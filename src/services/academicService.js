@@ -1,4 +1,4 @@
-﻿import { supabase } from '../supabase'
+import { supabase } from '../supabase'
 
 /**
  * Servicio para la gestión de Programas, Asignaturas y Pensum Académico
@@ -9,7 +9,8 @@
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api'
 
 async function requestBackend(endpoint, options = {}) {
-  const response = await fetch(${BACKEND_URL}, {
+  const url = `${BACKEND_URL}${endpoint}`
+  const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -18,12 +19,12 @@ async function requestBackend(endpoint, options = {}) {
   })
 
   if (!response.ok) {
-    let errorMsg = Error : 
+    let errorMsg = `Error ${response.status}: ${response.statusText}`
     try {
       const errorBody = await response.json()
       if (errorBody.message) errorMsg = errorBody.message
       else if (errorBody.errors) {
-        errorMsg = Object.entries(errorBody.errors).map(([k, v]) => ${k}: ).join(', ')
+        errorMsg = Object.entries(errorBody.errors).map(([k, v]) => `${k}: ${v}`).join(', ')
       }
     } catch {
       // Response was not JSON
@@ -90,7 +91,7 @@ export async function updatePrograma(code_program, changes) {
     if (changes.id_facultad_programa !== undefined) {
       payload.id_facultad_programa = changes.id_facultad_programa ? parseInt(changes.id_facultad_programa, 10) : null
     }
-    return await requestBackend(/programas/, {
+    return await requestBackend(`/programas/${encodeURIComponent(code_program)}`, {
       method: 'PUT',
       body: JSON.stringify(payload)
     })
@@ -116,7 +117,7 @@ export async function updatePrograma(code_program, changes) {
 
 export async function deletePrograma(code_program) {
   try {
-    return await requestBackend(/programas/, {
+    return await requestBackend(`/programas/${encodeURIComponent(code_program)}`, {
       method: 'DELETE'
     })
   } catch (err) {
@@ -202,7 +203,7 @@ export async function updateAsignatura(code_course, changes) {
     }
     if (changes.facultad !== undefined) payload.facultad = changes.facultad ? changes.facultad.trim() : null
 
-    return await requestBackend(/asignaturas/, {
+    return await requestBackend(`/asignaturas/${encodeURIComponent(code_course)}`, {
       method: 'PUT',
       body: JSON.stringify(payload)
     })
@@ -235,7 +236,7 @@ export async function updateAsignatura(code_course, changes) {
 
 export async function deleteAsignatura(code_course) {
   try {
-    return await requestBackend(/asignaturas/, {
+    return await requestBackend(`/asignaturas/${encodeURIComponent(code_course)}`, {
       method: 'DELETE'
     })
   } catch (err) {
@@ -253,7 +254,7 @@ export async function deleteAsignatura(code_course) {
 
 export async function getPensumByProgram(code_program) {
   try {
-    return await requestBackend(/pensum/programa/)
+    return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}`)
   } catch (err) {
     console.warn('Fallo backend en getPensumByProgram, fallback a Supabase:', err.message)
     const { data: pensumData, error: pensumError } = await supabase
@@ -344,7 +345,7 @@ export async function updateCourseSemester({ code_program, code_course, semestre
 
 export async function removeCourseFromPensum({ code_program, code_course }) {
   try {
-    return await requestBackend(/pensum//, {
+    return await requestBackend(`/pensum/${encodeURIComponent(code_program)}/${encodeURIComponent(code_course)}`, {
       method: 'DELETE'
     })
   } catch (err) {
@@ -365,7 +366,6 @@ export async function getFacultades() {
   try {
     return await requestBackend('/facultades')
   } catch {
-    // Fallback a Supabase
     try {
       const { data, error } = await supabase.from('Facultad').select('*')
       if (!error && data) return data
@@ -412,9 +412,8 @@ export async function checkDatabaseHealth() {
     error: null,
   }
 
-  // 1. Probar salud del Backend Spring Boot
   try {
-    const res = await fetch(${BACKEND_URL}/programas, { method: 'GET' })
+    const res = await fetch(`${BACKEND_URL}/programas`, { method: 'GET' })
     if (res.ok) {
       results.connected = true
       results.backendConnected = true
@@ -425,10 +424,9 @@ export async function checkDatabaseHealth() {
       return results
     }
   } catch {
-    // Backend aún no conectado o levantado
+    // Backend no disponible
   }
 
-  // 2. Probar conexión directa con Supabase
   try {
     const [progRes, asigRes, pensumRes, facultadRes] = await Promise.allSettled([
       supabase.from('programas').select('*').limit(1),
