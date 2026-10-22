@@ -447,3 +447,76 @@ export async function checkDatabaseHealth() {
 
   return results
 }
+
+
+// --- COORDINADORES ---
+
+export async function getCoordinadores() {
+  try {
+    return await requestBackend('/coordinadores')
+  } catch (err) {
+    console.warn('Backend no disponible para coordinadores, fallback Supabase:', err.message)
+    const { data, error } = await supabase
+      .from('coordinadores')
+      .select('*, programas(name_program)')
+      .order('nombre_completo', { ascending: true })
+    if (!error && data) {
+      return data.map(c => ({
+        ...c,
+        name_program: c.programas?.name_program || c.code_program
+      }))
+    }
+    return []
+  }
+}
+
+export async function createCoordinador(coordinador) {
+  try {
+    return await requestBackend('/coordinadores', {
+      method: 'POST',
+      body: JSON.stringify(coordinador)
+    })
+  } catch (err) {
+    console.warn('Fallo backend en createCoordinador, fallback Supabase:', err.message)
+    const { data, error } = await supabase
+      .from('coordinadores')
+      .insert([coordinador])
+      .select()
+    if (error) throw error
+    return data?.[0]
+  }
+}
+
+export async function updateCoordinador(id, changes) {
+  try {
+    return await requestBackend('/coordinadores/' + id, {
+      method: 'PUT',
+      body: JSON.stringify(changes)
+    })
+  } catch (err) {
+    console.warn('Fallo backend en updateCoordinador, fallback Supabase:', err.message)
+    const { data, error } = await supabase
+      .from('coordinadores')
+      .update(changes)
+      .eq('id', id)
+      .select()
+    if (error) throw error
+    return data?.[0]
+  }
+}
+
+export async function deleteCoordinador(id) {
+  try {
+    return await requestBackend('/coordinadores/' + id, {
+      method: 'DELETE'
+    })
+  } catch (err) {
+    console.warn('Fallo backend en deleteCoordinador, fallback Supabase:', err.message)
+    const { error } = await supabase
+      .from('coordinadores')
+      .delete()
+      .eq('id', id)
+    if (error) throw error
+    return true
+  }
+}
