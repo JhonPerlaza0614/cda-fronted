@@ -1,366 +1,407 @@
-import { supabase } from '../supabase'
+﻿import { supabase } from '../supabase'
 
 /**
  * Servicio para la gestión de Programas, Asignaturas y Pensum Académico
+ * Conectado directamente a la API REST de Spring Boot (cda-backend)
+ * con fallback transparente a Supabase si el backend se encuentra apagado.
  */
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api'
+
+async function requestBackend(endpoint, options = {}) {
+  const response = await fetch(${BACKEND_URL}, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  })
+
+  if (!response.ok) {
+    let errorMsg = Error : 
+    try {
+      const errorBody = await response.json()
+      if (errorBody.message) errorMsg = errorBody.message
+      else if (errorBody.errors) {
+        errorMsg = Object.entries(errorBody.errors).map(([k, v]) => ${k}: ).join(', ')
+      }
+    } catch {
+      // Response was not JSON
+    }
+    throw new Error(errorMsg)
+  }
+
+  if (response.status === 204) return true
+  return await response.json()
+}
 
 // --- PROGRAMAS ---
 
 export async function getProgramas() {
-  const { data, error } = await supabase
-    .from('programas')
-    .select('*')
-    .order('name_program', { ascending: true })
-  
-  if (error) throw error
-  return data || []
+  try {
+    return await requestBackend('/programas')
+  } catch (err) {
+    console.warn('Backend no disponible, usando Supabase directo:', err.message)
+    const { data, error } = await supabase
+      .from('programas')
+      .select('*')
+      .order('name_program', { ascending: true })
+    if (error) throw error
+    return data || []
+  }
 }
 
 export async function createPrograma(programa) {
-  const insertPayload = {
-    code_program: programa.code_program.trim().toUpperCase(),
-    name_program: programa.name_program.trim(),
-    numero_semestre: parseInt(programa.numero_semestre, 10) || 10,
-  }
-  if (programa.id_facultad_programa) {
-    insertPayload.id_facultad_programa = parseInt(programa.id_facultad_programa, 10)
-  }
-
-  const { data, error } = await supabase
-    .from('programas')
-    .insert([insertPayload])
-    .select()
-
-  if (error) {
-    if (insertPayload.id_facultad_programa) {
-      delete insertPayload.id_facultad_programa
-      const { data: fbData, error: fbError } = await supabase
-        .from('programas')
-        .insert([insertPayload])
-        .select()
-      if (fbError) throw error
-      return fbData?.[0]
+  try {
+    const payload = {
+      code_program: programa.code_program.trim().toUpperCase(),
+      name_program: programa.name_program.trim(),
+      numero_semestre: parseInt(programa.numero_semestre, 10) || 10,
+      id_facultad_programa: programa.id_facultad_programa ? parseInt(programa.id_facultad_programa, 10) : null
     }
-    throw error
+    return await requestBackend('/programas', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  } catch (err) {
+    console.warn('Fallo backend en createPrograma, fallback a Supabase:', err.message)
+    const insertPayload = {
+      code_program: programa.code_program.trim().toUpperCase(),
+      name_program: programa.name_program.trim(),
+      numero_semestre: parseInt(programa.numero_semestre, 10) || 10,
+    }
+    if (programa.id_facultad_programa) {
+      insertPayload.id_facultad_programa = parseInt(programa.id_facultad_programa, 10)
+    }
+    const { data, error } = await supabase
+      .from('programas')
+      .insert([insertPayload])
+      .select()
+    if (error) throw error
+    return data?.[0]
   }
-  return data?.[0]
 }
 
 export async function updatePrograma(code_program, changes) {
-  const updateData = {}
-  if (changes.name_program !== undefined) updateData.name_program = changes.name_program.trim()
-  if (changes.numero_semestre !== undefined) {
-    updateData.numero_semestre = parseInt(changes.numero_semestre, 10) || 10
-  }
-  if (changes.id_facultad_programa !== undefined) {
-    updateData.id_facultad_programa = changes.id_facultad_programa ? parseInt(changes.id_facultad_programa, 10) : null
-  }
-
-  const { data, error } = await supabase
-    .from('programas')
-    .update(updateData)
-    .eq('code_program', code_program)
-    .select()
-
-  if (error) {
-    console.warn('Error al actualizar programa, probando sin id_facultad_programa:', error)
-    const fallbackUpdate = { ...updateData }
-    delete fallbackUpdate.id_facultad_programa
-    const { data: fbData, error: fbError } = await supabase
+  try {
+    const payload = {}
+    if (changes.name_program !== undefined) payload.name_program = changes.name_program.trim()
+    if (changes.numero_semestre !== undefined) payload.numero_semestre = parseInt(changes.numero_semestre, 10)
+    if (changes.id_facultad_programa !== undefined) {
+      payload.id_facultad_programa = changes.id_facultad_programa ? parseInt(changes.id_facultad_programa, 10) : null
+    }
+    return await requestBackend(/programas/, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    })
+  } catch (err) {
+    console.warn('Fallo backend en updatePrograma, fallback a Supabase:', err.message)
+    const updateData = {}
+    if (changes.name_program !== undefined) updateData.name_program = changes.name_program.trim()
+    if (changes.numero_semestre !== undefined) {
+      updateData.numero_semestre = parseInt(changes.numero_semestre, 10) || 10
+    }
+    if (changes.id_facultad_programa !== undefined) {
+      updateData.id_facultad_programa = changes.id_facultad_programa ? parseInt(changes.id_facultad_programa, 10) : null
+    }
+    const { data, error } = await supabase
       .from('programas')
-      .update(fallbackUpdate)
+      .update(updateData)
       .eq('code_program', code_program)
       .select()
-    if (fbError) throw error
-    return fbData?.[0]
+    if (error) throw error
+    return data?.[0]
   }
-  return data?.[0]
 }
 
 export async function deletePrograma(code_program) {
-  const { error } = await supabase
-    .from('programas')
-    .delete()
-    .eq('code_program', code_program)
-
-  if (error) throw error
-  return true
+  try {
+    return await requestBackend(/programas/, {
+      method: 'DELETE'
+    })
+  } catch (err) {
+    console.warn('Fallo backend en deletePrograma, fallback a Supabase:', err.message)
+    const { error } = await supabase
+      .from('programas')
+      .delete()
+      .eq('code_program', code_program)
+    if (error) throw error
+    return true
+  }
 }
-
 
 // --- ASIGNATURAS ---
 
 export async function getAsignaturas() {
-  const { data, error } = await supabase
-    .from('asignaturas')
-    .select('*')
-    .order('name_course', { ascending: true })
-
-  if (error) throw error
-  return data || []
+  try {
+    return await requestBackend('/asignaturas')
+  } catch (err) {
+    console.warn('Backend no disponible, usando Supabase directo:', err.message)
+    const { data, error } = await supabase
+      .from('asignaturas')
+      .select('*')
+      .order('name_course', { ascending: true })
+    if (error) throw error
+    return data || []
+  }
 }
 
 export async function createAsignatura(asignatura) {
-  const creditsVal = parseInt(asignatura.credits, 10)
-  const payload = {
-    code_course: asignatura.code_course.trim().toUpperCase(),
-    name_course: asignatura.name_course.trim(),
-    credits: isNaN(creditsVal) ? 0 : Math.max(0, creditsVal),
-  }
-  if (asignatura.is_elective !== undefined) payload.is_elective = Boolean(asignatura.is_elective)
-  if (asignatura.es_complementaria !== undefined) payload.es_complementaria = Boolean(asignatura.es_complementaria)
-  if (asignatura.es_basica !== undefined) payload.es_basica = Boolean(asignatura.es_basica)
-  if (asignatura.id_facultad !== undefined && asignatura.id_facultad !== null && asignatura.id_facultad !== '') {
-    const facId = parseInt(asignatura.id_facultad, 10)
-    if (!isNaN(facId)) payload.id_facultad = facId
-  }
-
-  const { data, error } = await supabase
-    .from('asignaturas')
-    .insert([payload])
-    .select()
-
-  if (error) {
-    console.warn('Error en inserción completa de asignaturas:', error)
-    // Fallback 1: Probar sin es_complementaria, es_basica ni id_facultad si las columnas no existen aún
-    const payloadNoNewCols = { ...payload }
-    delete payloadNoNewCols.es_complementaria
-    delete payloadNoNewCols.es_basica
-    delete payloadNoNewCols.id_facultad
-    const { data: fbData1, error: fbError1 } = await supabase
-      .from('asignaturas')
-      .insert([payloadNoNewCols])
-      .select()
-
-    if (!fbError1 && fbData1) return fbData1[0]
-
-    // Fallback 2: Probar solo campos esenciales (code_course, name_course, credits)
-    const payloadCore = {
+  try {
+    const creditsVal = parseInt(asignatura.credits, 10)
+    const payload = {
       code_course: asignatura.code_course.trim().toUpperCase(),
       name_course: asignatura.name_course.trim(),
       credits: isNaN(creditsVal) ? 0 : Math.max(0, creditsVal),
+      is_elective: Boolean(asignatura.is_elective),
+      es_complementaria: Boolean(asignatura.es_complementaria),
+      es_basica: Boolean(asignatura.es_basica),
+      facultad: asignatura.facultad ? asignatura.facultad.trim() : null,
+      id_facultad: asignatura.id_facultad ? parseInt(asignatura.id_facultad, 10) : null
     }
-    const { data: fbData2, error: fbError2 } = await supabase
+    return await requestBackend('/asignaturas', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  } catch (err) {
+    console.warn('Fallo backend en createAsignatura, fallback a Supabase:', err.message)
+    const creditsVal = parseInt(asignatura.credits, 10)
+    const payload = {
+      code_course: asignatura.code_course.trim().toUpperCase(),
+      name_course: asignatura.name_course.trim(),
+      credits: isNaN(creditsVal) ? 0 : Math.max(0, creditsVal),
+      is_elective: Boolean(asignatura.is_elective),
+      es_complementaria: Boolean(asignatura.es_complementaria),
+      es_basica: Boolean(asignatura.es_basica),
+      facultad: asignatura.facultad ? asignatura.facultad.trim() : null,
+      id_facultad: asignatura.id_facultad ? parseInt(asignatura.id_facultad, 10) : null,
+    }
+    const { data, error } = await supabase
       .from('asignaturas')
-      .insert([payloadCore])
+      .insert([payload])
       .select()
-
-    if (!fbError2 && fbData2) return fbData2[0]
-
-    throw error
+    if (error) throw error
+    return data?.[0]
   }
-  return data?.[0]
 }
 
 export async function updateAsignatura(code_course, changes) {
-  const updateData = {}
-  if (changes.name_course !== undefined) updateData.name_course = changes.name_course.trim()
-  if (changes.credits !== undefined) {
-    const creditsVal = parseInt(changes.credits, 10)
-    updateData.credits = isNaN(creditsVal) ? 0 : Math.max(0, creditsVal)
-  }
-  if (changes.is_elective !== undefined) updateData.is_elective = Boolean(changes.is_elective)
-  if (changes.es_complementaria !== undefined) updateData.es_complementaria = Boolean(changes.es_complementaria)
-  if (changes.es_basica !== undefined) updateData.es_basica = Boolean(changes.es_basica)
-  if (changes.id_facultad !== undefined) {
-    const facId = parseInt(changes.id_facultad, 10)
-    updateData.id_facultad = !isNaN(facId) ? facId : null
-  }
+  try {
+    const payload = {}
+    if (changes.name_course !== undefined) payload.name_course = changes.name_course.trim()
+    if (changes.credits !== undefined) {
+      const creditsVal = parseInt(changes.credits, 10)
+      payload.credits = isNaN(creditsVal) ? 0 : Math.max(0, creditsVal)
+    }
+    if (changes.is_elective !== undefined) payload.is_elective = Boolean(changes.is_elective)
+    if (changes.es_complementaria !== undefined) payload.es_complementaria = Boolean(changes.es_complementaria)
+    if (changes.es_basica !== undefined) payload.es_basica = Boolean(changes.es_basica)
+    if (changes.id_facultad !== undefined) {
+      const facId = parseInt(changes.id_facultad, 10)
+      payload.id_facultad = !isNaN(facId) ? facId : null
+    }
+    if (changes.facultad !== undefined) payload.facultad = changes.facultad ? changes.facultad.trim() : null
 
-  const { data, error } = await supabase
-    .from('asignaturas')
-    .update(updateData)
-    .eq('code_course', code_course)
-    .select()
+    return await requestBackend(/asignaturas/, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    })
+  } catch (err) {
+    console.warn('Fallo backend en updateAsignatura, fallback a Supabase:', err.message)
+    const updateData = {}
+    if (changes.name_course !== undefined) updateData.name_course = changes.name_course.trim()
+    if (changes.credits !== undefined) {
+      const creditsVal = parseInt(changes.credits, 10)
+      updateData.credits = isNaN(creditsVal) ? 0 : Math.max(0, creditsVal)
+    }
+    if (changes.is_elective !== undefined) updateData.is_elective = Boolean(changes.is_elective)
+    if (changes.es_complementaria !== undefined) updateData.es_complementaria = Boolean(changes.es_complementaria)
+    if (changes.es_basica !== undefined) updateData.es_basica = Boolean(changes.es_basica)
+    if (changes.id_facultad !== undefined) {
+      const facId = parseInt(changes.id_facultad, 10)
+      updateData.id_facultad = !isNaN(facId) ? facId : null
+    }
 
-  if (error) {
-    console.warn('Error al actualizar asignatura, aplicando fallback:', error)
-    const cleanUpdate = {}
-    if (changes.name_course !== undefined) cleanUpdate.name_course = changes.name_course.trim()
-    if (changes.credits !== undefined) cleanUpdate.credits = updateData.credits
-    if (changes.is_elective !== undefined) cleanUpdate.is_elective = updateData.is_elective
-    const { data: fbData, error: fbError } = await supabase
+    const { data, error } = await supabase
       .from('asignaturas')
-      .update(cleanUpdate)
+      .update(updateData)
       .eq('code_course', code_course)
       .select()
 
-    if (fbError) throw error
-    return fbData?.[0]
+    if (error) throw error
+    return data?.[0]
   }
-  return data?.[0]
 }
 
 export async function deleteAsignatura(code_course) {
-  const { error } = await supabase
-    .from('asignaturas')
-    .delete()
-    .eq('code_course', code_course)
-
-  if (error) throw error
-  return true
+  try {
+    return await requestBackend(/asignaturas/, {
+      method: 'DELETE'
+    })
+  } catch (err) {
+    console.warn('Fallo backend en deleteAsignatura, fallback a Supabase:', err.message)
+    const { error } = await supabase
+      .from('asignaturas')
+      .delete()
+      .eq('code_course', code_course)
+    if (error) throw error
+    return true
+  }
 }
-
 
 // --- PENSUM ACADÉMICO ---
 
 export async function getPensumByProgram(code_program) {
-  // Obtenemos los registros de la tabla intermedia
-  const { data: pensumData, error: pensumError } = await supabase
-    .from('pensum_academico')
-    .select('*')
-    .eq('code_program', code_program)
-    .order('semestre', { ascending: true })
+  try {
+    return await requestBackend(/pensum/programa/)
+  } catch (err) {
+    console.warn('Fallo backend en getPensumByProgram, fallback a Supabase:', err.message)
+    const { data: pensumData, error: pensumError } = await supabase
+      .from('pensum_academico')
+      .select('*')
+      .eq('code_program', code_program)
+      .order('semestre', { ascending: true })
 
-  if (pensumError) throw pensumError
+    if (pensumError) throw pensumError
+    if (!pensumData || pensumData.length === 0) return []
 
-  if (!pensumData || pensumData.length === 0) {
-    return []
+    const courseCodes = pensumData.map(p => p.code_course)
+    const { data: coursesData } = await supabase
+      .from('asignaturas')
+      .select('*')
+      .in('code_course', courseCodes)
+
+    const courseMap = new Map((coursesData || []).map(c => [c.code_course, c]))
+    return pensumData.map(item => {
+      const course = courseMap.get(item.code_course)
+      return {
+        ...item,
+        name_course: course?.name_course || item.code_course,
+        credits: course?.credits !== undefined && course?.credits !== null ? course.credits : 0,
+      }
+    })
   }
-
-  // Obtenemos las asignaturas para combinar Nombre y detalles
-  const courseCodes = pensumData.map(p => p.code_course)
-  const { data: coursesData, error: coursesError } = await supabase
-    .from('asignaturas')
-    .select('*')
-    .in('code_course', courseCodes)
-
-  if (coursesError) {
-    console.warn('Error fetching courses detail, returning raw pensum data:', coursesError)
-    return pensumData
-  }
-
-  const courseMap = new Map((coursesData || []).map(c => [c.code_course, c]))
-
-  return pensumData.map(item => {
-    const course = courseMap.get(item.code_course)
-    return {
-      ...item,
-      name_course: course?.name_course || item.code_course,
-      credits: course?.credits !== undefined && course?.credits !== null ? course.credits : 0,
-    }
-  })
 }
 
 export async function getAllPensum() {
-  const { data, error } = await supabase
-    .from('pensum_academico')
-    .select('*')
-
-  if (error) throw error
-  return data || []
+  try {
+    return await requestBackend('/pensum')
+  } catch (err) {
+    console.warn('Backend no disponible en getAllPensum, usando Supabase directo:', err.message)
+    const { data, error } = await supabase
+      .from('pensum_academico')
+      .select('*')
+    if (error) throw error
+    return data || []
+  }
 }
 
 export async function addCourseToPensum({ code_program, code_course, semestre }) {
-  const sem = parseInt(semestre, 10)
-  if (isNaN(sem) || sem < 1 || sem > 20) {
-    throw new Error('El semestre debe ser un número entero entre 1 y 20')
-  }
-
-  const { data, error } = await supabase
-    .from('pensum_academico')
-    .insert([
-      {
+  try {
+    return await requestBackend('/pensum', {
+      method: 'POST',
+      body: JSON.stringify({
         code_program,
         code_course,
-        semestre: sem,
-      }
-    ])
-    .select()
-
-  if (error) throw error
-  return data?.[0]
+        semestre: parseInt(semestre, 10)
+      })
+    })
+  } catch (err) {
+    console.warn('Fallo backend en addCourseToPensum, fallback a Supabase:', err.message)
+    const sem = parseInt(semestre, 10)
+    const { data, error } = await supabase
+      .from('pensum_academico')
+      .insert([{ code_program, code_course, semestre: sem }])
+      .select()
+    if (error) throw error
+    return data?.[0]
+  }
 }
 
 export async function updateCourseSemester({ code_program, code_course, semestre }) {
-  const sem = parseInt(semestre, 10)
-  if (isNaN(sem) || sem < 1 || sem > 20) {
-    throw new Error('El semestre debe ser un número entero entre 1 y 20')
+  try {
+    return await requestBackend('/pensum/semestre', {
+      method: 'PUT',
+      body: JSON.stringify({
+        code_program,
+        code_course,
+        semestre: parseInt(semestre, 10)
+      })
+    })
+  } catch (err) {
+    console.warn('Fallo backend en updateCourseSemester, fallback a Supabase:', err.message)
+    const sem = parseInt(semestre, 10)
+    const { data, error } = await supabase
+      .from('pensum_academico')
+      .update({ semestre: sem })
+      .eq('code_program', code_program)
+      .eq('code_course', code_course)
+      .select()
+    if (error) throw error
+    return data?.[0]
   }
-
-  const { data, error } = await supabase
-    .from('pensum_academico')
-    .update({ semestre: sem })
-    .eq('code_program', code_program)
-    .eq('code_course', code_course)
-    .select()
-
-  if (error) throw error
-  return data?.[0]
 }
 
 export async function removeCourseFromPensum({ code_program, code_course }) {
-  const { error } = await supabase
-    .from('pensum_academico')
-    .delete()
-    .eq('code_program', code_program)
-    .eq('code_course', code_course)
-
-  if (error) throw error
-  return true
+  try {
+    return await requestBackend(/pensum//, {
+      method: 'DELETE'
+    })
+  } catch (err) {
+    console.warn('Fallo backend en removeCourseFromPensum, fallback a Supabase:', err.message)
+    const { error } = await supabase
+      .from('pensum_academico')
+      .delete()
+      .eq('code_program', code_program)
+      .eq('code_course', code_course)
+    if (error) throw error
+    return true
+  }
 }
 
 // --- FACULTADES ---
 
 export async function getFacultades() {
   try {
-    // Probar tabla 'Facultad'
-    const { data, error } = await supabase
-      .from('Facultad')
-      .select('*')
-
-    if (!error && data) {
-      return data
-    }
-
-    // Si dio PGRST205 / 404 (tabla no encontrada por distinción de mayúsculas), probar 'facultad'
-    if (error && (error.code === 'PGRST205' || error.status === 404)) {
-      const { data: dataLower, error: errorLower } = await supabase
-        .from('facultad')
-        .select('*')
-
-      if (!errorLower && dataLower) {
-        return dataLower
-      }
-    }
+    return await requestBackend('/facultades')
   } catch {
-    // Captura silenciosa para evitar logs de red no deseados
+    // Fallback a Supabase
+    try {
+      const { data, error } = await supabase.from('Facultad').select('*')
+      if (!error && data) return data
+      const { data: dataLower } = await supabase.from('facultad').select('*')
+      if (dataLower) return dataLower
+    } catch {
+      // Ignorar
+    }
+    return []
   }
-
-  return []
 }
 
 export async function createFacultad({ nombre, descripcion }) {
-  const name = nombre ? nombre.trim() : ''
-  const desc = descripcion ? descripcion.trim() : ''
-
-  const payload = { nombre: name }
-  if (desc) payload.descripcion = desc
-
-  // Intento 1: Tabla 'Facultad'
-  const { data: data1, error: err1 } = await supabase
-    .from('Facultad')
-    .insert([payload])
-    .select()
-
-  if (!err1 && data1) return data1[0]
-
-  // Intento 2: Tabla 'facultad' en minúscula
-  const { data: data2, error: err2 } = await supabase
-    .from('facultad')
-    .insert([payload])
-    .select()
-
-  if (!err2 && data2) return data2[0]
-
-  throw err1 || err2
+  try {
+    return await requestBackend('/facultades', {
+      method: 'POST',
+      body: JSON.stringify({ nombre, descripcion })
+    })
+  } catch (err) {
+    console.warn('Fallo backend en createFacultad, fallback a Supabase:', err.message)
+    const payload = { nombre: (nombre || '').trim() }
+    if (descripcion) payload.descripcion = descripcion.trim()
+    const { data, error } = await supabase.from('Facultad').insert([payload]).select()
+    if (!error && data) return data[0]
+    const { data: data2, error: err2 } = await supabase.from('facultad').insert([payload]).select()
+    if (!err2 && data2) return data2[0]
+    throw err
+  }
 }
 
-// --- DIAGNÓSTICO DE BASE DE DATOS ---
+// --- DIAGNÓSTICO DE SALUD ---
 
 export async function checkDatabaseHealth() {
   const results = {
     connected: false,
+    backendConnected: false,
     tables: {
       programas: false,
       asignaturas: false,
@@ -371,6 +412,23 @@ export async function checkDatabaseHealth() {
     error: null,
   }
 
+  // 1. Probar salud del Backend Spring Boot
+  try {
+    const res = await fetch(${BACKEND_URL}/programas, { method: 'GET' })
+    if (res.ok) {
+      results.connected = true
+      results.backendConnected = true
+      results.tables.programas = true
+      results.tables.asignaturas = true
+      results.tables.pensum_academico = true
+      results.tables.Facultad = true
+      return results
+    }
+  } catch {
+    // Backend aún no conectado o levantado
+  }
+
+  // 2. Probar conexión directa con Supabase
   try {
     const [progRes, asigRes, pensumRes, facultadRes] = await Promise.allSettled([
       supabase.from('programas').select('*').limit(1),
@@ -384,10 +442,6 @@ export async function checkDatabaseHealth() {
     results.tables.asignaturas = asigRes.status === 'fulfilled' && !asigRes.value.error
     results.tables.pensum_academico = pensumRes.status === 'fulfilled' && !pensumRes.value.error
     results.tables.Facultad = facultadRes.status === 'fulfilled' && !facultadRes.value.error
-
-    if (progRes.status === 'fulfilled' && progRes.value.error) {
-      results.error = progRes.value.error.message
-    }
   } catch (err) {
     results.connected = false
     results.error = err.message
