@@ -7,13 +7,14 @@ import CoordinadoresView from './components/CoordinadoresView'
 import ResolucionesView from './components/ResolucionesView'
 import PlantillaView from './components/PlantillaView'
 import DedicatedInProgressView from './components/DedicatedInProgressView'
+import MiPerfilView from './components/MiPerfilView'
 import SqlSetupModal from './components/SqlSetupModal'
 import Toast from './components/Toast'
-import { 
-  getProgramas, 
-  getAsignaturas, 
-  getAllPensum, 
-  checkDatabaseHealth 
+import {
+  getProgramas,
+  getAsignaturas,
+  getAllPensum,
+  checkDatabaseHealth
 } from './services/academicService'
 import { logout as cerrarSesionLocal } from './services/authService'
 import { AlertCircle, Database, RefreshCw, Sparkles, Clock } from 'lucide-react'
@@ -37,7 +38,7 @@ export default function App({ user, onLogout }) {
   const [asignaturas, setAsignaturas] = useState([])
   const [pensumList, setPensumList] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
-  
+
   const [loading, setLoading] = useState(!isDocente)
   const [initialError, setInitialError] = useState(null)
   const [isConnected, setIsConnected] = useState(true)
@@ -198,8 +199,8 @@ export default function App({ user, onLogout }) {
               <span className="banner-subtext"> — Tu cuenta de Coordinador(a) tiene acceso de consulta a Mallas Curriculares y Banco de Asignaturas.</span>
             </div>
           </div>
-          <button 
-            type="button" 
+          <button
+            type="button"
             className="btn-banner-link"
             onClick={() => setActiveTab('coordinador_portal')}
           >
@@ -296,6 +297,13 @@ export default function App({ user, onLogout }) {
 
             {activeTab === 'resoluciones' && esAdmin && (
               <ResolucionesView esAdmin={esAdmin} onSesionExpirada={handleSesionExpirada} />
+            )}
+
+            {activeTab === 'mi-perfil' && (
+              <MiPerfilView
+                user={user}
+                onShowToast={showToast}
+              />
             )}
           </>
         )}

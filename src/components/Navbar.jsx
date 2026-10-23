@@ -109,6 +109,17 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               <span>Portal Docente</span>
             </button>
           )}
+
+          {/* Mi perfil: visible para todos los roles */}
+          {user && (
+            <button
+              className={`nav-tab-btn ${activeTab === 'mi-perfil' ? 'active' : ''}`}
+              onClick={() => setActiveTab('mi-perfil')}
+            >
+              <UserCircle size={18} />
+              <span style={{ whiteSpace: 'nowrap' }}>Mi perfil</span>
+            </button>
+          )}
         </nav>
 
         <div className="navbar-actions">
