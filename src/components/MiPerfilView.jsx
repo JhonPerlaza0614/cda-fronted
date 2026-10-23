@@ -83,7 +83,7 @@ export default function MiPerfilView({ user, onShowToast }) {
         let cancelled = false
         setCoordStatus('loading')
 
-        getMiPerfilCoordinador(user.email)
+        getMiPerfilCoordinador()
             .then((data) => {
                 if (cancelled) return
                 setCoordinador(data)

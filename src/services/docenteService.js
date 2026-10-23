@@ -62,6 +62,5 @@ export const updateDocente = (id, payload) =>
 export const getMiPerfil = (correo) =>
     request(`/docentes/me?correo=${encodeURIComponent(correo)}`)
 
-// GET /api/coordinadores/me?correo=...
-export const getMiPerfilCoordinador = (correo) =>
-    request(`/coordinadores/me?correo=${encodeURIComponent(correo)}`)
+// GET /api/coordinadores/me (el backend toma el usuario del token)
+export const getMiPerfilCoordinador = () => request('/coordinadores/me')
