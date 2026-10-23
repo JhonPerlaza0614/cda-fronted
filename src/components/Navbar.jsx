@@ -1,13 +1,14 @@
 import React from 'react'
-import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Clock, UserCircle } from 'lucide-react'
+import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Clock, FileText } from 'lucide-react'
 
-export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout }) {
+export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout, esAdmin }) {
   const rol = user?.rol ?? 1 // 1: Admin, 2: Coordinador, 3: Docente
 
   const canSeePensum = rol === 1 || rol === 2
   const canSeeProgramas = rol === 1
   const canSeeAsignaturas = rol === 1 || rol === 2
   const canSeePlantilla = rol === 1
+  const canSeeResoluciones = esAdmin ?? rol === 1 // solo administrador
   const isCoordinador = rol === 2
   const isDocente = rol === 3
 
@@ -76,6 +77,16 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
             >
               <Users size={18} />
               <span>Plantilla</span>
+            </button>
+          )}
+
+          {canSeeResoluciones && (
+            <button
+              className={`nav-tab-btn ${activeTab === 'resoluciones' ? 'active' : ''}`}
+              onClick={() => setActiveTab('resoluciones')}
+            >
+              <FileText size={18} />
+              <span>Resoluciones</span>
             </button>
           )}
 
