@@ -4,8 +4,10 @@ import PensumView from './components/PensumView'
 import ProgramasView from './components/ProgramasView'
 import AsignaturasView from './components/AsignaturasView'
 import CoordinadoresView from './components/CoordinadoresView'
-import CrearDocenteView from './components/CrearDocenteView'
-import MiPerfilDocenteView from './components/MiPerfilDocenteView'
+import ResolucionesView from './components/ResolucionesView'
+import PlantillaView from './components/PlantillaView'
+import DedicatedInProgressView from './components/DedicatedInProgressView'
+import MiPerfilView from './components/MiPerfilView'
 import SqlSetupModal from './components/SqlSetupModal'
 import Toast from './components/Toast'
 import {
@@ -14,41 +16,70 @@ import {
   getAllPensum,
   checkDatabaseHealth
 } from './services/academicService'
-import { AlertCircle, Database, RefreshCw } from 'lucide-react'
+import { logout as cerrarSesionLocal } from './services/authService'
+import { AlertCircle, Database, RefreshCw, Sparkles, Clock } from 'lucide-react'
 import './App.css'
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState('pensum')
+// Rol de administrador (coincide con AuthConstants.ROL_ADMIN del backend).
+const ROL_ADMIN = 1
+
+export default function App({ user, onLogout }) {
+  const rol = user?.rol ?? 1 // 1: Admin, 2: Coordinador, 3: Docente
+  const isDocente = rol === 3
+  const isCoordinador = rol === 2
+
+  // Docentes entran directamente a su portal dedicado
+  const [activeTab, setActiveTab] = useState(() => {
+    if (isDocente) return 'docente_portal'
+    return 'pensum'
+  })
+
   const [programas, setProgramas] = useState([])
   const [asignaturas, setAsignaturas] = useState([])
   const [pensumList, setPensumList] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
 
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!isDocente)
   const [initialError, setInitialError] = useState(null)
-  const [isConnected, setIsConnected] = useState(false)
+  const [isConnected, setIsConnected] = useState(true)
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false)
   const [toast, setToast] = useState(null)
 
-  // TODO: reemplazar por el correo del usuario logueado (login con Google del compañero).
-  // Mientras tanto, para probar "Mi perfil" define VITE_DEV_CORREO_DOCENTE en .env.local
-  const correoUsuario = import.meta.env.VITE_DEV_CORREO_DOCENTE || ''
+  // Solo el administrador ve "Resoluciones". El backend es quien protege los datos;
+  // esto solo controla la interfaz.
+  const esAdmin = user?.rol === ROL_ADMIN
+
+  // Si se pierde el rol de admin estando en "Resoluciones", volver a la malla.
+  useEffect(() => {
+    if (!esAdmin && activeTab === 'resoluciones') setActiveTab('pensum')
+  }, [esAdmin, activeTab])
+
+  // 401 en Resoluciones: la sesión expiró. Se limpia la sesión y se vuelve al login.
+  const handleSesionExpirada = useCallback(() => {
+    cerrarSesionLocal()
+    if (onLogout) onLogout()
+  }, [onLogout])
 
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type })
   }, [])
 
-  // Carga global de datos desde Supabase
+  // Carga global de datos desde Backend / Supabase
   const loadData = useCallback(async (isSilent = false) => {
+    // Si es docente, no consulta los endpoints administrativos protegidos
+    if (isDocente) {
+      setLoading(false)
+      return
+    }
+
     if (!isSilent) setLoading(true)
     setInitialError(null)
 
     try {
-      // Primero verificar estado de conexión
       const health = await checkDatabaseHealth()
       setIsConnected(health.connected)
 
-      // Cargar en paralelo
+      // Cargar en paralelo datos académicos
       const [progs, asigs, pensum] = await Promise.all([
         getProgramas(),
         getAsignaturas(),
@@ -78,16 +109,22 @@ export default function App() {
         })
       }
     } catch (err) {
-      console.error('Error al cargar datos desde Supabase:', err)
+      console.error('Error al cargar datos:', err)
       setInitialError(err.message || 'Error al comunicarse con la base de datos')
       setIsConnected(false)
     } finally {
       if (!isSilent) setLoading(false)
     }
-  }, [])
+  }, [isDocente])
 
   useEffect(() => {
     let isMounted = true
+
+    if (isDocente) {
+      setLoading(false)
+      return
+    }
+
     const init = async () => {
       try {
         const health = await checkDatabaseHealth()
@@ -120,7 +157,7 @@ export default function App() {
         }
       } catch (err) {
         if (!isMounted) return
-        console.error('Error al inicializar datos desde Supabase:', err)
+        console.error('Error al inicializar datos:', err)
         setInitialError(err.message || 'Error al comunicarse con la base de datos')
         setIsConnected(false)
       } finally {
@@ -132,7 +169,7 @@ export default function App() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [isDocente])
 
   const handleSelectProgramForPensum = (code) => {
     setSelectedProgramCode(code)
@@ -147,10 +184,33 @@ export default function App() {
         setActiveTab={setActiveTab}
         onOpenSqlModal={() => setIsSqlModalOpen(true)}
         isConnected={isConnected}
+        user={user}
+        onLogout={onLogout}
+        esAdmin={esAdmin}
       />
 
+      {/* Banner de aviso para Coordinador cuando navega en asignaturas o pensum */}
+      {isCoordinador && (activeTab === 'pensum' || activeTab === 'asignaturas') && (
+        <div className="coordinador-info-banner">
+          <div className="banner-content">
+            <Sparkles size={18} className="banner-icon" />
+            <div className="banner-text">
+              <strong>Páginas dedicadas en progreso de creación</strong>
+              <span className="banner-subtext"> — Tu cuenta de Coordinador(a) tiene acceso de consulta a Mallas Curriculares y Banco de Asignaturas.</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn-banner-link"
+            onClick={() => setActiveTab('coordinador_portal')}
+          >
+            <Clock size={14} /> Ver Estado del Portal
+          </button>
+        </div>
+      )}
+
       {/* Alerta si ocurre un error de RLS o configuración */}
-      {initialError && (
+      {initialError && !isDocente && (
         <div className="system-alert-banner">
           <div className="alert-content">
             <AlertCircle size={20} className="text-warning" />
@@ -177,10 +237,20 @@ export default function App() {
         {loading ? (
           <div className="loading-state-container">
             <div className="spinner"></div>
-            <p>Conectando con Supabase y cargando mallas curriculares...</p>
+            <p>Conectando con el sistema y cargando mallas curriculares...</p>
           </div>
         ) : (
           <>
+            {/* Vistas Dedicadas en Progreso de Creación para Docentes y Coordinadores */}
+            {(activeTab === 'docente_portal' || activeTab === 'coordinador_portal') && (
+              <DedicatedInProgressView
+                user={user}
+                onNavigate={setActiveTab}
+                onLogout={onLogout}
+              />
+            )}
+
+            {/* Malla Curricular */}
             {activeTab === 'pensum' && (
               <PensumView
                 programas={programas}
@@ -195,6 +265,7 @@ export default function App() {
               />
             )}
 
+            {/* Programas */}
             {activeTab === 'programas' && (
               <ProgramasView
                 programas={programas}
@@ -205,6 +276,7 @@ export default function App() {
               />
             )}
 
+            {/* Banco de Asignaturas */}
             {activeTab === 'asignaturas' && (
               <AsignaturasView
                 asignaturas={asignaturas}
@@ -214,24 +286,22 @@ export default function App() {
                 onShowToast={showToast}
               />
             )}
-            {activeTab === 'coordinadores' && (
-              <CoordinadoresView
+
+            {/* Plantilla Administrativa */}
+            {(activeTab === 'plantilla' || activeTab === 'coordinadores') && (
+              <PlantillaView
                 programas={programas}
                 onShowToast={showToast}
               />
             )}
 
-            {activeTab === 'docentes' && (
-              <CrearDocenteView
-                programas={programas}
-                onShowToast={showToast}
-                onCancel={() => setActiveTab('pensum')}
-              />
+            {activeTab === 'resoluciones' && esAdmin && (
+              <ResolucionesView esAdmin={esAdmin} onSesionExpirada={handleSesionExpirada} />
             )}
 
             {activeTab === 'mi-perfil' && (
-              <MiPerfilDocenteView
-                correo={correoUsuario}
+              <MiPerfilView
+                user={user}
                 onShowToast={showToast}
               />
             )}

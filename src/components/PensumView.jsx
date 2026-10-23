@@ -628,10 +628,15 @@ export default function PensumView({
                     coursesInSem.map((item) => {
                       const isElective = item.name_course?.toLowerCase().includes('electiv') || item.code_course?.toLowerCase().startsWith('ele')
                       return (
-                        <div key={item.code_course} className="pensum-course-card">
+                        <div key={item.code_course} className={`pensum-course-card ${item.activo === false ? 'is-disabled-course' : ''}`} style={item.activo === false ? { opacity: 0.65, border: '1px dashed #6b7280', filter: 'grayscale(0.6)' } : {}}>
                           <div className="pensum-course-card-top">
                             <div className="pensum-card-badge-row">
                               <span className="course-code-pill">{item.code_course}</span>
+                              {item.activo === false && (
+                                <span className="pensum-disabled-pill" style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#78350f', color: '#fef3c7', fontWeight: 'bold' }}>
+                                  Inactiva
+                                </span>
+                              )}
                               {isElective && (
                                 <span className="pensum-elective-pill" title="Asignatura Electiva">
                                   <Sparkles size={10} /> Electiva
