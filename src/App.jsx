@@ -16,6 +16,7 @@ import { AlertCircle, Database, RefreshCw } from 'lucide-react'
 import './App.css'
 
 export default function App({ user, onLogout }) {
+  // Para el rol Administrador (rol = 1), la página principal predeterminada es Mallas Curriculares ('pensum')
   const [activeTab, setActiveTab] = useState('pensum')
   const [programas, setProgramas] = useState([])
   const [asignaturas, setAsignaturas] = useState([])
