@@ -5,6 +5,7 @@ import ProgramasView from './components/ProgramasView'
 import AsignaturasView from './components/AsignaturasView'
 import PlantillaView from './components/PlantillaView'
 import DedicatedInProgressView from './components/DedicatedInProgressView'
+import MiPerfilView from './components/MiPerfilView'
 import SqlSetupModal from './components/SqlSetupModal'
 import Toast from './components/Toast'
 import {
@@ -37,10 +38,6 @@ export default function App({ user, onLogout }) {
   const [isConnected, setIsConnected] = useState(true)
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false)
   const [toast, setToast] = useState(null)
-
-  // TODO: reemplazar por el correo del usuario logueado (login con Google del compañero).
-  // Mientras tanto, para probar "Mi perfil" define VITE_DEV_CORREO_DOCENTE en .env.local
-  const correoUsuario = import.meta.env.VITE_DEV_CORREO_DOCENTE || ''
 
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type })
@@ -276,17 +273,9 @@ export default function App({ user, onLogout }) {
               />
             )}
 
-            {activeTab === 'docentes' && (
-              <CrearDocenteView
-                programas={programas}
-                onShowToast={showToast}
-                onCancel={() => setActiveTab('pensum')}
-              />
-            )}
-
             {activeTab === 'mi-perfil' && (
-              <MiPerfilDocenteView
-                correo={correoUsuario}
+              <MiPerfilView
+                user={user}
                 onShowToast={showToast}
               />
             )}
