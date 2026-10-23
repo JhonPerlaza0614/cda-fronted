@@ -77,7 +77,7 @@ export async function loginWithGoogle(credential) {
       apellido: body.apellido,
       email: body.email,
       rol: body.rol,
-      rolNombre: body.rol === 1 ? 'Administrador' : (body.rol === 3 ? 'Docente' : 'Usuario'),
+      rolNombre: body.rol === 1 ? 'Administrador' : (body.rol === 2 ? 'Coordinador' : (body.rol === 3 ? 'Docente' : 'Usuario')),
     },
   }
 
