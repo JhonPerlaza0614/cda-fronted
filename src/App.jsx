@@ -3,6 +3,7 @@ import Navbar from './components/Navbar'
 import PensumView from './components/PensumView'
 import ProgramasView from './components/ProgramasView'
 import AsignaturasView from './components/AsignaturasView'
+import CoordinadoresView from './components/CoordinadoresView'
 import SqlSetupModal from './components/SqlSetupModal'
 import Toast from './components/Toast'
 import { 
@@ -206,6 +207,12 @@ export default function App({ user, onLogout }) {
                 programas={programas}
                 pensumList={pensumList}
                 onRefresh={() => loadData(true)}
+                onShowToast={showToast}
+              />
+            )}
+                      {activeTab === 'coordinadores' && (
+              <CoordinadoresView
+                programas={programas}
                 onShowToast={showToast}
               />
             )}
