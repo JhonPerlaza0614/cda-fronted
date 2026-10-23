@@ -14,6 +14,16 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
     ? 'Administrador' 
     : (rol === 2 ? 'Coordinador' : (rol === 3 ? 'Docente' : (user?.rolNombre || 'Usuario')))
 
+  const handleBrandClick = () => {
+    if (isDocente) {
+      setActiveTab('docente_portal')
+    } else if (canSeePensum) {
+      setActiveTab('pensum')
+    } else {
+      setActiveTab('plantilla')
+    }
+  }
+
   return (
     <header className="navbar">
       <div className="navbar-container">
@@ -86,9 +96,9 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               <span className="navbar-user-role">{rolLabel}</span>
             </div>
           )}
-          <div className={`status-pill ${isConnected ? 'online' : 'offline'}`} title="Estado de Supabase">
+          <div className={`status-pill ${isConnected ? 'online' : 'offline'}`} title="Estado de Conexión">
             <span className="status-dot"></span>
-            <span>{isConnected ? 'Supabase Conectado' : 'Sin Conexión'}</span>
+            <span>{isConnected ? 'Conectado' : 'Sin Conexión'}</span>
           </div>
           {onLogout && (
             <button type="button" className="navbar-logout-btn" onClick={onLogout} title="Cerrar sesión">

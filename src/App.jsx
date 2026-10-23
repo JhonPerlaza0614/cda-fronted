@@ -13,7 +13,7 @@ import {
   getAllPensum, 
   checkDatabaseHealth 
 } from './services/academicService'
-import { AlertCircle, Database, RefreshCw, ShieldAlert } from 'lucide-react'
+import { AlertCircle, Database, RefreshCw, Sparkles, Clock } from 'lucide-react'
 import './App.css'
 
 export default function App({ user, onLogout }) {
@@ -25,9 +25,9 @@ export default function App({ user, onLogout }) {
   const [pensumList, setPensumList] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
   
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!isDocente)
   const [initialError, setInitialError] = useState(null)
-  const [isConnected, setIsConnected] = useState(false)
+  const [isConnected, setIsConnected] = useState(true)
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false)
   const [toast, setToast] = useState(null)
 
@@ -35,13 +35,18 @@ export default function App({ user, onLogout }) {
     setToast({ message, type })
   }, [])
 
-  // Carga global de datos desde Supabase
+  // Carga global de datos desde Backend / Supabase
   const loadData = useCallback(async (isSilent = false) => {
+    // Si es docente, no consulta los endpoints administrativos protegidos
+    if (isDocente) {
+      setLoading(false)
+      return
+    }
+
     if (!isSilent) setLoading(true)
     setInitialError(null)
 
     try {
-      // Primero verificar estado de conexión
       const health = await checkDatabaseHealth()
       setIsConnected(health.connected)
 
@@ -73,7 +78,7 @@ export default function App({ user, onLogout }) {
         })
       }
     } catch (err) {
-      console.error('Error al cargar datos desde Supabase:', err)
+      console.error('Error al cargar datos:', err)
       setInitialError(err.message || 'Error al comunicarse con la base de datos')
       setIsConnected(false)
     } finally {
@@ -83,6 +88,12 @@ export default function App({ user, onLogout }) {
 
   useEffect(() => {
     let isMounted = true
+
+    if (isDocente) {
+      setLoading(false)
+      return
+    }
+
     const init = async () => {
       try {
         const health = await checkDatabaseHealth()
@@ -113,7 +124,7 @@ export default function App({ user, onLogout }) {
         }
       } catch (err) {
         if (!isMounted) return
-        console.error('Error al inicializar datos desde Supabase:', err)
+        console.error('Error al inicializar datos:', err)
         setInitialError(err.message || 'Error al comunicarse con la base de datos')
         setIsConnected(false)
       } finally {
@@ -144,8 +155,28 @@ export default function App({ user, onLogout }) {
         onLogout={onLogout}
       />
 
+      {/* Banner de aviso para Coordinador cuando navega en asignaturas o pensum */}
+      {isCoordinador && (activeTab === 'pensum' || activeTab === 'asignaturas') && (
+        <div className="coordinador-info-banner">
+          <div className="banner-content">
+            <Sparkles size={18} className="banner-icon" />
+            <div className="banner-text">
+              <strong>Páginas dedicadas en progreso de creación</strong>
+              <span className="banner-subtext"> — Tu cuenta de Coordinador(a) tiene acceso de consulta a Mallas Curriculares y Banco de Asignaturas.</span>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            className="btn-banner-link"
+            onClick={() => setActiveTab('coordinador_portal')}
+          >
+            <Clock size={14} /> Ver Estado del Portal
+          </button>
+        </div>
+      )}
+
       {/* Alerta si ocurre un error de RLS o configuración */}
-      {initialError && (
+      {initialError && !isDocente && (
         <div className="system-alert-banner">
           <div className="alert-content">
             <AlertCircle size={20} className="text-warning" />
@@ -172,7 +203,7 @@ export default function App({ user, onLogout }) {
         {loading ? (
           <div className="loading-state-container">
             <div className="spinner"></div>
-            <p>Conectando con Supabase y cargando mallas curriculares...</p>
+            <p>Conectando con el sistema y cargando mallas curriculares...</p>
           </div>
         ) : (
           <>
@@ -193,6 +224,7 @@ export default function App({ user, onLogout }) {
               />
             )}
 
+            {/* Programas */}
             {activeTab === 'programas' && (
               <ProgramasView
                 programas={programas}
@@ -203,6 +235,7 @@ export default function App({ user, onLogout }) {
               />
             )}
 
+            {/* Banco de Asignaturas */}
             {activeTab === 'asignaturas' && (
               <AsignaturasView
                 asignaturas={asignaturas}
@@ -212,7 +245,9 @@ export default function App({ user, onLogout }) {
                 onShowToast={showToast}
               />
             )}
-                      {(activeTab === 'plantilla' || activeTab === 'coordinadores') && (
+
+            {/* Plantilla Administrativa */}
+            {(activeTab === 'plantilla' || activeTab === 'coordinadores') && (
               <PlantillaView
                 programas={programas}
                 onShowToast={showToast}

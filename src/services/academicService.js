@@ -674,3 +674,40 @@ export async function updateDocente(id, changes) {
     return data?.[0]
   }
 }
+
+
+// --- DESHABILITACIÓN / HABILITACIÓN (SOFT DELETE) ---
+
+export async function toggleAsignaturaActivo(code_course, nuevoActivo) {
+  try {
+    return await requestBackend(`/asignaturas/${encodeURIComponent(code_course)}/estado?activo=${Boolean(nuevoActivo)}`, {
+      method: 'PATCH'
+    })
+  } catch (err) {
+    console.warn('Fallo backend en toggleAsignaturaActivo, fallback Supabase:', err.message)
+    const { data, error } = await supabase
+      .from('asignaturas')
+      .update({ activo: Boolean(nuevoActivo) })
+      .eq('code_course', code_course)
+      .select()
+    if (error) throw error
+    return data?.[0]
+  }
+}
+
+export async function togglePensumActivo(code_program, code_course, nuevoActivo) {
+  try {
+    return await requestBackend(`/pensum/${encodeURIComponent(code_program)}/${encodeURIComponent(code_course)}/estado?activo=${Boolean(nuevoActivo)}`, {
+      method: 'PATCH'
+    })
+  } catch (err) {
+    console.warn('Fallo backend en togglePensumActivo, fallback Supabase:', err.message)
+    const { data, error } = await supabase
+      .from('pensum_academico')
+      .update({ activo: Boolean(nuevoActivo) })
+      .match({ code_program, code_course })
+      .select()
+    if (error) throw error
+    return data?.[0]
+  }
+}
