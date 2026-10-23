@@ -1,5 +1,5 @@
 import React from 'react'
-import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Clock } from 'lucide-react'
+import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Clock, UserCircle } from 'lucide-react'
 
 export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout }) {
   const rol = user?.rol ?? 1 // 1: Admin, 2: Coordinador, 3: Docente
@@ -11,8 +11,8 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
   const isCoordinador = rol === 2
   const isDocente = rol === 3
 
-  const rolLabel = rol === 1 
-    ? 'Administrador' 
+  const rolLabel = rol === 1
+    ? 'Administrador'
     : (rol === 2 ? 'Coordinador' : (rol === 3 ? 'Docente' : (user?.rolNombre || 'Usuario')))
 
   const handleBrandClick = () => {
@@ -96,6 +96,17 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
             >
               <Clock size={18} />
               <span>Portal Docente</span>
+            </button>
+          )}
+
+          {/* Mi perfil: visible para todos los roles */}
+          {user && (
+            <button
+              className={`nav-tab-btn ${activeTab === 'mi-perfil' ? 'active' : ''}`}
+              onClick={() => setActiveTab('mi-perfil')}
+            >
+              <UserCircle size={18} />
+              <span style={{ whiteSpace: 'nowrap' }}>Mi perfil</span>
             </button>
           )}
         </nav>
