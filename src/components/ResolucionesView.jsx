@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { FileText, AlertCircle, RefreshCw, Plus, Edit2, Trash2, ExternalLink } from 'lucide-react'
 import { getPeriodos, getPeriodo } from '../services/resolucionesService'
 import { estadoPlazo } from '../utils/estadoPlazo'
@@ -27,6 +27,9 @@ function esUrlHttp(valor) {
   }
 }
 
+// Convierte el error del servicio en un objeto simple para el estado.
+const aInfoError = (err) => ({ status: err?.status, mensaje: err?.message || '' })
+
 /* ---------- Subcomponentes ---------- */
 
 function EstadoBadge({ estado }) {
@@ -37,17 +40,36 @@ function EstadoBadge({ estado }) {
   )
 }
 
-function ErrorCarga({ mensaje, onReintentar }) {
+// 401 -> sesión expirada (la vista cierra sesión). 403 -> sin permiso (no se reintenta).
+// Cualquier otro fallo -> "No se pudo cargar" con "Reintentar" (criterio 5).
+function ErrorCarga({ error, onReintentar }) {
+  const status = error?.status
+  let titulo = 'No se pudo cargar'
+  let detalle = error?.mensaje
+  let reintentable = true
+
+  if (status === 401) {
+    titulo = 'Tu sesión expiró'
+    detalle = 'Inicia sesión de nuevo para continuar.'
+    reintentable = false
+  } else if (status === 403) {
+    titulo = 'No tienes permiso para ver esta pantalla'
+    detalle = 'Esta sección es solo para administradores.'
+    reintentable = false
+  }
+
   return (
     <div className="res-error" role="alert">
       <AlertCircle size={20} className="text-danger" />
       <div className="res-error-text">
-        <strong>No se pudo cargar</strong>
-        {mensaje && <small>{mensaje}</small>}
+        <strong>{titulo}</strong>
+        {detalle && <small>{detalle}</small>}
       </div>
-      <button type="button" className="btn-primary btn-sm" onClick={onReintentar}>
-        <RefreshCw size={14} /> Reintentar
-      </button>
+      {reintentable && (
+        <button type="button" className="btn-primary btn-sm" onClick={onReintentar}>
+          <RefreshCw size={14} /> Reintentar
+        </button>
+      )}
     </div>
   )
 }
@@ -161,7 +183,7 @@ function PanelDetalle({ estado, detalle, error, onReintentar }) {
   }
 
   if (estado === 'cargando') return <Cargando texto="Cargando detalle del período..." />
-  if (estado === 'error') return <ErrorCarga mensaje={error} onReintentar={onReintentar} />
+  if (estado === 'error') return <ErrorCarga error={error} onReintentar={onReintentar} />
   if (!detalle) return null
 
   const enlace = detalle.enlaceResolucion
@@ -210,19 +232,25 @@ function PanelDetalle({ estado, detalle, error, onReintentar }) {
 
 /* ---------- Contenido principal ---------- */
 
-function ResolucionesContenido() {
+function ResolucionesContenido({ onSesionExpirada }) {
   // Lista
   const [periodos, setPeriodos] = useState([])
   const [estadoLista, setEstadoLista] = useState('cargando') // cargando | ok | error
-  const [errorLista, setErrorLista] = useState('')
+  const [errorLista, setErrorLista] = useState(null)
   const [intentoLista, setIntentoLista] = useState(0)
 
   // Detalle
   const [seleccionadoId, setSeleccionadoId] = useState(null)
   const [detalle, setDetalle] = useState(null)
   const [estadoDetalle, setEstadoDetalle] = useState('cargando')
-  const [errorDetalle, setErrorDetalle] = useState('')
+  const [errorDetalle, setErrorDetalle] = useState(null)
   const [intentoDetalle, setIntentoDetalle] = useState(0)
+
+  // Ref para llamar siempre a la última versión del callback sin re-disparar los efectos.
+  const sesionExpiradaRef = useRef(onSesionExpirada)
+  useEffect(() => {
+    sesionExpiradaRef.current = onSesionExpirada
+  }, [onSesionExpirada])
 
   useEffect(() => {
     let activo = true
@@ -235,8 +263,9 @@ function ResolucionesContenido() {
       })
       .catch((err) => {
         if (!activo) return
-        setErrorLista(err.message || '')
+        setErrorLista(aInfoError(err))
         setEstadoLista('error')
+        if (err?.status === 401) sesionExpiradaRef.current?.()
       })
     return () => {
       activo = false
@@ -256,8 +285,9 @@ function ResolucionesContenido() {
       })
       .catch((err) => {
         if (!activo) return
-        setErrorDetalle(err.message || '')
+        setErrorDetalle(aInfoError(err))
         setEstadoDetalle('error')
+        if (err?.status === 401) sesionExpiradaRef.current?.()
       })
     return () => {
       activo = false
@@ -289,7 +319,7 @@ function ResolucionesContenido() {
       {estadoLista === 'cargando' && <Cargando texto="Cargando períodos académicos..." />}
 
       {estadoLista === 'error' && (
-        <ErrorCarga mensaje={errorLista} onReintentar={() => setIntentoLista((n) => n + 1)} />
+        <ErrorCarga error={errorLista} onReintentar={() => setIntentoLista((n) => n + 1)} />
       )}
 
       {estadoLista === 'ok' && periodos.length === 0 && (
@@ -337,10 +367,10 @@ function ResolucionesContenido() {
 
 /**
  * Pantalla "Resoluciones" (solo lectura, HU-A).
- * TODO: conectar `esAdmin` al sistema de roles cuando exista (login y roles
- * están en desarrollo por otro equipo). Por ahora el default es true.
+ * `esAdmin` lo calcula App.jsx a partir del rol de la sesión (rol === 1).
+ * `onSesionExpirada` se llama cuando el backend responde 401.
  */
-export default function ResolucionesView({ esAdmin = true }) {
+export default function ResolucionesView({ esAdmin = true, onSesionExpirada }) {
   if (!esAdmin) {
     return (
       <div className="section-container">
@@ -351,5 +381,5 @@ export default function ResolucionesView({ esAdmin = true }) {
       </div>
     )
   }
-  return <ResolucionesContenido />
+  return <ResolucionesContenido onSesionExpirada={onSesionExpirada} />
 }
