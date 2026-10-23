@@ -1,6 +1,6 @@
 import React from 'react'
 
-import { GraduationCap, BookOpen, Library, Layers, LogOut } from 'lucide-react'
+import { GraduationCap, BookOpen, Library, Layers, LogOut, Users } from 'lucide-react'
 
 
 export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout }) {
@@ -42,11 +42,11 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
             <span>Banco de Asignaturas</span>
           </button>
                   <button
-            className={`nav-tab-btn ${activeTab === 'coordinadores' ? 'active' : ''}`}
-            onClick={() => setActiveTab('coordinadores')}
+            className={`nav-tab-btn ${activeTab === 'plantilla' ? 'active' : ''}`}
+            onClick={() => setActiveTab('plantilla')}
           >
             <Users size={18} />
-            <span>Coordinadores</span>
+            <span>Plantilla</span>
           </button>
         </nav>
 

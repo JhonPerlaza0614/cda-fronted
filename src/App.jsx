@@ -3,7 +3,7 @@ import Navbar from './components/Navbar'
 import PensumView from './components/PensumView'
 import ProgramasView from './components/ProgramasView'
 import AsignaturasView from './components/AsignaturasView'
-import CoordinadoresView from './components/CoordinadoresView'
+import PlantillaView from './components/PlantillaView'
 import SqlSetupModal from './components/SqlSetupModal'
 import Toast from './components/Toast'
 import { 
@@ -210,8 +210,8 @@ export default function App({ user, onLogout }) {
                 onShowToast={showToast}
               />
             )}
-                      {activeTab === 'coordinadores' && (
-              <CoordinadoresView
+                      {(activeTab === 'plantilla' || activeTab === 'coordinadores') && (
+              <PlantillaView
                 programas={programas}
                 onShowToast={showToast}
               />
