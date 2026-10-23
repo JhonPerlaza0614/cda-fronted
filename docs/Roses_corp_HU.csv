@@ -1,0 +1,594 @@
+"ID","Historia de usuario","Criterios de aceptacion","Modulo","Peso","Prioridad","Observaciones","Estado"
+"HU-001","Yo como administrador, requiero iniciar sesión para autenticarme ante el sistema","1. Inicio de sesión exitoso
+1.1. Dado que el usuario accede al sistema sin sesión iniciada, cuando abre la página principal, entonces el sistema debe mostrar la pantalla de inicio de sesión.
+1.2. Dado que el usuario está en la pantalla de login, cuando presiona el botón “Iniciar sesión con Google con el correo institucional”, entonces el sistema debe redirigir al servicio de autenticación de Google.
+1.3. Dado que el usuario se autentica correctamente con Google con una cuenta @correounivalle.edu.co registrada y activa, cuando el sistema valida su cuenta, entonces debe permitir el acceso según el rol asignado (Administrador).
+
+2. Credenciales incorrectas
+2.1. Dado que el usuario intenta autenticarse, cuando utilice una cuenta que no pertenezca al dominio institucional “@correounivalle.edu.co”, entonces el sistema debe impedir el acceso y mostrar “Debe usar su correo institucional”.
+2.2. Dado que el usuario se autentica con una cuenta institucional que no está registrada en el sistema, entonces el sistema debe impedir el acceso y mostrar “Su cuenta no está registrada. Contacte al administrador”.
+2.3. Dado que la cuenta del usuario está desactivada, cuando intente autenticarse, entonces el sistema debe impedir el acceso y mostrar “Su cuenta está desactivada”.
+2.4. Dado que el usuario inicia el proceso de autenticación, cuando cancele el inicio de sesión, cierre la ventana de Google o Google no pueda autenticarlo, entonces el sistema debe volver al login e impedir el acceso a las funcionalidades de la aplicación.
+2.5. Dado que el usuario inicia sesión, cuando Google no responda o haya un error de conexión, entonces el sistema debe mostrar “No fue posible iniciar sesión. Intente de nuevo” y permitir reintentar.
+
+3. Identificación de rol
+3.1. Dado que el administrador se ha autenticado correctamente mediante su cuenta institucional, cuando el sistema valide su información, entonces debe reconocer que el usuario posee el rol de administrador y permitirle acceder a las funcionalidades correspondientes.
+3.2. Dado que la cuenta está registrada pero no tiene rol de administrador, cuando el usuario se autentique, entonces el sistema debe impedir el acceso a las funcionalidades de administración y mostrar “No tiene permisos de administrador”.
+
+4. Sesión
+4.1. Dado que el usuario ya tiene sesión activa, cuando abra el login, entonces el sistema debe llevarlo a su pantalla de inicio.
+4.2. Dado que no hay sesión iniciada, cuando el usuario intente entrar a una pantalla interna, entonces el sistema debe redirigirlo al login.
+4.3. Dado que la sesión expira por inactividad, entonces el sistema debe cerrarla y mostrar “Su sesión expiró”. (el tiempo lo define el cliente)","Gestión de acceso","5","M","","En Backlog"
+"HU-002","Yo como administrador, requiero crear un nuevo periodo académico basándome en la resolución, para definir la vigencia del semestre y habilitar los plazos de registro del sistema.","1. Dado que el administrador está en el módulo de programación académica se debe mostrar el enlace a la resolucion y cuando selecciona “Crear período académico”, el sistema muestra el formulario.
+2. Campos obligatorios: nombre del período (ej. Agosto-Diciembre 2026), número de resolución, fecha de resolución, fecha de inicio y de fin del semestre, fecha de adición y cancelación y plazo de registro de disponibilidad docente (inicio y fin, con fecha y hora).
+3. El plazo de asignación de coordinadores (inicio y fin, con fecha y hora) es opcional. Mientras no esté definido, los coordinadores solo consultan.
+4. Al ingresar el inicio del plazo docente, el sistema sugiere el fin dos semanas después. El administrador puede cambiarlo. (supuesto)
+5. El nombre no puede repetirse y tiene una longitud máxima(20). El número de resolución tampoco puede repetirse.
+6. En el semestre y en cada plazo, la fecha de fin (con hora) debe ser posterior a la de inicio.
+7. Las fechas de adición y cancelación deben estar dentro del semestre y los rangos no pueden solaparse.
+8. El enlace a la resolución puede ser modificado por el administrador por cambio de link o diversos motivos.
+9. El enlace a la resolución(generado por el sistema o modificado manualmente) debe ser una dirección web válida(http o https), de lo contrario muestra el mensaje “Enlace no válido”.
+10. Los plazos de docentes y coordinadores pueden solaparse y no se validan contra las fechas del semestre. (supuesto)
+11. Si hay un período vigente, el sistema avisa que pasará a historial y pide confirmación.
+12.Al guardar, el sistema pide “¿La información es correcta?”. Al aceptar, muestra “Período académico creado” y queda como vigente.
+13. Los docentes solo pueden registrar disponibilidad dentro de su plazo. Fuera de él ven “Fuera del período habilitado”. Lo mismo aplica a los coordinadores con el suyo. Se programan los recordatorios (HU-038 y 039).
+14. Al cancelar con datos escritos, el sistema pide confirmar antes de limpiar el formulario.
+15. Si no se puede guardar, muestra “No se pudo crear el período” y conserva los datos escritos. El período vigente anterior no cambia.","Gestión de resolución de calendario","5","M","Definir con base en cómo lo quiera manejar el administrador si se crea desde la app o se sube un PDF","En Backlog"
+"HU-003","Yo como administrador, requiero poder editar la resolución del calendario académico, para asi poder corregir errores oportunamente","1. Solo el período vigente muestra “Editar”. Los del historial son de solo consulta.
+2. El formulario carga los datos actuales y permite modificar todos los campos, incluido el enlace, y agregar o quitar fechas de adición y cancelación.
+3. Una modificatoria de la resolución (como la 161) se aplica editando este período: nuevo número, enlace o fechas.
+4. Aplican las validaciones de HU-002, sin contar el propio período como repetido.
+5. Si no modificó nada, muestra “No hay cambios para guardar”.
+6.Al guardar, el sistema pide confirmación y muestra “Período académico actualizado”. Los cambios aplican de inmediato.
+7. Si un docente o coordinador está trabajando cuando su plazo se cierra por la edición, lo ya guardado se conserva y los nuevos cambios quedan bloqueados.
+8. Si cambia las fechas de un plazo, se envía el correo de actualización (HU-038 y 039).
+9. Las programaciones y asignaciones ya hechas se conservan aunque cambien las fechas.
+10. Al cancelar con cambios sin guardar, pide confirmar antes de descartarlos. Al confirmar, el período conserva su información original.
+11. Si falla, muestra “No se pudo actualizar el período” y conserva la información original.","Gestión de resolución de calendario","3","M","","En Backlog"
+"HU-004","Yo como administrador, requiero la capacidad de eliminar (desactivar) la resolución del calendario académico, para evitar redundancias futuras","1. Dado que existe un período vigente, cuando el administrador lo selecciona, el sistema muestra el botón “Eliminar”.
+2. Al presionarlo, el sistema muestra “¿Está seguro que desea eliminar el período ...?” con Aceptar y Cancelar. Advierte: “El sistema quedará sin período vigente y los plazos de docentes y coordinadores se cerrarán”.
+3. Al aceptar, el período se desactiva, deja de ser vigente y se muestra “Período eliminado”.
+4. El sistema nunca borra físicamente el registro. El período queda en el historial con estado “Desactivado”. (tu texto decía “ocultarla del sistema”; lo dejo visible en el historial para consulta)
+5. Docentes y coordinadores quedan en solo consulta (“Fuera del período habilitado”) y se cancelan los recordatorios pendientes.
+6. Las programaciones y asignaciones ya hechas con ese período se conservan.
+7. Solo el período vigente muestra “Eliminar”. Los del historial no.
+8. Al cancelar, no cambia nada.
+9. Si falla, muestra “No se pudo eliminar el período” y sigue vigente.","Gestión de resolución de calendario","2","M","","En Backlog"
+"HU-005","Yo como administrador, requiero ver las resoluciones de calendario académico que han sido creadas y auditarlas","1. El sistema muestra el período vigente destacado y debajo el historial, del más reciente al más antiguo, con nombre y estado (“Vigente”, “Historial” o “Desactivado”). (supuesto: orden)
+2. Al seleccionar uno, muestra número de resolución, enlace (abre en pestaña nueva), inicio y fin del semestre, fechas de adición y cancelación, y los plazos de docentes y coordinadores con su estado “Abierto” o “Cerrado” según la fecha y hora actual.
+3. Los del historial y los desactivados son de solo lectura. Solo el vigente muestra “Editar” y “Eliminar”.
+4. Sin períodos, muestra “No hay períodos académicos registrados” y la opción de crear uno.
+5. Si no carga, muestra “No se pudo cargar” con opción de reintentar.","Gestión de resolución de calendario","2","M","","En Backlog"
+"HU-006","Yo como docente, requiero hacer login, para autenticarme ante el sistema","1. Inicio de sesión exitoso
+1.1. Dado que el usuario accede al sistema sin sesión iniciada, cuando abre la página principal, entonces el sistema debe mostrar la pantalla de inicio de sesión.
+1.2. Dado que el usuario está en la pantalla de login, cuando presiona el botón “Iniciar sesión con Google con el correo institucional”, entonces el sistema debe redirigir al servicio de autenticación de Google.
+1.3. Dado que el usuario se autentica correctamente con Google con una cuenta @correounivalle.edu.co registrada y activa, cuando el sistema valida su cuenta, entonces debe permitir el acceso según el rol asignado (Docente).
+
+2. Credenciales incorrectas
+2.1. Dado que el usuario intenta autenticarse, cuando utilice una cuenta que no pertenezca al dominio institucional “@correounivalle.edu.co”, entonces el sistema debe impedir el acceso y mostrar “Debe usar su correo institucional”.
+2.2. Dado que el usuario se autentica con una cuenta institucional que no está registrada en el sistema, entonces el sistema debe impedir el acceso y mostrar “Su cuenta no está registrada. Contacte al administrador”.
+2.3. Dado que la cuenta del usuario está desactivada, cuando intente autenticarse, entonces el sistema debe impedir el acceso y mostrar “Su cuenta está desactivada”.
+2.4. Dado que el usuario inicia el proceso de autenticación, cuando cancele el inicio de sesión, cierre la ventana de Google o Google no pueda autenticarlo, entonces el sistema debe volver al login e impedir el acceso a las funcionalidades de la aplicación.
+2.5. Dado que el usuario inicia sesión, cuando Google no responda o haya un error de conexión, entonces el sistema debe mostrar “No fue posible iniciar sesión. Intente de nuevo” y permitir reintentar.
+
+3. Identificación de rol
+3.1. Dado que el Docente se ha autenticado correctamente mediante su cuenta institucional, cuando el sistema valide su información, entonces debe reconocer que el usuario posee el rol de Docente y permitirle acceder a las funcionalidades correspondientes.
+3.2. Dado que la cuenta está registrada pero no tiene rol de Docente, cuando el usuario se autentique, entonces el sistema debe impedir el acceso a las funcionalidades de Docente y mostrar “No tiene permisos de Docente”.
+
+4. Sesión
+4.1. Dado que el usuario ya tiene sesión activa, cuando abra el login, entonces el sistema debe llevarlo a su pantalla de inicio.
+4.2. Dado que no hay sesión iniciada, cuando el usuario intente entrar a una pantalla interna, entonces el sistema debe redirigirlo al login.
+4.3. Dado que la sesión expira por inactividad, entonces el sistema debe cerrarla y mostrar “Su sesión expiró”. (el tiempo lo define el cliente)","Gestión de acceso","5","M","Sujeta a cambios según las preferencias del cliente con la HU-001","En Backlog"
+"HU-007","Yo como docente, requiero registrar mis horarios, para notificar a los coordinadores mis horarios disponibles para las clases","1. Acceder al registro
+1.1. Dado que el docente ha iniciado sesión, hay un período vigente y su plazo de registro está abierto, cuando acceda al módulo de horarios, entonces el sistema debe mostrar la opción “Registrar disponibilidad”.
+1.2. Dado que el plazo del docente está cerrado o aún no inicia, cuando acceda al módulo de horarios, entonces el sistema no debe mostrar la opción de registrar y debe mostrar “Fuera del período habilitado”.
+1.3. Dado que no hay un período vigente, cuando el docente acceda al módulo de horarios, entonces el sistema debe mostrar “No hay un período académico vigente”.
+
+2. Registrar horario
+2.1. El sistema debe permitir seleccionar el día de la semana, de una lista de lunes a domingo. (obligatorio)
+2.2. El sistema debe permitir ingresar la hora de inicio de disponibilidad. (obligatorio)
+2.3. El sistema debe permitir ingresar la hora de finalización de disponibilidad. (obligatorio)
+2.4. Dado que falta algún campo obligatorio, cuando el docente presione “Guardar”, entonces el sistema debe marcar el campo y no guardar.
+2.5. Dado que el docente completa la información requerida, cuando presione “Guardar”, entonces el sistema debe solicitar la confirmación del registro con “¿Desea registrar este horario?”.
+
+3. Validaciones
+3.1. Dado que el docente registra un horario, cuando la hora de finalización sea menor o igual a la hora de inicio, entonces el sistema debe impedir el registro y mostrar “La hora de fin debe ser posterior a la hora de inicio”.
+3.2. Dado que el docente registra un horario, cuando las horas estén fuera del rango horario permitido (definido por el cliente), entonces el sistema debe impedir el registro y mostrar “Hora fuera del rango permitido”.
+3.3. Dado que el horario registrado se cruza con otro registrado el mismo día, entonces el sistema debe informar “El horario se cruza con otro ya registrado ([día] [inicio] a [fin])” y evitar el registro. Los bloques contiguos, donde uno termina cuando empieza otro, están permitidos. (supuesto)
+3.4. Dado que el plazo del docente se cierra mientras llena el formulario, cuando presione “Guardar”, entonces el sistema debe impedir el registro y mostrar “El plazo de registro ya cerró”. Los horarios ya registrados se conservan.
+
+4. Confirmación
+4.1. Dado que el horario fue registrado correctamente, cuando finalice la operación, entonces el sistema debe mostrar el mensaje “Horario registrado” y el horario debe aparecer en el listado del docente.
+4.2. Dado que el docente cancela con datos escritos, entonces el sistema debe pedir confirmar antes de limpiar el formulario.
+4.3. Dado que no se puede guardar, entonces el sistema debe mostrar “No se pudo registrar el horario” y conservar los datos escritos.
+
+5 Plazo de registro
+5.1. Dado que el plazo del docente está cerrado o aún no inicia, cuando acceda al módulo de horarios, entonces el sistema no debe mostrar la opción de registrar y debe mostrar “Fuera del período habilitado”.
+5.2. Dado que no hay un período vigente, cuando el docente acceda al módulo, entonces el sistema debe mostrar “No hay un período académico vigente”.
+5.3. Dado que el plazo se cierra mientras el docente llena el formulario, cuando presione “Guardar”, entonces el sistema debe impedir el registro y mostrar “El plazo de registro ya cerró”.
+
+6 Fallos
+6.1. Dado que no se puede guardar, entonces el sistema debe mostrar “No se pudo registrar el horario” y conservar los datos escritos.
+6.2. Dado que el docente cancela con datos escritos, entonces el sistema debe pedir confirmar antes de limpiar el formulario.","Gestión de disponibilidad docente","13","M","","En Backlog"
+"HU-008","Yo como docente, requiero editar mis horarios, para corregir errores o actualizar la información de mis horarios","1. Seleccionar horario
+1.1. Dado que el docente posee horarios registrados y su plazo de registro está abierto, cuando seleccione uno de ellos, entonces el sistema debe mostrar la opción “Editar”.
+1.2. Dado que el plazo del docente está cerrado o aún no inicia, cuando seleccione un horario, entonces el sistema no debe mostrar la opción “Editar”.
+
+2. Modificar
+2.1. Dado que el docente selecciona “Editar”, cuando se cargue el formulario, entonces el sistema debe mostrar la información actual del horario (día, hora de inicio y hora de fin).
+2.2. Dado que el docente modifica la información, cuando ingrese datos válidos, entonces el sistema debe permitir guardar los cambios.
+2.3. Dado que el docente no modificó nada, cuando presione “Guardar”, entonces el sistema debe mostrar “No hay cambios para guardar”.
+
+3. Validar cambios
+3.1. Dado que el docente deja vacío algún campo, cuando presione “Guardar”, entonces el sistema debe marcar el campo e impedir guardar la modificación.
+3.2. Dado que la hora de finalización es menor o igual a la de inicio, entonces el sistema debe impedir guardar y mostrar “La hora de fin debe ser posterior a la hora de inicio”.
+3.3. Dado que las horas están fuera del rango permitido, entonces el sistema debe impedir guardar y mostrar “Hora fuera del rango permitido”.
+3.4. Dado que el docente modifica un horario, cuando genere un conflicto con otro horario registrado, entonces el sistema debe impedir guardar la modificación. El propio horario no cuenta como conflicto.
+3.5. Dado que el plazo del docente se cierra mientras edita, cuando presione “Guardar”, entonces el sistema debe impedir guardar y mostrar “El plazo de registro ya cerró”, y el horario conserva su información original.
+
+4. Confirmar
+4.1. Dado que el docente confirma los cambios, cuando finalice la actualización, entonces el sistema debe guardar la nueva información y mostrar “Horario actualizado”.
+4.2. Dado que el docente cancela la modificación, cuando regrese a la pantalla anterior, entonces el horario debe conservar su información original. Si hay cambios sin guardar, el sistema debe pedir confirmar antes de descartarlos.
+4.3. Editar un horario no modifica  las franjas asignadas ya registradas por el coordinador. (supuesto)
+4.4. Dado que no se puede guardar, entonces el sistema debe mostrar “No se pudo actualizar el horario” y el horario debe conservar su información original.
+
+5 Plazo de registro
+5.1. Dado que el plazo del docente está cerrado o aún no inicia, cuando seleccione un horario, entonces el sistema no debe mostrar la opción “Editar”.
+5.2. Dado que el plazo se cierra mientras el docente edita, cuando presione “Guardar”, entonces el sistema debe impedir guardar y mostrar “El plazo de registro ya cerró”. El horario conserva su información original.
+
+6 Fallos
+6.1. Dado que no se puede guardar, entonces el sistema debe mostrar “No se pudo actualizar el horario” y el horario debe conservar su información original.","Gestión de disponibilidad docente","5","S","","En Backlog"
+"HU-009","Yo como docente, requiero ver mis horarios, para auditar mis horarios","1. Consulta
+1.1. Dado que el docente ha iniciado sesión, cuando acceda al módulo de horarios, entonces el sistema debe mostrar los horarios registrados a su nombre en el período vigente.
+1.2. El sistema no debe mostrar al docente los horarios registrados por otros docentes.
+1.3. Cada horario debe mostrar la opción “Editar” solo si el plazo del docente está abierto (HU-008).
+1.4. El módulo debe mostrar el plazo de registro del docente (inicio y fin) con el estado “Abierto” o “Cerrado”. Si el administrador no lo definió, debe mostrar “Su plazo aún no ha sido definido”. (supuesto)
+
+2. Organización
+2.1. Dado que el docente posee varios horarios registrados, cuando consulte su información, entonces el sistema debe mostrar los horarios organizados por día (de lunes a domingo) y por hora de inicio, con día, hora de inicio y hora de fin.
+
+3. Sin horarios
+3.1. Dado que el docente no tiene horarios registrados, cuando acceda al módulo, entonces el sistema debe mostrar un mensaje indicando que no tiene horarios registrados.
+3.2. Dado que no hay un período vigente, cuando el docente acceda al módulo, entonces el sistema debe mostrar “No hay un período académico vigente”.
+
+4. Plazo y fallos
+4.1. Cada horario debe mostrar la opción “Editar” solo si el plazo del docente está abierto.
+4.2. Dado que no hay un período vigente, cuando el docente acceda al módulo, entonces el sistema debe mostrar “No hay un período académico vigente”.
+4.3. Dado que no cargan los horarios, entonces el sistema debe mostrar “No se pudo cargar” con opción de reintentar.","Gestión de disponibilidad docente","2","M","","En Backlog"
+"HU-010","Yo como coordinador, requiero hacer login, para autenticarme ante el sistema","1. Inicio de sesión exitoso
+1.1. Dado que el usuario accede al sistema sin sesión iniciada, cuando abre la página principal, entonces el sistema debe mostrar la pantalla de inicio de sesión.
+1.2. Dado que el usuario está en la pantalla de login, cuando presiona el botón “Iniciar sesión con Google con el correo institucional”, entonces el sistema debe redirigir al servicio de autenticación de Google.
+1.3. Dado que el usuario se autentica correctamente con Google con una cuenta @correounivalle.edu.co con perfil de coordinador activo, cuando el sistema valida su cuenta, entonces debe permitir el acceso según el rol asignado (coordinador).
+
+2. Credenciales incorrectas
+2.1. Dado que el usuario intenta autenticarse, cuando utilice una cuenta que no pertenezca al dominio institucional “@correounivalle.edu.co”, entonces el sistema debe impedir el acceso y mostrar “Debe usar su correo institucional”.
+2.2. Dado que el usuario se autentica con una cuenta institucional que no tiene ningún perfil registrado, entonces el sistema debe impedir el acceso y mostrar “Su cuenta no está registrada. Contacte al administrador”.
+2.3. Dado que el perfil de coordinador del usuario está desactivado, cuando intente autenticarse, entonces el sistema debe impedir el acceso y mostrar “Su perfil está desactivado. Contacte al administrador”.
+2.4. Dado que el usuario inicia el proceso de autenticación, cuando cancele el inicio de sesión, cierre la ventana de Google o Google no pueda autenticarlo, entonces el sistema debe volver al login e impedir el acceso a las funcionalidades de la aplicación.
+2.5. Dado que el usuario inicia sesión, cuando Google no responda o haya un error de conexión, entonces el sistema debe mostrar “No fue posible iniciar sesión. Intente de nuevo” y permitir reintentar.
+
+3. Identificación de rol
+3.1. Dado que el coordinador se ha autenticado correctamente, cuando el sistema valide la información de la cuenta, entonces debe identificar el rol de coordinador.
+3.2. Dado que el usuario posee el rol de coordinador, cuando ingrese al sistema, entonces debe visualizar las funcionalidades correspondientes a dicho rol.
+3.3. Dado que la cuenta tiene un perfil registrado pero no de coordinador, cuando el usuario se autentique, entonces el sistema debe impedir el acceso a las funcionalidades de coordinador y mostrar “No tiene perfil de coordinador”.
+3.4. Dado que el coordinador no tiene programa asignado, cuando ingrese al sistema, entonces debe permitirle el acceso y mostrar “Aún no tiene un programa asignado. Contacte al administrador”. (supuesto)
+
+4. Sesión
+4.1. Dado que el usuario ya tiene sesión activa, cuando abra el login, entonces el sistema debe llevarlo a su pantalla de inicio.
+4.2. Dado que no hay sesión iniciada, cuando el usuario intente entrar a una pantalla interna, entonces el sistema debe redirigirlo al login.
+4.3. Dado que la sesión expira por inactividad, entonces el sistema debe cerrarla y mostrar “Su sesión expiró”.","Gestión de acceso","5","M","","En Backlog"
+"HU-011","Yo como coordinador, requiero seleccionar la resolución, el semestre y el periodo de oferta para ver las materias a programar, para iniciar la asignación de docentes de mi programa.","1. Selección de Parámetros:
+
+1.1. Dado que el coordinador ha iniciado sesión correctamente, cuando acceda al módulo de Programación Académica, el sistema debe mostrar únicamente las resoluciones activas asociadas a su programa académico.
+
+1.2. Dado que el coordinador selecciona una resolución, el sistema debe habilitar el selector de semestres correspondientes a dicha resolución.
+
+1.3. Dado que el coordinador selecciona el semestre y el periodo de oferta (""Semestral"" o ""Anual""), cuando confirme la selección, el sistema debe cargar las materias correspondientes.
+
+2. Carga Automática de Materias y Grupos:
+
+2.1. Dado que el sistema carga las materias del semestre seleccionado, debe generar automáticamente un identificador de grupo para diferenciar las secciones del curso.","Gestión de asignación académica","1","M","","En Backlog"
+"HU-012","Yo como coordinador, requiero editar los docentes asignados, para evitar problemas de cruce y corregir errores","1. Consultar programación
+1.1. Dado que existe una programación académica creada, cuando el coordinador acceda a ella, entonces el sistema debe mostrar las materias y los docentes asignados.
+1.2. Dado que una materia no tiene docente asignado, cuando el coordinador consulte la programación, entonces el sistema debe identificarla como ""Sin docente asignado"".
+
+2. Editar asignación
+2.1. Dado que una materia tiene un docente asignado, cuando el coordinador seleccione la materia, entonces el sistema debe mostrar la opción ""Editar docente"".
+2.2. Dado que el coordinador selecciona ""Editar docente"", cuando el sistema cargue las opciones disponibles, entonces debe mostrar los docentes asociados a la materia.
+2.3. Dado que existen docentes asociados a la materia, cuando el coordinador consulte las opciones, entonces el sistema debe permitir visualizar su disponibilidad horaria y la información correspondiente a su última evaluación docente.
+
+3. Cambiar docente
+3.1. Dado que el coordinador selecciona un nuevo docente, cuando confirme la modificación, entonces el sistema debe reemplazar el docente anteriormente asignado.
+3.2. Dado que el coordinador selecciona ""Sin docente asignado"", cuando confirme la modificación, entonces el sistema debe dejar la materia sin docente y marcarla como pendiente de asignación.
+
+4. Cancelar modificación
+4.1. Dado que el coordinador está modificando una asignación, cuando seleccione ""Cancelar"", entonces el sistema debe conservar el docente asignado originalmente.","Gestión de asignación académica","3","M","","En Backlog"
+"HU-013","Yo como coordinador, requiero la posibilidad de asignarme como docente para dictar la materia","1. Identificación del coordinador como docente
+1.1. Dado que el coordinador también posee el rol de docente, cuando el sistema cargue los docentes asociados a una materia, entonces el perfil de docente del coordinador aparece en la lista de docentes de la materia como cualquier otro docente activo.
+
+2. Validación de disponibilidad
+2.1. Dado que el coordinador aparece como docente asociado a la materia, cuando el sistema consulte su disponibilidad, entonces debe mostrar su disponibilidad horaria registrada.
+2.2. Dado que el coordinador no tiene disponibilidad para el horario correspondiente, cuando se realice la selección, entonces el sistema debe informar que no existe disponibilidad para dicha asignación.
+2.3 Dado que el perfil de docente del coordinador tiene las mismas limitantes que otro perfl de docente, tiene límite de 20 horas de carga academica.
+
+3. Asignación
+3.1. Dado que el coordinador aparece como docente disponible, cuando se seleccione a sí mismo y confirme la operación, entonces el sistema debe registrarlo como docente de la materia.
+3.2. Dado que el coordinador selecciona ""Sin docente asignado"", cuando confirme la operación, entonces el sistema debe dejar la materia pendiente de asignación.","Gestión de asignación académica","3","M","","En Backlog"
+"HU-014","Yo como administrador, requiero la capacidad de exportar la programación académica, para subirla al portal del SIRA","1. Al exportar, el archivo generado debe ser en formato Excel (.xlsx o .xls), legible por aplicaciones estándar.
+2. El archivo exportado debe tener un nombre descriptivo (ejemplo: programacion_academica.xlsx) y, opcionalmente, incluir fecha/hora de exportación.
+3. El archivo solo puede ser exportable en un tiempo fijo antes del inicio del semestre.","Reportes","1","M","Preguntar si definir este tiempo cuando se crea el calendario en la HU-002","En Backlog"
+"HU-015","Yo como docente, requiero editar los datos de mi perfil, para mantener la información actualizada y corregir errores.","1. Dado que estoy en mi perfil, cuando presiono “Editar perfil”, el sistema muestra el formulario con mis datos actuales.
+2. Puedo editar foto, nombres, apellidos y correo institucional. No puedo editar código, documento,  tipo de perfil, estado ni evaluación docente. (supuesto)
+3. Nombres y apellidos son obligatorios, solo aceptan letras y espacios, y tienen una longitud máxima definida por el cliente.
+4. El correo debe tener formato válido, terminar en @correounivalle.edu.co y no estar repetido en ningún otro perfil, o muestra el mensaje correspondiente (“Debe usar el correo institucional” o “Ya existe un perfil con este correo”).
+5. La foto es opcional, en formato JPG o PNG y con un tamaño máximo definido por el cliente. Si no cumple, muestra “Formato o tamaño no válido”.
+6. Puedo reemplazar la foto o eliminarla, con confirmación. Al eliminarla vuelve la imagen por defecto.
+7. Si no modifiqué nada, muestra “No hay cambios para guardar”.
+8. Al guardar, el sistema pide confirmación y muestra “Perfil actualizado”.
+9. Si cambié mi correo, los recordatorios (HU-038) llegan al nuevo correo y mis asignaciones se conservan.
+10. Los cambios se reflejan de inmediato en el resto del sistema (listas de docentes y asignaciones).
+11. Al cancelar con cambios sin guardar, pide confirmar antes de descartarlos. Si confirmo, el perfil conserva su información original.
+12,Si falla al guardar, muestra “No se pudo guardar. Intente de nuevo” y conserva lo escrito. Si falla la carga de la foto, muestra “No se pudo cargar la imagen”.","Gestión de perfil y usuario","3","M","","En Backlog"
+"HU-016","Yo como coordinador, requiero ver las materias pendientes de asignación docente, para completar la programación de  mi programa.","1. El sistema muestra las materias “Sin docente asignado” de mi programa, agrupadas por semestre, con el total de pendientes.
+2. Cada una muestra su nombre, código y grupo.
+3. Con mi período de asignación abierto, cada materia muestra “Asignar docente” (HU-041). Con el período cerrado, es solo consulta.
+4. Si no hay pendientes, muestra “No hay materias pendientes de asignación”.
+5. Si no hay programación iniciada, muestra “Aún no hay programación iniciada”.
+6. Si no tengo programa asignado, muestra “Aún no tiene un programa asignado. Contacte al administrador”.
+7. Si no carga, muestra “No se pudo cargar” con opción de reintentar.","Gestión de asignación académica","2","M","","En Backlog"
+"HU-017","Yo como administrador, requiero crear nuevas resoluciones a los programas académicos, para desechar los no vigentes","1. Dado que el administrador está en el módulo de programación académica, cuando selecciona “Registrar resolución de programa”, el sistema muestra el formulario con nombre del programa, descripción, jornada (diurna o nocturna), período de oferta (semestral o anual) y botón “Agregar semestre”.
+
+2. Cada semestre tiene número y botón “Agregar asignatura”: nombre, código, créditos, horas de clase, horas de estudio independiente y tipo (básica, profesional, electiva complementaria, act. extracurricular).
+2.1El formulario debe permitir ingresar los siguientes datos: nombre del programa académico(tipo alfanumérico no mayor a XX caracteres) , descripción (tipo alfabetico no mayor a XX caracteres), numero del semestre (numerico XX), nombre de la asignatura(tipo alfabético no mayor a XX caracteres),código de la asignatura(alfanumerico no mayor a 8 caracteres), créditos de la asignatura (numerico de 1 digito),  horas de estudio independiente(numerico maximo 2 digitos),tipo de asignatura(lista seleccionable entre asignatura basica, profesional, electiva complementaria, act. extracurricular), horas de clase (numerico 1 digito)
+
+3. El administrador puede quitar un semestre o una asignatura del formulario antes de guardar.
+3.1 Al presionar guardar se mostrará un cuadro de dialogo preguntando si la información ingresada es correcta, con las opciones de aceptar para guardar la información y cancelar para regresar al formulario y editar la información erronea.
+Todos los campos son obligatorios. Se necesita al menos un semestre con una asignatura. Si falta algo, marca el campo y no guarda.
+El número de semestre es numérico, sin repetirse y consecutivo desde 1(algunos).
+Dado que el administrador completa el formulario correctamente y confirma el registro, el sistema debe guardar la resolucionen la base de datos.
+
+3.2. Si ya existe una malla activa del mismo programa(codigo) y jornada, el sistema avisa que pasará a inactiva y pide confirmación.
+
+4.Al cancelar con datos escritos, pide confirmar antes de limpiar.
+5.Si no se puede guardar, muestra “No se pudo registrar la resolución” y conserva los datos escritos.
+","Gestión de resolución de programa","5","M","","En Backlog"
+"HU-018","Yo como administrador, requiero que se desactiven las resoluciones de programas no vigentes, para evitar conflictos con los vigentes","1.Dado que la resolución está activa, cuando el administrador la selecciona, el sistema muestra “Desactivar”.
+2.Al presionarlo, pregunta “¿Está seguro que desea desactivar la resolución ...?” con Aceptar y Cancelar.
+3.Al aceptar, el estado pasa a inactivo, se registra la fecha del cambio y muestra “Resolución desactivada”.
+4.El sistema nunca borra físicamente el registro.
+5.Las programaciones y documentos ya generados con esa resolución conservan su información original.
+6.Una resolución inactiva deja de ofrecerse a los coordinadores para nuevas programaciones.
+7.Al cancelar, no cambia nada.
+8.Si falla, muestra “No se pudo desactivar” y sigue activa.
+
+Preservación del Historial e Integridad Referencial
+9. Dado que existen registros históricos, documentos generados con anterioridad asociados a una resolución inactiva, cuando se consulten dichos reportes o antecedentes, entonces el sistema debe mantener visible la información original sin alterar las relaciones existentes en la base de datos.","Gestión de resolución de programa","1","W","Preguntar sobre el manejo de las resoluciones de los programas de manera automatica es decir si edito una resolución esta queda vigente para los nuevos ingresos y se cierra la anterior cuando acaben las cortes con el programa anterior
+
+Editar ","En Backlog"
+"HU-019","Yo como administrador, requiero ver la lista de resoluciones de programas académicos, para auditar las carreras que se ofrecen","1. Listado
+1.1. Dado que el administrador accede al módulo correspondiente, cuando consulte las resoluciones, entonces el sistema debe mostrar el listado de resoluciones registradas.
+1.2. Cada resolución debe mostrar como mínimo la información necesaria para identificar el programa académico al que pertenece.
+
+2. Consulta
+2.1. Dado que el administrador visualiza el listado, cuando seleccione una resolución, entonces el sistema debe mostrar la información asociada.(HU-33)
+2.2. Cada fila muestra sus acciones según el estado: “Editar” y “Desactivar” si está activa, “Reactivar” si está inactiva.
+
+3. Estado
+3.1. Dado que existen resoluciones activas e inactivas, cuando el administrador consulte el listado, entonces el sistema debe permitir identificar el estado de cada resolución.
+
+4.Sin resoluciones, muestra “No hay resoluciones registradas”. Sin coincidencias, “Sin resultados”.
+
+5.Si no carga, muestra “No se pudo cargar” con opción de reintentar.","Gestión de resolución de programa","1","M","5","En Backlog"
+"HU-020","Yo como administrador, requiero asignar coordinadores a los programas academicos, para que puedan gestionar los respectivos docentes en la programación académica","1. Consultar programas
+1.1. Dado que el administrador ha iniciado sesión, cuando acceda al módulo de programas académicos, entonces el sistema debe mostrar los programas disponibles.
+
+2. Asignar coordinador
+2.1Dado que un programa no tiene coordinador, cuando el administrador lo selecciona, el sistema muestra “Asignar coordinador”.
+2.2. Dado que el administrador selecciona un programa académico, cuando seleccione la opción ""Asignar coordinador"", entonces el sistema debe mostrar los coordinadores disponibles.
+2.3. Al presionarlo, el sistema muestra los perfiles de coordinador activos.
+2.4. Dado que el administrador selecciona un coordinador, cuando confirme la operación, entonces el sistema debe registrar la relación entre el coordinador y el programa académico.
+2.5. Si no hay perfiles de coordinador activos, muestra “No hay coordinadores disponibles. Cree un perfil de coordinador”.
+2.6. Un programa solo puede tener un coordinador. Si ya tiene, el sistema muestra “Este programa ya tiene coordinador” y remite a reemplazarlo (HU-036).
+2.7. No se pueden asignar perfiles desactivados.
+2.8. Un coordinador no puede estar asignado a más de un programa. 
+2.9. Al cancelar, no cambia nada.
+2.10. Si falla, muestra “No se pudo asignar” y el programa sigue sin coordinador.
+
+3. Validaciones
+3.1. Dado que un programa ya tiene un coordinador asignado, cuando el administrador intente asignar otro coordinador, entonces el sistema debe informar que ya existe un coordinador asociado.
+
+4. Confirmación
+4.1. Dado que la asignación se realiza correctamente, cuando finalice la operación, entonces el sistema debe mostrar un mensaje confirmando la asignación.","Gestión de asignación coordinador","3","M","","En Backlog"
+"HU-021","Yo como usuario, requiero un manual de usuario para saber como funciona el sistema ","1-  Al iniciar sesión podrá acceder al módulo ""Ayuda"" donde encontrará un manual de usuario según su tipo de usuario (Docente, coordinador, administrador) en el cual podrá encontrar información de las funcionalidades limitadas por su tipo de usuario y una explicación detallada de la misma (De modo que un docente no pueda encontrar un manual para funciones únicas de coordinador, por ejemplo).
+1.1 De ser aceptada esta propuesta, esta HU se verá dividida en una HU única por tipo de usuario (Docente, coordinador, Admin.)
+2- Los usuarios docentes y coordinadores comparten el mismo manual, mientras que el administrador posee un manual privado. ","Soporte y ayuda","8","M","","En Backlog"
+"HU-022","Yo como Docente, requiero un perfil docente, para cumplir con el Habeas data","1.Dado que inicié sesión como docente, el sistema muestra el ícono de mi perfil con mi foto. Si no tengo foto, muestra una imagen por defecto.
+2. Al hacer clic en el ícono, el sistema me lleva a la página de mi perfil.
+3. La página muestra mi código, nombres, apellidos, correo institucional, tipo de perfil (Docente), estado y foto.
+4. También muestra mi última evaluación docente (período y resultado), o “Sin evaluación registrada”. (supuesto: el docente puede ver su evaluación, por ser un dato suyo)
+5. Indica qué campos puedo editar (HU-015) y cuáles solo consultar.
+6. Solo veo mi propio perfil, nunca el de otros docentes.
+7. El perfil está disponible siempre, sin depender de los períodos.
+8. Si no carga, muestra “No se pudo cargar su perfil” con opción de reintentar.","Gestión de perfil y usuario","3","M","","En Backlog"
+"HU-023","Yo como Administrador, requiero cerrar sesión, para proteger mi cuenta.","1. Dado que hay sesión iniciada, el sistema muestra siempre el boton ""Cerrar sesión""
+2. Al presionarlo, el sistema termina la sesión y vuelve al login.
+3. Sin sesión activa, el sistema impide acceder a las pantallas internas del administrador.
+4.Si falla la conexión al cerrar, el sistema igual invalida la sesión en el equipo y vuelve al login
+5.Si la sesión ya había expirado, ""Cerrar sesión"" lleva al login sin mostrar error.","Gestión de acceso","2","M","","En Backlog"
+"HU-024","Yo como Coordinador, requiero cerrar sesión, para proteger mi cuenta.","1. Dado que hay sesión iniciada, el sistema muestra siempre el boton ""Cerrar sesión""
+2. Al presionarlo, el sistema termina la sesión y vuelve al login.
+3. Sin sesión activa, el sistema impide acceder a las pantallas internas del coordinador.
+4.Si falla la conexión al cerrar, el sistema igual invalida la sesión en el equipo y vuelve al login
+5.Si la sesión ya había expirado, ""Cerrar sesión"" lleva al login sin mostrar error.","Gestión de acceso","2","M","","En Backlog"
+"HU-025","Yo como Docente, requiero cerrar sesión, para proteger mi cuenta.","1. Dado que hay sesión iniciada, el sistema muestra siempre el boton ""Cerrar sesión""
+2. Al presionarlo, el sistema termina la sesión y vuelve al login.
+3. Sin sesión activa, el sistema impide acceder a las pantallas internas del docente.
+4.Si falla la conexión al cerrar, el sistema igual invalida la sesión en el equipo y vuelve al login
+5.Si la sesión ya había expirado, ""Cerrar sesión"" lleva al login sin mostrar error.","Gestión de acceso","2","M","","En Backlog"
+"HU-026","Yo como Administrador, requiero crear el perfil de docente, para que puedan ingresar y participar en el flujo de programación con el rol correspondiente.","""1. «Crear perfil de docente» muestra: codigo de docente, nombres, apellidos, tipo y número de documento, correo institucional personal (@correounivalle.edu.co), teléfono, tipo (Nombrado u Hora cátedra), categoría (lista definida por el cliente, sin valores monetarios) y programa de adscripción.
+
+2. No se crean contraseñas ni códigos. El perfil habilita el ingreso con Google (HU-006).
+
+3. Opcional: última evaluación docente (periodo y valor numérico dentro de la escala del cliente). Si hay valor, el periodo es obligatorio. Una nueva reemplaza la anterior.
+
+4. Obligatorios: nombres(alfabetico no mayor a 30 caracteres), apellidos (alfabetico no mayor a 30 caracteres), documento(numerico, no mayor a 11 caracteres), correo(alfabetico con caracteres especiales, no mayor a 50 caracteres), tipo (lista seleccionable), categoría (lista seleccionable), y programa (lista seleccionable),. Correo con formato válido, dominio institucional y único.
+
+5. Nombres y apellidos solo letras y espacios, con máximo definido por el cliente. Documento único.
+
+6. Si ya existe la persona (mismo documento), ofrece actualizarla en lugar de duplicar.
+
+7. Guardar pregunta «¿La información es correcta?». Al aceptar: «Perfil de docente creado».
+
+8. Cancelar con datos pide confirmar. Si falla: «No se pudo guardar. Intente de nuevo» y conserva los datos.""
+","Gestión de perfil y usuario","2","M","","En Backlog"
+"HU-027","Yo como Administrador, requiero crear el perfil de coordinador, para que puedan ingresar y participar en el flujo de programación con el rol correspondiente.","""1. «Crear perfil de coordinación» pide: correo del programa (@correounivalle.edu.co), nombre y documento del responsable, teléfono y programa vinculado(uno, obligatorio).
+
+2. Todos los campos son obligatorios. El correo debe tener formato válido y dominio institucional, o muestra «Debe usar el correo institucional».
+
+3. Si ya existe una cuenta activa con ese correo: «Ya existe una cuenta de coordinación con este correo». Si está desactivada: «Existe una cuenta desactivada con este correo» y remite a reactivarla.
+
+4. La cuenta de coordinación solo opera funciones de coordinador. El perfil docente del responsable se registra aparte con su correo personal (HU-026).
+
+5. Guardar pregunta «¿La información es correcta?» y muestra «Cuenta de coordinación registrada». No se crean contraseñas.
+
+6. Cancelar con datos pide confirmar. Si falla: «No se pudo guardar. Intente de nuevo» y conserva los datos.""
+","Gestión de perfil y usuario","2","M","","En Backlog"
+"HU-028","Yo como Administrador, requiero ver los perfiles de docentes y coordinadores, para consultar quien esta registrado y su estado.","""1. Listado con nombre, correo, perfil (docente o cuenta de coordinación), tipo (nombrado u hora cátedra), categoría, programa y estado.
+
+2. Búsqueda por nombre o correo; filtros por perfil, tipo, categoría y estado. Orden alfabético y paginación.
+
+3. Acciones por fila: «Editar» y «Desactivar» si está activo; «Reactivar» si está desactivado.
+
+4. Sin perfiles: «No hay perfiles registrados». Sin coincidencias: «Sin resultados». Si no carga: «No se pudo cargar» con reintentar.""
+","Gestión de perfil y usuario","2","M","","En Backlog"
+"HU-029","Yo como Administrador, requiero editar los datos de un perfil, para corregir errores o actualizar la información de ser necesario.","1. A un perfil activo se le muestra «Editar».
+
+2. Carga los datos actuales y permite cambiar nombres, apellidos, documento, teléfono, categoría, tipo de vinculación, programa, correo y evaluación docente. El tipo de perfil (docente o coordinación) no se modifica.
+
+3. Si se cambia el correo institucional, el nuevo debe cumplir las validaciones de HU-026 y HU-027, y el acceso pasa al nuevo correo.
+
+4. Al guardar pide confirmación y muestra «Perfil actualizado». Los cambios de categoría y tipo quedan en el perfil.
+
+5. Cancelar o error conservan la información original. Asignaciones y programa se conservan.""
+","Gestión de perfil y usuario","2","M","","En Backlog"
+"HU-030","Yo como Administrador, requiero desactivar un perfil, para impedir el acceso de quien ya no participa sin perder su historial.","""1. A un perfil activo se le muestra «Desactivar» y pregunta «¿Está seguro que desea desactivar el perfil de ...?».
+2. Al aceptar queda desactivado, se cierran sus sesiones y no puede ingresar con Google.
+3. Si es docente con asignaciones en el periodo vigente, avisa antes. Al aceptar, esos cursos quedan «Sin docente asignado» y se notifica al coordinador.
+4. Si es una cuenta de coordinación con programas vinculados, avisa que los programas quedarán sin cuenta.
+5. El perfil no se elimina. Cancelar no cambia nada. Si falla: «No se pudo desactivar» y sigue activo.""
+","Gestión de perfil y usuario","2","M","","En Backlog"
+"HU-031","Yo como Administrador, requiero reactivar un perfil, para que la persona vuelva a participar.","1.Dado que el perfil está desactivado, cuando el administrador lo selecciona, el sistema muestra “Reactivar”.
+2.Al presionarlo, pide confirmación. Al aceptar, el perfil queda activo y muestra “Perfil reactivado”.
+3.Reactivar no restituye asignaciones ni el programa anteriores. 
+4.Al cancelar, el perfil sigue desactivado.
+5.Si falla, muestra “No se pudo reactivar” y el perfil sigue desactivado.","Gestión de perfil y usuario","2","M","","En Backlog"
+"HU-032","Yo como administrador, requiero editar una malla, para corregir errores o actualizar asignaturas.","1.Solo las mallas activas muestran “Editar”. Las inactivas son de solo consulta.
+2.El formulario carga los datos actuales y permite modificar todos los campos, y agregar o quitar semestres y asignaturas.
+3.Aplican las validaciones de HU-017 (formatos, códigos únicos, semestres consecutivos).
+4.Si quita o cambia el código de una asignatura con asignaciones en la programación vigente, el sistema avisa y pide confirmación. Al aceptar, esas asignaciones se eliminan. 
+5.Si no modificó nada, muestra “No hay cambios para guardar”.
+6.Al guardar, pide confirmación y muestra “Resolución actualizada”.
+7.Al cancelar, la malla conserva su información original.
+8.Si falla, muestra el error y la malla conserva su información original.","Gestión de resolución de programa","3","M","","En Backlog"
+"HU-033","Yo como administrador, requiero ver el detalle de una resolución de programa, para consultar sus semestres y asignaturas.","""1. Muestra programa, número de resolución, descripción, jornada, período de oferta, estado, vigencia y semestres con sus asignaturas (código, nombre, créditos, horas y tipo).
+2. Si está inactiva muestra la fecha de desactivación.
+3. Es de solo lectura; las acciones dependen del estado.
+4. Si no carga: «No se pudo cargar» con reintentar.""
+","Gestión de resolución de programa","3","M","","En Backlog"
+"HU-034","Yo como administrador, requiero reactivar una resolución de programa para volver a ofrecerla a los coordinadores cuando vuelva a estar vigente.","1.Dado que la resolución está inactiva, el sistema muestra “Reactivar”. Al presionarlo, pide confirmación.
+2.Si ya existe una activa del mismo programa y jornada, el sistema avisa que esa pasará a inactiva (si no tiene cohortes) ) y pide confirmación.
+3.Al aceptar, queda activa y muestra “Resolución reactivada”.
+4.Al cancelar, sigue inactiva. Si falla, muestra “No se pudo reactivar” y sigue inactiva.","Gestión de resolución de programa","2","M","","En Backlog"
+"HU-035","Yo como administrador, descargar la resolución de programa  en Excel, para exportarla.","1.Desde el detalle, el sistema muestra “Descargar Excel”.
+2.El archivo es .xlsx, con nombre descriptivo (ej. malla_nombre-programa_jornada.xlsx), y contiene semestres y asignaturas con todos sus datos.
+3.Si falla la generación, muestra “No se pudo generar el archivo” y permite reintentar.","Reportes","5","M","","En Backlog"
+"HU-036","Yo como administrador, requiero reemplazar un coordinador de un programa, para mantener su gestion cuando cambie el responsable.","1. Dado que un programa tiene coordinador, cuando el administrador lo selecciona, el sistema muestra “Cambiar coordinador”.
+2. Al presionarlo, muestra los perfiles de coordinador activos, sin el actual. Si no hay otros, muestra “No hay otros coordinadores disponibles”.
+3. Al seleccionar uno, pregunta “¿Desea reemplazar a [actual] por [nuevo] en [programa]?” con Aceptar y Cancelar.
+4. Al aceptar, actualiza la relación y muestra “Coordinador actualizado”. El anterior pierde acceso a ese programa, y las asignaciones que ya hizo se conservan.
+5. Al cancelar, el coordinador actual se conserva.
+6. Si falla, muestra “No se pudo actualizar” y el coordinador actual se conserva.","Gestión de coordinador","3","M","","En Backlog"
+"HU-037","Yo como administrador,requiero ver programas y sus coordinadores, para saber cuales tienen coordinador y gestionarlos.","1.El sistema muestra los programas con resolución activa y su coordinador, o “Sin coordinador”.
+2.Permite buscar por programa o coordinador y filtrar los programas “Sin coordinador”.
+3.Cada fila muestra “Asignar coordinador” si no tiene, o “Cambiar coordinador” si tiene.
+4.Sin programas, muestra “No hay programas registrados”. Sin coincidencias, “Sin resultados”.
+5.Si no carga, muestra “No se pudo cargar” con opción de reintentar.","Gestión de coordinador","2","M","","En Backlog"
+"HU-038","Yo como docente, requiero recibir un recordatorio de las fechas de mi periodo, para registrar mi disponibilidad a tiempo.","1. Dado que mi perfil de docente está activo y mi período está definido, cuando el período abre, el sistema me envía un correo a mi correo institucional con el nombre del período, la fecha de inicio y fin, y el enlace al sistema.
+2. Antes del cierre, con la antelación definida por el cliente, el sistema me envía un recordatorio con la fecha de cierre.
+3. Si el administrador modifica las fechas de mi período, el sistema me envía un correo de actualización y reprograma los recordatorios.
+4. Si ya registré mi disponibilidad, igual recibo el aviso de apertura y el de cierre. 
+5. Los perfiles desactivados no reciben correos.
+6. Si el período no está definido, no se envía nada.
+7. Si el calendario pasa a historial, se cancelan los recordatorios pendientes.
+8. Si falla el envío, el sistema reintenta y registra el fallo sin bloquear el resto de los envíos.","Notificaciones y alertas","5","M","","En Backlog"
+"HU-039","Yo como coordinador, requiero recibir un recordatorio de las fechas de mi periodo, para asignar docentes a la resolución de mi programa.","1. El período es el de asignación de docentes.
+2. El correo incluye también las fechas de adición y cancelación del calendario, con el aviso de que en ese lapso solo se consulta, no se cambian asignaciones.
+3. El recordatorio de cierre no se envía si ya asigné docente a todas las materias de mis programas. (supuesto)","Notificaciones y alertas","5","M","","En Backlog"
+"HU-040","Yo como administrador, requiero crear y editar programas académicos, para tener la base sobre la que se registran mallas, cohortes y coordinadores.
+","1. Formulario: código del programa (4 dígitos, único), nombre (máximo 100), jornada (diurna, nocturna o ambas), duración en semestres, ingreso (semestral o anual) y estado.
+ 2. Validaciones de obligatoriedad y unicidad. Pide confirmación al guardar.
+ 3. Un programa nuevo no tiene cohortes hasta que se configuran (HU-042).
+ 4. Editar mantiene las mallas, cohortes y coordinador asociados.
+ 5. El administrador ve todos los programas.","Gestión de resolución de programa","3","M","","En Backlog"
+"HU-041","Yo como administrador, requiero desactivar o eliminar un programa académico, para retirar los que ya no se ofrecen.
+","1. Desactivar: queda oculto para nuevas programaciones y conserva su historial.
+ 2. Eliminar: solo si el programa no tiene cohortes existentes.
+ 3. Si tiene una cohorte en el último semestre (6.º, 10.º u 11.º en nocturna) o cualquier cohorte activa, no se elimina; se informa qué cohortes lo impiden.
+ 4. Pide confirmación y muestra «Programa eliminado» o «Programa desactivado».
+ 5. Si el programa tiene coordinador asignado, avisa que quedará libre.","Gestión de resolución de programa","3","S","","En Backlog"
+"HU-042","Yo como administrador, requiero indicar las cohortes (semestres) que cursa cada programa en un periodo, para que el sistema sepa qué asignaturas programar.
+","""1. Para un periodo y un programa, el administrador marca los semestres que se ofertan (ej. 1.º, 2.º, 4.º y 6.º en Software).
+2. Solo permite semestres existentes en la malla vigente o en extinción.
+3. Si el periodo no es el primero del programa, las cohortes llegan precargadas por HU-043 y puede ajustarlas.
+4. Muestra la resolución (malla) que se usará por cohorte.
+5. Una cohorte sin malla vigente genera un error que bloquea la generación.""
+","Programación y oferta académica","5","M","","En Backlog"
+"HU-043","Yo como administrador, requiero que el sistema proponga las cohortes del siguiente periodo, para no volver a digitarlas.
+","1. Al crear un periodo, el sistema propone las cohortes: cada cohorte c pasa a c+1 y la del último semestre vuelve al 1 (nuevo ingreso). Ej. 6 semestres: {1,3,4,5} → {2,4,5,6} → {1,3,5,6}.
+ 2. Con ingreso anual de 10 semestres: {1,3,5,7,9} → {2,4,6,8,10} → {1,3,5,7,9}.
+ 3. Si el periodo anterior se canceló o está ampliado, no propone avance hasta que el administrador lo confirme.
+ 4. El administrador revisa, ajusta y confirma antes de generar (HU-042).
+ 5. Nunca supera la duración definida del programa.","Programación y oferta académica","5","M","","En Backlog"
+"HU-044","Yo como administrador, requiero un catálogo de asignaturas con código y nombre únicos, para que los programas compartan asignaturas sin errores de digitación.
+","""1. Crear, editar y desactivar asignaturas con código (alfanumérico, máximo 8, único) y nombre (máximo 100).
+2. Al armar una malla (HU-017) se elige del catálogo.
+3. No permite dos asignaturas con el mismo código.
+4. Una asignatura en uso solo puede desactivarse sin afectar mallas.
+5. Cambiar el nombre actualiza todas las mallas y programaciones futuras; las pasadas conservan su nombre original.""
+","Gestión de resolución de programa","3","M","","En Backlog"
+"HU-045","Yo como administrador, requiero generar la programación de un periodo a partir de las mallas y cohortes, para obtener los cursos sin digitarlos.
+","""1. «Generar programación» toma, por programa y cohorte confirmada, las asignaturas del semestre en la malla correspondiente.
+2. Cada curso trae código, nombre, créditos, horas de clase y jornada desde la malla. Ninguno se digita.
+3. Solo se generan asignaturas de la malla. Las electivas profesionales no se generan (HU-048).
+4. Si falta alguna cohorte o malla, informa y no genera.
+5. Muestra un resumen: cursos generados por programa y total (unos 400).
+6. Volver a generar para el mismo periodo pide confirmación y conserva los docentes ya asignados a cursos que no cambian.""
+","Programación y oferta académica","20","M","","En Backlog"
+"HU-046","Yo como administrador, requiero que el sistema asigne los grupos a cada curso, para identificar cada programa que ve una asignatura.
+","1. Para cada asignatura, los cursos de los distintos programas reciben grupos consecutivos desde 50 (50, 51, 52…).
+2. El identificador es CÓDIGO-GRUPO (ej. MAT101-50).
+3. Si 5 programas ven Cálculo, quedan del 50 al 54.
+4. La asignación es estable: al regenerar no cambia el grupo de los cursos sin cambios.
+5. El grupo y el programa quedan visibles en el curso.
+","Programación y oferta académica","13","M","","En Backlog"
+"HU-047","Yo como administrador, requiero revisar y ajustar la programación generada, para corregir novedades antes de abrir la asignación.
+","1. Consolida todos los cursos con filtros por programa, asignatura y jornada.
+2. Puede excluir un curso con justificación o reordenar grupos de una asignatura.
+3. No puede agregar asignaturas que no estén en la malla.
+4. Los cursos con «Requiere revisión» (HU-032) se muestran resaltados.
+5. Cada ajuste queda en la bitácora.
+","Programación y oferta académica","13","M","","En Backlog"
+"HU-048","Yo como coordinador, requiero programar manualmente las electivas profesionales de mi programa, para que se les asignen docentes.
+","1. Dentro de su ventana, selecciona una electiva profesional de la malla y la cantidad de grupos.
+2. El sistema asigna el grupo y el identificador CÓDIGO-GRUPO.
+3. Al guardar se envían las notificaciones a los docentes asociados en el histórico para que registren su disponibilidad (HU-038).
+4. Si no hay docentes asociados, se dispara la alerta de HU-051.
+5. Puede modificar o quitar la electiva mientras no tenga docente asignado.
+","Programación y oferta académica","8","S","","En Backlog"
+"HU-049","Yo como administrador, requiero asociar docentes a las asignaturas que han dictado, para que el sistema solo los recomiende donde corresponde.
+","""1. Asociar y quitar asociaciones docente-asignatura-programa de forma individual.
+2. Carga inicial con el histórico (correo institucional o documento del docente, código de asignatura, programa). Muestra filas con errores y no carga las inválidas.
+3. Un docente solo se asocia a asignaturas de su perfil.
+4. Cuando un docente dicta una asignatura en un periodo, se agrega al histórico automáticamente.
+5. Consulta de las asociaciones por docente o por asignatura.""
+","Gestión de asignación académica","8","M","","En Backlog"
+"HU-050","Yo como coordinador, requiero recibir una alerta cuando una asignatura no tiene docentes asociados, para gestionar su contratación.
+","
+
+1. Al generar la programación o crear una electiva, si una asignatura no tiene docentes activos asociados, se muestra una alerta en pantalla y se envía correo al coordinador y al administrador.
+2. El mensaje indica asignatura, programa, grupo y periodo.
+3. El curso queda «Pendiente de contratación» hasta que se cree y asocie un docente (HU-026 y HU-049).
+4. El panel del administrador lista las asignaturas en esa condición (HU-054).
+","Notificaciones y alertas","5","S","","En Backlog"
+"HU-051","Yo como administrador, requiero registrar la disponibilidad de un docente en su nombre, para atender excepciones como docentes que no manejan la aplicación.","1. Selecciona un docente y registra franjas con las validaciones de HU-007.
+2. Realiza el registro aunque la ventana esté cerrada, indicando el motivo.
+3. La franja se marca «Registrada por administrador».
+4. El docente puede verla en HU-009.
+5. Queda registrada en la bitácora.""
+","Gestión de disponibilidad docente","5","M","","En Backlog"
+"HU-052","Yo como coordinador, requiero consultar la carga académica de un docente, para respetar el límite de 20 horas.
+","1. Muestra por docente y periodo los cursos asignados, las horas de cada uno y el total sobre 20.
+ 2. El coordinador ve la carga total de sus candidatos, sin el detalle de otros programas.
+ 3. El sistema impide asignaciones que superen 20 h (parámetro).Por ejemplo: Cálculo de 5 h en 3 programas = 15 h.","Gestión de asignación académica","3","M","relacionada con HU-XXX","En Backlog"
+"HU-053","Yo como administrador requiero consultar la carga académica de un docente, para respetar el límite de 20 horas.
+","1. Muestra por docente y periodo los cursos asignados, las horas de cada uno y el total sobre 20.
+ 2. El Administrador ve la carga total de sus candidatos, sin el detalle de otros programas.
+ 3. El sistema impide asignaciones que superen 20 h (parámetro).Por ejemplo: Cálculo de 5 h en 3 programas = 15 h.","Gestión de asignación académica","3","M","","En Backlog"
+"HU-054","Yo como administrador, requiero ver el avance de la programación del periodo, para conocer lo qué hace falta antes de exportar.","1. Tablero con cursos generados, con docente, pendientes y pendientes de contratación, por programa.
+2. Lista docentes que no han enviado disponibilidad.
+3. Indica la fecha de cierre de cada ventana.
+4. Permite descargar los pendientes en Excel.
+","Programación y oferta académica","5","M","","En Backlog"
+"HU-055","Yo como administrador, requiero habilitar un acceso extraordinario fuera de las fechas, para atender casos puntuales sin cambiar el calendario.
+","1. Desde el perfil, «Habilitar acceso extraordinario» pide fecha y hora de fin y un motivo obligatorio.
+2. Mientras esté vigente, el perfil puede iniciar sesión aunque la ventana esté cerrada.
+3. Al vencer, el acceso se cierra solo. El administrador puede revocarlo antes.
+4. Queda en la bitácora con motivo, fechas y usuario.
+5. Notifica por correo al perfil habilitado.
+","Gestión de acceso","5","M","","En Backlog"
+"HU-056","Yo como docente, requiero ver los cursos que me asignaron, para conocer mi carga del periodo.
+","1. Dentro de la ventana de acceso docente, lista por periodo los cursos asignados con CÓDIGO-GRUPO, nombre, programa, jornada y horas.
+2. Muestra el total de horas sobre 20.
+3. Solo ve sus propios cursos.
+4. Si no tiene curso asignados muestra el mensaje: «No tiene cursos asignados en este periodo».
+5. Como el acceso se bloquea fuera de fechas, la asignación definitiva llega por correo (HU-057).""
+","Gestión de asignación académica","3","S","","En Backlog"
+"HU-057","Yo como docente, requiero recibir un correo cuando me asignen un curso, para estar enterado ","1. Al asignar, enviar al correo institucional del docente el curso, programa, grupo y horas.
+3. Cuando termina la asignación, envía un resumen con todos sus cursos y horas.
+4. Si falla el envío, reintenta y registra el fallo.""
+","Notificaciones y alertas","8","C","","En Backlog"
+"HU-058","Yo como administrador, requiero consultar una bitácora de cambios, para auditar cambios
+","1. Registra usuario o persona que operó la cuenta, fecha, acción, entidad, valor anterior y valor nuevo.
+2. Registra también ingresos exitosos y rechazados por fecha.
+3. Filtros por usuario, entidad, periodo y rango de fechas.
+4. Solo lectura. No se puede borrar.
+","Gestión de administrador","3","S","","En Backlog"
+"HU-059","Yo como administrador, requiero registrar el número de cupos de estudiantes asignados a cada materia y grupo de mi programa, para dejar definida la capacidad final de estudiantes habilitada por curso en el periodo académico.","1. Consulta de cursos del programa
+1.1. Dado que el coordinador está en el módulo de programación académica y su plazo de asignación está abierto, cuando consulta los cursos de su programa, el sistema debe mostrar la lista de materias y grupos programados para el período vigente.
+1.2. Cada curso muestra un campo para ingresar o visualizar el número de cupos asignados.
+
+2. Registro y modificación de cupos:
+2.1. El sistema debe permitir ingresar o modificar el número de cupos de estudiantes para cada grupo (ej. 30, 40, 45 estudiantes).
+2.2. El campo de cupos es de tipo numérico entero positivo (mayor a 0 y hasta un máximo permitido parametrizado por la institución).
+2.3. Si el coordinador deja el campo de cupos vacío o ingresa 0 o un valor no numérico, al presionar “Guardar”, el sistema debe marcar el campo e impedir el registro mostrando “Debe ingresar un número de cupos válido”.
+
+3. Confirmación y guardado:
+3.1. Dado que el coordinador completa o modifica los cupos de las materias y presiona “Guardar”, el sistema debe pedir confirmación con la pregunta: “¿Desea guardar la cantidad de cupos configurada?”.
+3.2. Al aceptar, el sistema debe registrar los cupos asignados a cada curso, actualizar la información en la programación y mostrar el mensaje: “Cupos de estudiantes registrados correctamente”.
+
+4.Validaciones de plazo:
+4.1. Dado que el plazo de asignación del coordinador está cerrado, el campo de cupos se muestra en modo solo lectura y no permite ediciones.
+4.2. Si el plazo del coordinador se cierra mientras edita los cupos, al intentar guardar, el sistema debe impedir el guardado y mostrar “El plazo de edición ya cerró”.
+
+5. Visualización y Reportes:
+5.1. La cantidad de cupos definida queda guardada en la programación académica del período y estará disponible para la exportación de la programación (HU-014).
+
+6. Manejo de errores y cancelación:
+6.1. Al cancelar con cambios no guardados, el sistema pide confirmación antes de descartar la información.
+6.2. En caso de fallo en el sistema al guardar, debe mostrar “No se pudo registrar la información de cupos. Intente de nuevo” y conservar los datos digitados en el formulario.","Gestión de asignación académica","8","M","","En Backlog"
+"HU-060","Yo como coordinador, requiero consultar el listado de docentes asociados, su disponibilidad horaria y evaluación docente, para asignar al docente adecuado a cada materia o dejarla como pendiente.","1. Consulta de Información del Docente:
+
+1.1. Dado que el sistema presenta una materia, al desplegar las opciones de docentes, debe listar únicamente los docentes asociados a esa materia.
+
+1.2. Dado un docente listado, el sistema debe permitir visualizar su disponibilidad horaria y el puntaje de su última evaluación docente registrada.
+
+2. Asignación y Registro:
+
+2.1. Dado que el coordinador selecciona un docente disponible y confirma, el sistema debe asociar al docente con la materia/grupo en la programación.
+
+2.2. Validación de Carga Académica: Dado que el docente seleccionado supera las 20 horas de carga académica acumulada (sumando otros cursos asignados), cuando el coordinador intente confirmar la asignación, el sistema debe impedir el registro y mostrar un mensaje de alerta.
+
+3. Manejo de Materias Sin Docente:
+
+3.1. Dado que una materia no tiene docentes asociados o ninguno cuenta con disponibilidad, el sistema debe incluir la opción ""Sin docente asignado"".
+
+3.2. Dado que el coordinador selecciona ""Sin docente asignado"", el sistema debe registrar la materia con el estado ""Pendiente de asignación"".","Gestión de asignación académica","5","M","","En Backlog"
+"HU-061","Yo como coordinador, requiero que el sistema avance automáticamente al siguiente semestre tras completar la asignación actual, para agilizar la programación continua de todo el plan de estudios.","1. Transición Automática:
+
+1.1. Dado que se ha completado la asignación (o marcado como pendiente) de todas las materias del semestre en curso, cuando el coordinador confirme la finalización del semestre, el sistema debe cargar automáticamente las materias del semestre siguiente.
+
+2. Control de Límites del Plan de Estudios:
+
+2.1. Dado que el sistema alcanza el último semestre configurado para el programa académico, no debe permitir avanzar a un semestre superior inexistente.
+
+2.2. Dado que se ha completado el último semestre del plan de estudios, el sistema debe notificar la finalización del ciclo de programación y permitir reiniciar el flujo desde el primer semestre si se requiere programar una nueva cohorte/jornada.","Gestión de asignación académica","8","M","","En Backlog"
