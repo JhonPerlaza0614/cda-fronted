@@ -14,7 +14,7 @@ import {
 import { AlertCircle, Database, RefreshCw } from 'lucide-react'
 import './App.css'
 
-export default function App() {
+export default function App({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('pensum')
   const [programas, setProgramas] = useState([])
   const [asignaturas, setAsignaturas] = useState([])
@@ -140,6 +140,8 @@ export default function App() {
         setActiveTab={setActiveTab}
         onOpenSqlModal={() => setIsSqlModalOpen(true)}
         isConnected={isConnected}
+        user={user}
+        onLogout={onLogout}
       />
 
       {/* Alerta si ocurre un error de RLS o configuración */}
