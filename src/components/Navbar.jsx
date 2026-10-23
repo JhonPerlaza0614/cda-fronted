@@ -1,5 +1,5 @@
 import React from 'react'
-import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Clock, FileText } from 'lucide-react'
+import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Clock, FileText, UserCircle } from 'lucide-react'
 
 export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout, esAdmin }) {
   const rol = user?.rol ?? 1 // 1: Admin, 2: Coordinador, 3: Docente
