@@ -1151,19 +1151,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                         <Edit2 size={14} />
                       </button>
 
-                      <button
-                        className="btn-danger"
-                        onClick={() => setDeletingCoord(profile.rawObject)}
-                        title="Eliminar coordinador"
-                        style={{
-                          padding: '0.4rem 0.6rem',
-                          backgroundColor: '#7f1d1d',
-                          color: '#fca5a5',
-                          border: '1px solid #991b1b',
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      
                     </div>
                   )}
                 </div>
@@ -1197,6 +1185,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                backgroundColor: '#1f2937',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
@@ -1270,7 +1259,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 >
                   Datos de Identificación
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', fontSize: '0.9rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', fontSize: '0.9rem' }}>
                   <div>
                     <span style={{ color: '#9ca3af', display: 'block', fontSize: '0.78rem' }}>Tipo y Número de Documento</span>
                     <strong style={{ color: '#f3f4f6' }}>
@@ -1321,7 +1310,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 >
                   Vinculación Académica y Contratación
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', fontSize: '0.9rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', fontSize: '0.9rem' }}>
                   <div style={{ gridColumn: 'span 2' }}>
                     <span style={{ color: '#9ca3af', display: 'block', fontSize: '0.78rem' }}>Programa Académico</span>
                     <strong style={{ color: '#f3f4f6' }}>
@@ -1447,14 +1436,12 @@ export default function PlantillaView({ programas = [], onShowToast }) {
             </div>
 
             {/* Footer del Modal */}
-            <div
-              className="modal-footer"
-              style={{
-                borderTop: '1px solid #374151',
+            <div className="modal-footer" style={{ borderTop: '1px solid #374151', backgroundColor: '#1f2937',
                 padding: '1rem 1.5rem',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                backgroundColor: '#1f2937',
               }}
             >
               <button
@@ -1543,7 +1530,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 </div>
 
                 {/* Fila doble: Categoría y Tipo de Contrato */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
                   <div className="form-group">
                     <label style={{ color: '#e5e7eb' }}>Categoría *</label>
                     <select
@@ -1644,7 +1631,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 </div>
               </div>
 
-              <div className="modal-footer" style={{ borderTop: '1px solid #374151' }}>
+              <div className="modal-footer" style={{ borderTop: '1px solid #374151', backgroundColor: '#1f2937' }}>
                 <button
                   type="button"
                   className="btn-secondary"
@@ -1709,7 +1696,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 </div>
 
                 {/* Nombres y Apellidos */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
                   <div className="form-group">
                     <label style={{ color: '#e5e7eb' }}>Nombres *</label>
                     <input
@@ -1735,7 +1722,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 </div>
 
                 {/* Tipo y Número de Documento */}
-                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '0.75rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.75rem' }}>
                   <div className="form-group">
                     <label style={{ color: '#e5e7eb' }}>Tipo Doc. *</label>
                     <select
@@ -1790,7 +1777,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 </div>
 
                 {/* Tipo de Docente y Categoría */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
                   <div className="form-group">
                     <label style={{ color: '#e5e7eb' }}>Tipo de Docente *</label>
                     <select
@@ -1837,7 +1824,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 </div>
               </div>
 
-              <div className="modal-footer" style={{ borderTop: '1px solid #374151' }}>
+              <div className="modal-footer" style={{ borderTop: '1px solid #374151', backgroundColor: '#1f2937' }}>
                 <button
                   type="button"
                   className="btn-secondary"
@@ -1893,7 +1880,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 <strong>{deletingCoord.nombre_completo}</strong> (ID: {deletingCoord.identificacion})?
               </p>
             </div>
-            <div className="modal-footer" style={{ borderTop: '1px solid #374151' }}>
+            <div className="modal-footer" style={{ borderTop: '1px solid #374151', backgroundColor: '#1f2937' }}>
               <button
                 className="btn-secondary"
                 onClick={() => setDeletingCoord(null)}

@@ -1,5 +1,5 @@
 import React from 'react'
-import { GraduationCap, BookOpen, Library, Layers, LogOut, Users } from 'lucide-react'
+import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Clock } from 'lucide-react'
 
 export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout }) {
   const rol = user?.rol ?? 1 // 1: Admin, 2: Coordinador, 3: Docente
@@ -8,15 +8,27 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
   const canSeeProgramas = rol === 1
   const canSeeAsignaturas = rol === 1 || rol === 2
   const canSeePlantilla = rol === 1
+  const isCoordinador = rol === 2
+  const isDocente = rol === 3
 
   const rolLabel = rol === 1
     ? 'Administrador'
     : (rol === 2 ? 'Coordinador' : (rol === 3 ? 'Docente' : (user?.rolNombre || 'Usuario')))
 
+  const handleBrandClick = () => {
+    if (isDocente) {
+      setActiveTab('docente_portal')
+    } else if (canSeePensum) {
+      setActiveTab('pensum')
+    } else {
+      setActiveTab('plantilla')
+    }
+  }
+
   return (
     <header className="navbar">
       <div className="navbar-container">
-        <div className="navbar-brand" onClick={() => setActiveTab(canSeePensum ? 'pensum' : 'plantilla')}>
+        <div className="navbar-brand" onClick={handleBrandClick}>
           <div className="brand-icon-bg">
             <GraduationCap size={24} className="brand-icon" />
           </div>
@@ -66,6 +78,26 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               <span>Plantilla</span>
             </button>
           )}
+
+          {isCoordinador && (
+            <button
+              className={`nav-tab-btn ${activeTab === 'coordinador_portal' ? 'active' : ''}`}
+              onClick={() => setActiveTab('coordinador_portal')}
+            >
+              <Clock size={18} />
+              <span>Portal Coordinador</span>
+            </button>
+          )}
+
+          {isDocente && (
+            <button
+              className={`nav-tab-btn ${activeTab === 'docente_portal' ? 'active' : ''}`}
+              onClick={() => setActiveTab('docente_portal')}
+            >
+              <Clock size={18} />
+              <span>Portal Docente</span>
+            </button>
+          )}
         </nav>
 
         <div className="navbar-actions">
@@ -75,9 +107,9 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               <span className="navbar-user-role">{rolLabel}</span>
             </div>
           )}
-          <div className={`status-pill ${isConnected ? 'online' : 'offline'}`} title="Estado de Supabase">
+          <div className={`status-pill ${isConnected ? 'online' : 'offline'}`} title="Estado de Conexión">
             <span className="status-dot"></span>
-            <span>{isConnected ? 'Supabase Conectado' : 'Sin Conexión'}</span>
+            <span>{isConnected ? 'Conectado' : 'Sin Conexión'}</span>
           </div>
           {onLogout && (
             <button type="button" className="navbar-logout-btn" onClick={onLogout} title="Cerrar sesión">
