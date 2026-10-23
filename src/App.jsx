@@ -3,7 +3,7 @@ import Navbar from './components/Navbar'
 import PensumView from './components/PensumView'
 import ProgramasView from './components/ProgramasView'
 import AsignaturasView from './components/AsignaturasView'
-import CoordinadoresView from './components/CoordinadoresView'
+import PlantillaView from './components/PlantillaView'
 import SqlSetupModal from './components/SqlSetupModal'
 import Toast from './components/Toast'
 import { 
@@ -12,10 +12,11 @@ import {
   getAllPensum, 
   checkDatabaseHealth 
 } from './services/academicService'
-import { AlertCircle, Database, RefreshCw } from 'lucide-react'
+import { AlertCircle, Database, RefreshCw, ShieldAlert } from 'lucide-react'
 import './App.css'
 
 export default function App({ user, onLogout }) {
+  // Para el rol Administrador (rol = 1), la página principal predeterminada es Mallas Curriculares ('pensum')
   const [activeTab, setActiveTab] = useState('pensum')
   const [programas, setProgramas] = useState([])
   const [asignaturas, setAsignaturas] = useState([])
@@ -210,8 +211,8 @@ export default function App({ user, onLogout }) {
                 onShowToast={showToast}
               />
             )}
-                      {activeTab === 'coordinadores' && (
-              <CoordinadoresView
+                      {(activeTab === 'plantilla' || activeTab === 'coordinadores') && (
+              <PlantillaView
                 programas={programas}
                 onShowToast={showToast}
               />
