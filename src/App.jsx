@@ -16,7 +16,6 @@ import {
   checkDatabaseHealth 
 } from './services/academicService'
 import { logout as cerrarSesionLocal } from './services/authService'
-import { AlertCircle, Database, RefreshCw } from 'lucide-react'
 import { AlertCircle, Database, RefreshCw, Sparkles, Clock } from 'lucide-react'
 import './App.css'
 
