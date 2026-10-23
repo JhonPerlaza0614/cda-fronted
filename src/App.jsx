@@ -3,31 +3,36 @@ import Navbar from './components/Navbar'
 import PensumView from './components/PensumView'
 import ProgramasView from './components/ProgramasView'
 import AsignaturasView from './components/AsignaturasView'
-import PlantillaView from './components/PlantillaView'
+import CoordinadoresView from './components/CoordinadoresView'
+import CrearDocenteView from './components/CrearDocenteView'
+import MiPerfilDocenteView from './components/MiPerfilDocenteView'
 import SqlSetupModal from './components/SqlSetupModal'
 import Toast from './components/Toast'
-import { 
-  getProgramas, 
-  getAsignaturas, 
-  getAllPensum, 
-  checkDatabaseHealth 
+import {
+  getProgramas,
+  getAsignaturas,
+  getAllPensum,
+  checkDatabaseHealth
 } from './services/academicService'
-import { AlertCircle, Database, RefreshCw, ShieldAlert } from 'lucide-react'
+import { AlertCircle, Database, RefreshCw } from 'lucide-react'
 import './App.css'
 
-export default function App({ user, onLogout }) {
-  // Para el rol Administrador (rol = 1), la página principal predeterminada es Mallas Curriculares ('pensum')
+export default function App() {
   const [activeTab, setActiveTab] = useState('pensum')
   const [programas, setProgramas] = useState([])
   const [asignaturas, setAsignaturas] = useState([])
   const [pensumList, setPensumList] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
-  
+
   const [loading, setLoading] = useState(true)
   const [initialError, setInitialError] = useState(null)
   const [isConnected, setIsConnected] = useState(false)
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false)
   const [toast, setToast] = useState(null)
+
+  // TODO: reemplazar por el correo del usuario logueado (login con Google del compañero).
+  // Mientras tanto, para probar "Mi perfil" define VITE_DEV_CORREO_DOCENTE en .env.local
+  const correoUsuario = import.meta.env.VITE_DEV_CORREO_DOCENTE || ''
 
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type })
@@ -142,8 +147,6 @@ export default function App({ user, onLogout }) {
         setActiveTab={setActiveTab}
         onOpenSqlModal={() => setIsSqlModalOpen(true)}
         isConnected={isConnected}
-        user={user}
-        onLogout={onLogout}
       />
 
       {/* Alerta si ocurre un error de RLS o configuración */}
@@ -211,9 +214,24 @@ export default function App({ user, onLogout }) {
                 onShowToast={showToast}
               />
             )}
-                      {(activeTab === 'plantilla' || activeTab === 'coordinadores') && (
-              <PlantillaView
+            {activeTab === 'coordinadores' && (
+              <CoordinadoresView
                 programas={programas}
+                onShowToast={showToast}
+              />
+            )}
+
+            {activeTab === 'docentes' && (
+              <CrearDocenteView
+                programas={programas}
+                onShowToast={showToast}
+                onCancel={() => setActiveTab('pensum')}
+              />
+            )}
+
+            {activeTab === 'mi-perfil' && (
+              <MiPerfilDocenteView
+                correo={correoUsuario}
                 onShowToast={showToast}
               />
             )}
