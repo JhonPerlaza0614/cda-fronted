@@ -8,7 +8,7 @@ import { supabase } from '../supabase'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api'
 
-async function requestBackend(endpoint, options = {}) {
+export async function requestBackend(endpoint, options = {}) {
   const url = `${BACKEND_URL}${endpoint}`
   const response = await fetch(url, {
     ...options,
