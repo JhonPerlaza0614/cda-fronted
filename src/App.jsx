@@ -4,13 +4,15 @@ import PensumView from './components/PensumView'
 import ProgramasView from './components/ProgramasView'
 import AsignaturasView from './components/AsignaturasView'
 import CoordinadoresView from './components/CoordinadoresView'
+import CrearDocenteView from './components/CrearDocenteView'
+import MiPerfilDocenteView from './components/MiPerfilDocenteView'
 import SqlSetupModal from './components/SqlSetupModal'
 import Toast from './components/Toast'
-import { 
-  getProgramas, 
-  getAsignaturas, 
-  getAllPensum, 
-  checkDatabaseHealth 
+import {
+  getProgramas,
+  getAsignaturas,
+  getAllPensum,
+  checkDatabaseHealth
 } from './services/academicService'
 import { AlertCircle, Database, RefreshCw } from 'lucide-react'
 import './App.css'
@@ -21,12 +23,16 @@ export default function App() {
   const [asignaturas, setAsignaturas] = useState([])
   const [pensumList, setPensumList] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
-  
+
   const [loading, setLoading] = useState(true)
   const [initialError, setInitialError] = useState(null)
   const [isConnected, setIsConnected] = useState(false)
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false)
   const [toast, setToast] = useState(null)
+
+  // TODO: reemplazar por el correo del usuario logueado (login con Google del compañero).
+  // Mientras tanto, para probar "Mi perfil" define VITE_DEV_CORREO_DOCENTE en .env.local
+  const correoUsuario = import.meta.env.VITE_DEV_CORREO_DOCENTE || ''
 
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type })
@@ -208,9 +214,24 @@ export default function App() {
                 onShowToast={showToast}
               />
             )}
-                      {activeTab === 'coordinadores' && (
+            {activeTab === 'coordinadores' && (
               <CoordinadoresView
                 programas={programas}
+                onShowToast={showToast}
+              />
+            )}
+
+            {activeTab === 'docentes' && (
+              <CrearDocenteView
+                programas={programas}
+                onShowToast={showToast}
+                onCancel={() => setActiveTab('pensum')}
+              />
+            )}
+
+            {activeTab === 'mi-perfil' && (
+              <MiPerfilDocenteView
+                correo={correoUsuario}
                 onShowToast={showToast}
               />
             )}

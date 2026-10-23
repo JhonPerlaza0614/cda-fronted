@@ -12,7 +12,7 @@ function Row({ icon, label, children }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.92rem' }}>
             <span style={{ color: '#71717a', display: 'inline-flex' }}>{icon}</span>
             <span style={{ color: '#71717a', minWidth: '130px' }}>{label}</span>
-            <span style={{ color: '#e4e4e7' }}>{children}</span>
+            <span style={{ color: '#27272a' }}>{children}</span>
         </div>
     )
 }
@@ -91,8 +91,8 @@ export default function MiPerfilDocenteView({ correo, onShowToast }) {
 
             <div
                 style={{
-                    background: '#5f57575d',
-                    border: '1px solid #ffffffff',
+                    background: '#ffffff',
+                    border: '1px solid #e4e4e7',
                     borderRadius: '12px',
                     padding: '1.5rem',
                     display: 'flex',
@@ -108,7 +108,7 @@ export default function MiPerfilDocenteView({ correo, onShowToast }) {
                             src={docente.foto_url}
                             alt={`Foto de ${docente.nombres} ${docente.apellidos}`}
                             onError={() => setFotoError(true)}
-                            style={{ width: '120px', height: '120px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #3f3f46' }}
+                            style={{ width: '120px', height: '120px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #d4d4d8' }}
                         />
                     ) : (
                         <div
@@ -116,9 +116,9 @@ export default function MiPerfilDocenteView({ correo, onShowToast }) {
                                 width: '120px',
                                 height: '120px',
                                 borderRadius: '50%',
-                                background: '#27272a',
-                                border: '2px solid #3f3f46',
-                                color: '#a1a1aa',
+                                background: '#f4f4f5',
+                                border: '2px solid #d4d4d8',
+                                color: '#52525b',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -135,7 +135,7 @@ export default function MiPerfilDocenteView({ correo, onShowToast }) {
                 {/* Datos */}
                 <div style={{ flex: 1, minWidth: '280px', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
-                        <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#f4f4f5' }}>
+                        <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#18181b' }}>
                             {docente.nombres} {docente.apellidos}
                         </h2>
                         <span
@@ -172,11 +172,11 @@ export default function MiPerfilDocenteView({ correo, onShowToast }) {
                             <>
                                 {docente.evaluacion_valor}
                                 {docente.evaluacion_periodo && (
-                                    <span style={{ color: '#a1a1aa' }}> (periodo {docente.evaluacion_periodo})</span>
+                                    <span style={{ color: '#52525b' }}> (periodo {docente.evaluacion_periodo})</span>
                                 )}
                             </>
                         ) : (
-                            <span style={{ color: '#a1a1aa' }}>Sin evaluación registrada</span>
+                            <span style={{ color: '#52525b' }}>Sin evaluación registrada</span>
                         )}
                     </Row>
                 </div>

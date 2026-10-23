@@ -1,6 +1,6 @@
 // Servicio de Docentes (HU-026 y HU-022)
-// Ajusta API_URL si ya usas otra variable de entorno para la URL del backend.
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+// URL del backend Spring Boot. En Vite se define con VITE_API_URL (.env.local y en Vercel).
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 // Error con status y cuerpo, para que la vista pueda distinguir 400 / 409 / 500
 export class ApiError extends Error {
