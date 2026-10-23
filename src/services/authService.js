@@ -22,17 +22,17 @@ function readSession() {
 }
 
 function getErrorMessage(body, status, statusText) {
-  if (body?.detail) return body.detail
   if (body?.message) return body.message
-  if (body?.error) return body.error
+  if (body?.detail) return body.detail
+  if (body?.error && typeof body.error === 'string') return body.error
   if (body?.errors) {
     return Object.entries(body.errors)
       .map(([field, message]) => `${field}: ${message}`)
       .join(', ')
   }
 
-  if (status === 401) return 'Google no pudo validar tu inicio de sesión. Inténtalo de nuevo.'
-  if (status === 403) return 'Tu cuenta no está autorizada para ingresar como docente.'
+  if (status === 401) return 'No fue posible iniciar sesión. Intente de nuevo'
+  if (status === 403) return 'No tiene permisos de administrador'
   return `No se pudo iniciar sesión (${status || statusText || 'error desconocido'}).`
 }
 
@@ -77,7 +77,7 @@ export async function loginWithGoogle(credential) {
       apellido: body.apellido,
       email: body.email,
       rol: body.rol,
-      rolNombre: body.rol === 3 ? 'Docente' : 'Usuario',
+      rolNombre: body.rol === 1 ? 'Administrador' : (body.rol === 3 ? 'Docente' : 'Usuario'),
     },
   }
 
