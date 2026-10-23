@@ -36,6 +36,9 @@ async function request(path, options = {}) {
     return body
 }
 
+// GET /api/docentes
+export const getDocentes = () => request('/api/docentes')
+
 // POST /api/docentes
 export const createDocente = (payload) =>
     request('/api/docentes', { method: 'POST', body: JSON.stringify(payload) })
