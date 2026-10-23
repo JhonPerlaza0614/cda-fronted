@@ -29,7 +29,9 @@ export async function requestBackend(endpoint, options = {}) {
     } catch {
       // Response was not JSON
     }
-    throw new Error(errorMsg)
+    const error = new Error(errorMsg)
+    error.status = response.status
+    throw error
   }
 
   if (response.status === 204) return true

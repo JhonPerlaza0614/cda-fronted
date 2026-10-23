@@ -1,9 +1,9 @@
 import React from 'react'
 
-import { GraduationCap, BookOpen, Library, Layers, LogOut, Users } from 'lucide-react'
+import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, FileText } from 'lucide-react'
 
 
-export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout }) {
+export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout, esAdmin = false }) {
   return (
     <header className="navbar">
       <div className="navbar-container">
@@ -48,13 +48,24 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
             <Users size={18} />
             <span>Coordinadores</span>
           </button>
+
+          {/* Solo administrador */}
+          {esAdmin && (
+            <button
+              className={`nav-tab-btn ${activeTab === 'resoluciones' ? 'active' : ''}`}
+              onClick={() => setActiveTab('resoluciones')}
+            >
+              <FileText size={18} />
+              <span>Resoluciones</span>
+            </button>
+          )}
         </nav>
 
         <div className="navbar-actions">
           {user && (
             <div className="navbar-user" title={user.email || ''}>
               <span className="navbar-user-name">{user.nombre} {user.apellido}</span>
-              <span className="navbar-user-role">{user.rolNombre || (user.rol === 1 ? 'Administrador' : 'Docente')}</span>
+              <span className="navbar-user-role">{user.rolNombre || 'Docente'}</span>
             </div>
           )}
           <div className={`status-pill ${isConnected ? 'online' : 'offline'}`} title="Estado de Supabase">

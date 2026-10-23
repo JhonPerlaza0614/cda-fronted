@@ -4,6 +4,7 @@ import PensumView from './components/PensumView'
 import ProgramasView from './components/ProgramasView'
 import AsignaturasView from './components/AsignaturasView'
 import CoordinadoresView from './components/CoordinadoresView'
+import ResolucionesView from './components/ResolucionesView'
 import SqlSetupModal from './components/SqlSetupModal'
 import Toast from './components/Toast'
 import { 
@@ -12,8 +13,12 @@ import {
   getAllPensum, 
   checkDatabaseHealth 
 } from './services/academicService'
+import { logout as cerrarSesionLocal } from './services/authService'
 import { AlertCircle, Database, RefreshCw } from 'lucide-react'
 import './App.css'
+
+// Rol de administrador (coincide con AuthConstants.ROL_ADMIN del backend).
+const ROL_ADMIN = 1
 
 export default function App({ user, onLogout }) {
   // Para el rol Administrador (rol = 1), la página principal predeterminada es Mallas Curriculares ('pensum')
@@ -28,6 +33,21 @@ export default function App({ user, onLogout }) {
   const [isConnected, setIsConnected] = useState(false)
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false)
   const [toast, setToast] = useState(null)
+
+  // Solo el administrador ve "Resoluciones". El backend es quien protege los datos;
+  // esto solo controla la interfaz.
+  const esAdmin = user?.rol === ROL_ADMIN
+
+  // Si se pierde el rol de admin estando en "Resoluciones", volver a la malla.
+  useEffect(() => {
+    if (!esAdmin && activeTab === 'resoluciones') setActiveTab('pensum')
+  }, [esAdmin, activeTab])
+
+  // 401 en Resoluciones: la sesión expiró. Se limpia la sesión y se vuelve al login.
+  const handleSesionExpirada = useCallback(() => {
+    cerrarSesionLocal()
+    if (onLogout) onLogout()
+  }, [onLogout])
 
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type })
@@ -144,6 +164,7 @@ export default function App({ user, onLogout }) {
         isConnected={isConnected}
         user={user}
         onLogout={onLogout}
+        esAdmin={esAdmin}
       />
 
       {/* Alerta si ocurre un error de RLS o configuración */}
@@ -216,6 +237,10 @@ export default function App({ user, onLogout }) {
                 programas={programas}
                 onShowToast={showToast}
               />
+            )}
+
+            {activeTab === 'resoluciones' && esAdmin && (
+              <ResolucionesView esAdmin={esAdmin} onSesionExpirada={handleSesionExpirada} />
             )}
           </>
         )}

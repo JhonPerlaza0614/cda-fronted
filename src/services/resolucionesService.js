@@ -1,18 +1,27 @@
 import { requestBackend } from './academicService'
+import { getAuthToken } from './authService'
 
 /**
  * Servicio de Resoluciones (períodos académicos).
- * Toda la lectura de datos de la pantalla pasa por este archivo,
- * para poder sustituirlo o simularlo sin tocar la vista.
- *
  * Contrato (BACKEND_URL ya incluye /api):
  *   GET /periodos        -> [ResumenPeriodo]
  *   GET /periodos/{id}   -> PeriodoDetalle | 404 { message }
  *
- * A diferencia de los servicios de programas y asignaturas, aquí NO hay
- * fallback a Supabase: si el backend falla, el error llega a la vista
- * para mostrar "No se pudo cargar" con "Reintentar".
+ * Requiere sesión: envía "Authorization: Bearer <token>".
+ * Los errores llevan `error.status` (401 sin sesión/expirada, 403 sin permiso).
+ * Sin fallback a Supabase: el error llega a la vista.
  */
+
+function opcionesAutenticadas() {
+  const token = getAuthToken()
+  if (!token) {
+    // Sin sesión vigente: no se llama al backend.
+    const error = new Error('Tu sesión expiró. Inicia sesión de nuevo.')
+    error.status = 401
+    throw error
+  }
+  return { headers: { Authorization: `Bearer ${token}` } }
+}
 
 /**
  * @returns {Promise<Array<{
@@ -21,7 +30,7 @@ import { requestBackend } from './academicService'
  * }>>}
  */
 export async function getPeriodos() {
-  const data = await requestBackend('/periodos')
+  const data = await requestBackend('/periodos', opcionesAutenticadas())
   if (!Array.isArray(data)) {
     throw new Error('Respuesta inesperada del servidor al listar períodos')
   }
@@ -36,7 +45,7 @@ export async function getPeriodo(id) {
   if (id === undefined || id === null || id === '') {
     throw new Error('Falta el identificador del período')
   }
-  const data = await requestBackend(`/periodos/${encodeURIComponent(id)}`)
+  const data = await requestBackend(`/periodos/${encodeURIComponent(id)}`, opcionesAutenticadas())
   if (!data || typeof data !== 'object') {
     throw new Error('Respuesta inesperada del servidor al obtener el período')
   }
