@@ -32,13 +32,18 @@ function getErrorMessage(body, status, statusText) {
   }
 
   if (status === 401) return 'No fue posible iniciar sesión. Intente de nuevo'
-  if (status === 403) return 'No tiene permisos de administrador'
+  if (status === 403) return 'Acceso denegado. Verifique sus permisos institucionales o contacte al administrador'
   return `No se pudo iniciar sesión (${status || statusText || 'error desconocido'}).`
 }
 
-export async function loginWithGoogle(credential) {
+export async function loginWithGoogle(credential, rolEsperado = null) {
   if (!credential) {
     throw new Error('Google no devolvió una credencial. Inténtalo de nuevo.')
+  }
+
+  const payload = { credential }
+  if (rolEsperado !== null && rolEsperado !== undefined) {
+    payload.rolEsperado = rolEsperado
   }
 
   let response
@@ -46,7 +51,7 @@ export async function loginWithGoogle(credential) {
     response = await fetch(`${BACKEND_URL}/auth/google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential }),
+      body: JSON.stringify(payload),
     })
   } catch {
     throw new Error('No se pudo conectar con el backend. Verifica que Spring Boot esté ejecutándose en http://localhost:8080.')
@@ -77,7 +82,10 @@ export async function loginWithGoogle(credential) {
       apellido: body.apellido,
       email: body.email,
       rol: body.rol,
-      rolNombre: body.rol === 1 ? 'Administrador' : (body.rol === 3 ? 'Docente' : 'Usuario'),
+      rolNombre: body.rol === 1 ? 'Administrador' : (body.rol === 2 ? 'Coordinador' : (body.rol === 3 ? 'Docente' : 'Usuario')),
+      codeProgram: body.codeProgram || null,
+      nombrePrograma: body.nombrePrograma || null,
+      mensaje: body.mensaje || null,
     },
   }
 
