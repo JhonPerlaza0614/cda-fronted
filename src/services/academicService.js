@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { getAuthToken } from './authService'
 
 /**
  * Servicio para la gestión de Programas, Asignaturas y Pensum Académico
@@ -10,10 +11,14 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/a
 
 async function requestBackend(endpoint, options = {}) {
   const url = `${BACKEND_URL}${endpoint}`
+  const token = getAuthToken()
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {}
+
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders,
       ...(options.headers || {})
     }
   })

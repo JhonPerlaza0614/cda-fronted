@@ -12,7 +12,7 @@ import {
   getAllPensum, 
   checkDatabaseHealth 
 } from './services/academicService'
-import { AlertCircle, Database, RefreshCw } from 'lucide-react'
+import { AlertCircle, Database, RefreshCw, ShieldAlert } from 'lucide-react'
 import './App.css'
 
 export default function App({ user, onLogout }) {
