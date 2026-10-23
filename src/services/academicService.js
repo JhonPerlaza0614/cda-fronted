@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { getAuthToken } from './authService'
 
 /**
  * Servicio para la gestión de Programas, Asignaturas y Pensum Académico
@@ -10,10 +11,14 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/a
 
 async function requestBackend(endpoint, options = {}) {
   const url = `${BACKEND_URL}${endpoint}`
+  const token = getAuthToken()
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {}
+
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders,
       ...(options.headers || {})
     }
   })
@@ -554,5 +559,97 @@ export async function getTiposContrato() {
       { id: 2, nombre: 'Ocasional' },
       { id: 3, nombre: 'Cátedra' }
     ]
+  }
+}
+
+
+// --- DOCENTES ---
+
+export async function getDocentes() {
+  try {
+    return await requestBackend('/docentes')
+  } catch (err) {
+    console.warn('Backend no disponible para docentes, fallback Supabase:', err.message)
+    const { data, error } = await supabase
+      .from('docentes')
+      .select('*, programas(name_program)')
+      .order('apellidos', { ascending: true })
+    if (!error && data) {
+      return data.map(d => ({
+        ...d,
+        nombre_completo: `${d.nombres || ''} ${d.apellidos || ''}`.trim(),
+        name_program: d.programas?.name_program || d.code_program
+      }))
+    }
+    return []
+  }
+}
+
+export async function toggleDocenteEstado(id, nuevoEstado) {
+  try {
+    return await requestBackend(`/docentes/${id}/estado?estado=${Boolean(nuevoEstado)}`, {
+      method: 'PATCH'
+    })
+  } catch (err) {
+    console.warn('Fallo backend en toggleDocenteEstado, fallback Supabase:', err.message)
+    const { data, error } = await supabase
+      .from('docentes')
+      .update({ estado: Boolean(nuevoEstado), updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+    if (error) throw error
+    return data?.[0]
+  }
+}
+
+export async function toggleCoordinadorActivo(id, nuevoActivo) {
+  try {
+    return await requestBackend(`/coordinadores/${id}/estado?activo=${Boolean(nuevoActivo)}`, {
+      method: 'PATCH'
+    })
+  } catch (err) {
+    console.warn('Fallo backend en toggleCoordinadorActivo, fallback Supabase:', err.message)
+    const { data, error } = await supabase
+      .from('coordinadores')
+      .update({ activo: Boolean(nuevoActivo) })
+      .eq('id', id)
+      .select()
+    if (error) throw error
+    return data?.[0]
+  }
+}
+
+export async function createDocente(docente) {
+  try {
+    return await requestBackend('/docentes', {
+      method: 'POST',
+      body: JSON.stringify(docente)
+    })
+  } catch (err) {
+    console.warn('Fallo backend en createDocente, fallback Supabase:', err.message)
+    const { data, error } = await supabase
+      .from('docentes')
+      .insert([docente])
+      .select()
+    if (error) throw error
+    return data?.[0]
+  }
+}
+
+export async function updateDocente(id, changes) {
+  try {
+    return await requestBackend(`/docentes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(changes)
+    })
+  } catch (err) {
+    console.warn('Fallo backend en updateDocente, fallback Supabase:', err.message)
+    const { data, error } = await supabase
+      .from('docentes')
+      .update(changes)
+      .eq('id', id)
+      .select()
+    if (error) throw error
+    return data?.[0]
   }
 }
