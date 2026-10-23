@@ -19,7 +19,9 @@ import {
   getCoordinadores,
   createCoordinador,
   updateCoordinador,
-  deleteCoordinador
+  deleteCoordinador,
+  getCategorias,
+  getTiposContrato
 } from '../services/academicService'
 
 // Escalafón Docente
@@ -42,6 +44,17 @@ export default function CoordinadoresView({
   onShowToast
 }) {
   const [coordinadores, setCoordinadores] = useState([])
+  const [categoriasList, setCategoriasList] = useState([
+    { id: 1, nombre: 'Auxiliar' },
+    { id: 2, nombre: 'Asistente' },
+    { id: 3, nombre: 'Asociado' },
+    { id: 4, nombre: 'Titular' }
+  ])
+  const [tiposContratoList, setTiposContratoList] = useState([
+    { id: 1, nombre: 'Nombrado' },
+    { id: 2, nombre: 'Ocasional' },
+    { id: 3, nombre: 'Cátedra' }
+  ])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [programFilter, setProgramFilter] = useState('ALL')
@@ -68,8 +81,14 @@ export default function CoordinadoresView({
   const loadData = async () => {
     setLoading(true)
     try {
-      const data = await getCoordinadores()
+      const [data, cats, contratos] = await Promise.all([
+        getCoordinadores(),
+        getCategorias(),
+        getTiposContrato()
+      ])
       setCoordinadores(data || [])
+      if (cats && cats.length > 0) setCategoriasList(cats)
+      if (contratos && contratos.length > 0) setTiposContratoList(contratos)
     } catch (err) {
       console.error('Error al cargar coordinadores:', err)
       onShowToast?.('Error al cargar la lista de coordinadores: ' + err.message, 'error')
@@ -128,14 +147,19 @@ export default function CoordinadoresView({
 
     setSubmitting(true)
     try {
+      const selectedCatObj = categoriasList.find(c => c.nombre === formData.categoria || c.id === formData.id_categoria)
+      const selectedContratoObj = tiposContratoList.find(tc => tc.nombre === formData.tipo_contrato || tc.id === formData.id_tipo_contrato)
+
       const payload = {
         nombre_completo: formData.nombre_completo.trim(),
         correo: formData.correo ? formData.correo.trim() : null,
         correo_institucional: formData.correo_institucional.trim(),
         telefono: formData.telefono ? formData.telefono.trim() : null,
         code_program: formData.code_program || null,
-        categoria: formData.categoria || 'Auxiliar',
-        tipo_contrato: formData.tipo_contrato || 'Nombrado',
+        id_categoria: selectedCatObj ? selectedCatObj.id : null,
+        categoria: selectedCatObj ? selectedCatObj.nombre : (formData.categoria || 'Auxiliar'),
+        id_tipo_contrato: selectedContratoObj ? selectedContratoObj.id : null,
+        tipo_contrato: selectedContratoObj ? selectedContratoObj.nombre : (formData.tipo_contrato || 'Nombrado'),
         activo: formData.activo
       }
 
@@ -238,8 +262,8 @@ export default function CoordinadoresView({
           style={{ minWidth: '160px' }}
         >
           <option value="ALL">Todos los contratos</option>
-          {TIPOS_CONTRATO.map(tc => (
-            <option key={tc} value={tc}>Contrato: {tc}</option>
+          {tiposContratoList.map(tc => (
+            <option key={tc.id || tc.nombre} value={tc.nombre}>Contrato: {tc.nombre}</option>
           ))}
         </select>
 
@@ -251,8 +275,8 @@ export default function CoordinadoresView({
           style={{ minWidth: '160px' }}
         >
           <option value="ALL">Todas las categorías</option>
-          {CATEGORIAS.map(cat => (
-            <option key={cat} value={cat}>Categoría: {cat}</option>
+          {categoriasList.map(cat => (
+            <option key={cat.id || cat.nombre} value={cat.nombre}>Categoría: {cat.nombre}</option>
           ))}
         </select>
 
@@ -509,9 +533,9 @@ export default function CoordinadoresView({
                       onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
                       style={{ fontWeight: 500 }}
                     >
-                      {CATEGORIAS.map(cat => (
-                        <option key={cat} value={cat}>
-                          {cat}
+                      {categoriasList.map(cat => (
+                        <option key={cat.id || cat.nombre} value={cat.nombre}>
+                          {cat.nombre}
                         </option>
                       ))}
                     </select>
@@ -525,9 +549,9 @@ export default function CoordinadoresView({
                       onChange={(e) => setFormData({ ...formData, tipo_contrato: e.target.value })}
                       style={{ fontWeight: 500 }}
                     >
-                      {TIPOS_CONTRATO.map(tc => (
-                        <option key={tc} value={tc}>
-                          {tc}
+                      {tiposContratoList.map(tc => (
+                        <option key={tc.id || tc.nombre} value={tc.nombre}>
+                          {tc.nombre}
                         </option>
                       ))}
                     </select>

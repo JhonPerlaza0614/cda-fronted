@@ -520,3 +520,39 @@ export async function deleteCoordinador(id) {
     return true
   }
 }
+
+
+// --- CATÁLOGOS NORMALIZADOS: CATEGORÍAS Y TIPOS DE CONTRATO ---
+
+export async function getCategorias() {
+  try {
+    return await requestBackend('/categorias')
+  } catch {
+    try {
+      const { data, error } = await supabase.from('categoria').select('*').order('nombre', { ascending: true })
+      if (!error && data && data.length > 0) return data
+    } catch {}
+    return [
+      { id: 1, nombre: 'Auxiliar' },
+      { id: 2, nombre: 'Asistente' },
+      { id: 3, nombre: 'Asociado' },
+      { id: 4, nombre: 'Titular' }
+    ]
+  }
+}
+
+export async function getTiposContrato() {
+  try {
+    return await requestBackend('/tipos-contrato')
+  } catch {
+    try {
+      const { data, error } = await supabase.from('tipo_contrato').select('*').order('nombre', { ascending: true })
+      if (!error && data && data.length > 0) return data
+    } catch {}
+    return [
+      { id: 1, nombre: 'Nombrado' },
+      { id: 2, nombre: 'Ocasional' },
+      { id: 3, nombre: 'Cátedra' }
+    ]
+  }
+}
