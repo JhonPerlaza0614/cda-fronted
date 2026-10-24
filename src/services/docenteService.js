@@ -1,6 +1,17 @@
 // Servicio de Docentes (HU-026 y HU-022)
-// URL del backend Spring Boot. En Vite se define con VITE_API_URL (.env.local y en Vercel).
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+// Misma URL base que usa el login (ya incluye /api) y mismo token de sesión.
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api').replace(/\/+$/, '')
+const SESSION_KEY = 'cda.auth.session'
+
+function authHeaders() {
+    try {
+        const raw = window.sessionStorage.getItem(SESSION_KEY)
+        const token = raw ? JSON.parse(raw)?.token : null
+        return token ? { Authorization: `Bearer ${token}` } : {}
+    } catch {
+        return {}
+    }
+}
 
 // Error con status y cuerpo, para que la vista pueda distinguir 400 / 409 / 500
 export class ApiError extends Error {
@@ -15,8 +26,8 @@ export class ApiError extends Error {
 async function request(path, options = {}) {
     let res
     try {
-        res = await fetch(`${API_URL}${path}`, {
-            headers: { 'Content-Type': 'application/json' },
+        res = await fetch(`${BACKEND_URL}${path}`, {
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
             ...options
         })
     } catch {
@@ -37,16 +48,20 @@ async function request(path, options = {}) {
 }
 
 // GET /api/docentes
-export const getDocentes = () => request('/api/docentes')
+export const getDocentes = () => request('/docentes')
 
 // POST /api/docentes
 export const createDocente = (payload) =>
-    request('/api/docentes', { method: 'POST', body: JSON.stringify(payload) })
+    request('/docentes', { method: 'POST', body: JSON.stringify(payload) })
 
 // PUT /api/docentes/{id}
 export const updateDocente = (id, payload) =>
-    request(`/api/docentes/${id}`, { method: 'PUT', body: JSON.stringify(payload) })
+    request(`/docentes/${id}`, { method: 'PUT', body: JSON.stringify(payload) })
 
 // GET /api/docentes/me?correo=...
 export const getMiPerfil = (correo) =>
-    request(`/api/docentes/me?correo=${encodeURIComponent(correo)}`)
+    request(`/docentes/me?correo=${encodeURIComponent(correo)}`)
+
+// GET /api/coordinadores/me?correo=...
+export const getMiPerfilCoordinador = (correo) =>
+    request(`/coordinadores/me?correo=${encodeURIComponent(correo)}`)
