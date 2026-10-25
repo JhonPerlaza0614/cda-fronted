@@ -22,28 +22,23 @@ function readSession() {
 }
 
 function getErrorMessage(body, status, statusText) {
-  if (body?.message) return body.message
   if (body?.detail) return body.detail
-  if (body?.error && typeof body.error === 'string') return body.error
+  if (body?.message) return body.message
+  if (body?.error) return body.error
   if (body?.errors) {
     return Object.entries(body.errors)
       .map(([field, message]) => `${field}: ${message}`)
       .join(', ')
   }
 
-  if (status === 401) return 'No fue posible iniciar sesión. Intente de nuevo'
-  if (status === 403) return 'Acceso denegado. Verifique sus permisos institucionales o contacte al administrador'
+  if (status === 401) return 'Google no pudo validar tu inicio de sesión. Inténtalo de nuevo.'
+  if (status === 403) return 'Tu cuenta no está autorizada para ingresar como docente.'
   return `No se pudo iniciar sesión (${status || statusText || 'error desconocido'}).`
 }
 
-export async function loginWithGoogle(credential, rolEsperado = null) {
+export async function loginWithGoogle(credential) {
   if (!credential) {
     throw new Error('Google no devolvió una credencial. Inténtalo de nuevo.')
-  }
-
-  const payload = { credential }
-  if (rolEsperado !== null && rolEsperado !== undefined) {
-    payload.rolEsperado = rolEsperado
   }
 
   let response
@@ -51,7 +46,7 @@ export async function loginWithGoogle(credential, rolEsperado = null) {
     response = await fetch(`${BACKEND_URL}/auth/google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ credential }),
     })
   } catch {
     throw new Error('No se pudo conectar con el backend. Verifica que Spring Boot esté ejecutándose en http://localhost:8080.')
@@ -82,10 +77,7 @@ export async function loginWithGoogle(credential, rolEsperado = null) {
       apellido: body.apellido,
       email: body.email,
       rol: body.rol,
-      rolNombre: body.rol === 1 ? 'Administrador' : (body.rol === 2 ? 'Coordinador' : (body.rol === 3 ? 'Docente' : 'Usuario')),
-      codeProgram: body.codeProgram || null,
-      nombrePrograma: body.nombrePrograma || null,
-      mensaje: body.mensaje || null,
+      rolNombre: body.rol === 3 ? 'Docente' : 'Usuario',
     },
   }
 
