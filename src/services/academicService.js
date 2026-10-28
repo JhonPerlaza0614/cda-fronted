@@ -9,7 +9,7 @@ import { getAuthToken } from './authService'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api'
 
-async function requestBackend(endpoint, options = {}) {
+export async function requestBackend(endpoint, options = {}) {
   const url = `${BACKEND_URL}${endpoint}`
   const token = getAuthToken()
   const authHeaders = token ? { Authorization: `Bearer ${token}` } : {}
