@@ -137,7 +137,7 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
           {onLogout && (
             <button type="button" className="navbar-logout-btn" onClick={onLogout} title="Cerrar sesión">
               <LogOut size={16} />
-              <span>Salir</span>
+              <span>Cerrar sesión</span>
             </button>
           )}
         </div>
