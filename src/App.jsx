@@ -7,6 +7,7 @@ import PlantillaView from './components/PlantillaView'
 import PeriodosView from './components/PeriodosView'
 import DedicatedInProgressView from './components/DedicatedInProgressView'
 import MiPerfilView from './components/MiPerfilView'
+import DisponibilidadView from './components/DisponibilidadView'
 import SqlSetupModal from './components/SqlSetupModal'
 import Toast from './components/Toast'
 import {
@@ -98,12 +99,11 @@ export default function App({ user, onLogout }) {
     } catch (err) {
       if (seq !== loadSeq.current) return
       console.error('Error al cargar datos:', err)
-      setInitialError(err.message || 'Error al comunicarse con la base de datos')
-      setIsConnected(false)
+      setInitialError(err.message || 'No fue posible cargar la información académica')
     } finally {
       if (seq === loadSeq.current && !isSilent) setLoading(false)
     }
-  }, [canSeeAcademicData, isDocente])
+  }, [canSeeAcademicData, isDocente, applyAcademicResources, loadAcademicResources])
 
   useEffect(() => {
     loadData()
@@ -189,9 +189,9 @@ export default function App({ user, onLogout }) {
           <div className="alert-content">
             <AlertCircle size={20} className="text-warning" />
             <div>
-              <strong>Aviso de Base de Datos:</strong> {initialError}
+              <strong>Aviso de carga académica:</strong> {initialError}
               <p className="alert-hint">
-                Si las tablas son nuevas o tienen RLS activado sin políticas, debes ejecutar el script SQL en Supabase para otorgar permisos.
+                El inicio de sesión puede funcionar aunque falle una consulta académica. Revisa el backend y las migraciones si el problema persiste.
               </p>
             </div>
           </div>
@@ -215,7 +215,7 @@ export default function App({ user, onLogout }) {
           </div>
         ) : (
           <>
-            {/* Vistas Dedicadas en Progreso de Creación para Docentes y Coordinadores */}
+            {/* Portales informativos para Docentes y Coordinadores */}
             {(activeTab === 'docente_portal' || activeTab === 'coordinador_portal') && (
               <DedicatedInProgressView
                 user={user}
@@ -223,6 +223,9 @@ export default function App({ user, onLogout }) {
                 onLogout={onLogout}
               />
             )}
+
+            {/* Disponibilidad docente: visible únicamente para el rol docente */}
+            {isDocente && activeTab === 'disponibilidad' && <DisponibilidadView />}
 
             {/* Períodos Académicos (Resolución de Calendario) */}
             {activeTab === 'periodos' && (
@@ -244,6 +247,7 @@ export default function App({ user, onLogout }) {
                 onShowToast={showToast}
                 onNavigateToAsignaturas={() => setActiveTab('asignaturas')}
                 onNavigateToProgramas={() => setActiveTab('programas')}
+                canEdit
               />
             )}
 
