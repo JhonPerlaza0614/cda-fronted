@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, Check, Clock3, Eraser, Info, RotateCcw, AlertCircle, LoaderCircle } from 'lucide-react'
-import { consultarMiDisponibilidad, registrarDisponibilidad } from '../services/disponibilidadService'
+import { consultarMiDisponibilidad, registrarDisponibilidad } from '../services/DisponibilidadService'
 import './DisponibilidadView.css'
 
 const DAYS = [
