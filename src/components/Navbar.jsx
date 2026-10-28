@@ -111,6 +111,16 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
             </button>
           )}
 
+          {isDocente && (
+            <button
+              className={`nav-tab-btn ${activeTab === 'disponibilidad' ? 'active' : ''}`}
+              onClick={() => setActiveTab('disponibilidad')}
+            >
+              <CalendarDays size={18} />
+              <span>Disponibilidad</span>
+            </button>
+          )}
+
           {/* Mi perfil: visible para todos los roles */}
           {user && (
             <button
