@@ -171,8 +171,7 @@
 3.1. Dado que el coordinador se ha autenticado correctamente, cuando el sistema valide la información de la cuenta, entonces debe identificar el rol de coordinador.
 3.2. Dado que el usuario posee el rol de coordinador, cuando ingrese al sistema, entonces debe visualizar las funcionalidades correspondientes a dicho rol.
 3.3. Dado que la cuenta tiene un perfil registrado pero no de coordinador, cuando el usuario se autentique, entonces el sistema debe impedir el acceso a las funcionalidades de coordinador y mostrar “No tiene perfil de coordinador”.
-3.4. Dado que el coordinador no tiene programa asignado, cuando ingrese al sistema, entonces debe permitirle el acceso y mostrar “Aún no tiene un programa asignado. Contacte al administrador”. (supuesto)
-
+3.4. Dado que el coordinador no tiene programa asignado, cuando ingrese al sistema, entonces debe permitirle el acceso y mostrar “Aún no tiene un programa asignado. Contacte al administrador”. 
 4. Sesión
 4.1. Dado que el usuario ya tiene sesión activa, cuando abra el login, entonces el sistema debe llevarlo a su pantalla de inicio.
 4.2. Dado que no hay sesión iniciada, cuando el usuario intente entrar a una pantalla interna, entonces el sistema debe redirigirlo al login.
@@ -218,8 +217,8 @@
 2. El archivo exportado debe tener un nombre descriptivo (ejemplo: programacion_academica.xlsx) y, opcionalmente, incluir fecha/hora de exportación.
 3. El archivo solo puede ser exportable en un tiempo fijo antes del inicio del semestre.","Reportes","1","M","Preguntar si definir este tiempo cuando se crea el calendario en la HU-002","En Backlog"
 "HU-015","Yo como docente, requiero editar los datos de mi perfil, para mantener la información actualizada y corregir errores.","1. Dado que estoy en mi perfil, cuando presiono “Editar perfil”, el sistema muestra el formulario con mis datos actuales.
-2. Puedo editar foto, nombres, apellidos y correo institucional. No puedo editar código, documento,  tipo de perfil, estado ni evaluación docente. (supuesto)
-3. Nombres y apellidos son obligatorios, solo aceptan letras y espacios, y tienen una longitud máxima definida por el cliente.
+2. Puedo editar foto, correo personal y telefono. No puedo editar nombres, apellidos y correo institucional, código, documento,  tipo de perfil, estado ni evaluación docente. 
+3. Nombres y apellidos no se modifican
 4. El correo debe tener formato válido, terminar en @correounivalle.edu.co y no estar repetido en ningún otro perfil, o muestra el mensaje correspondiente (“Debe usar el correo institucional” o “Ya existe un perfil con este correo”).
 5. La foto es opcional, en formato JPG o PNG y con un tamaño máximo definido por el cliente. Si no cumple, muestra “Formato o tamaño no válido”.
 6. Puedo reemplazar la foto o eliminarla, con confirmación. Al eliminarla vuelve la imagen por defecto.
@@ -236,10 +235,10 @@
 5. Si no hay programación iniciada, muestra “Aún no hay programación iniciada”.
 6. Si no tengo programa asignado, muestra “Aún no tiene un programa asignado. Contacte al administrador”.
 7. Si no carga, muestra “No se pudo cargar” con opción de reintentar.","Gestión de asignación académica","2","M","","En Backlog"
-"HU-017","Yo como administrador, requiero crear nuevas resoluciones a los programas académicos, para desechar los no vigentes","1. Dado que el administrador está en el módulo de programación académica, cuando selecciona “Registrar resolución de programa”, el sistema muestra el formulario con nombre del programa, descripción, jornada (diurna o nocturna), período de oferta (semestral o anual) y botón “Agregar semestre”.
+"HU-017","Yo como administrador, requiero crear nuevas resoluciones a los programas académicos, para desechar los no vigentes","1. Dado que el administrador está en el módulo de programación académica, cuando selecciona “Registrar resolución de programa”, el sistema muestra el formulario con nombre del programa, descripción, jornada (diurna o nocturna), período de oferta (semestral o anual) y botón “Agregar semestre”. (lo de semestral o anual es cada cuanto hay estudiantes de primer semestre algunos programas pueden estar sujeto a cambios, pero por ejemplo un programa anual tendria inscripciones de nuevo cuando los estudiantes de aquel primer semestre ya esten en tercer semestre.)
 
 2. Cada semestre tiene número y botón “Agregar asignatura”: nombre, código, créditos, horas de clase, horas de estudio independiente y tipo (básica, profesional, electiva complementaria, act. extracurricular).
-2.1El formulario debe permitir ingresar los siguientes datos: nombre del programa académico(tipo alfanumérico no mayor a XX caracteres) , descripción (tipo alfabetico no mayor a XX caracteres), numero del semestre (numerico XX), nombre de la asignatura(tipo alfabético no mayor a XX caracteres),código de la asignatura(alfanumerico no mayor a 8 caracteres), créditos de la asignatura (numerico de 1 digito),  horas de estudio independiente(numerico maximo 2 digitos),tipo de asignatura(lista seleccionable entre asignatura basica, profesional, electiva complementaria, act. extracurricular), horas de clase (numerico 1 digito)
+2.1El formulario debe permitir ingresar los siguientes datos: nombre del programa académico(tipo alfanumérico no mayor a XX caracteres) , descripción (tipo alfabetico no mayor a XX caracteres), numero del semestre (numerico XX), nombre de la asignatura(tipo alfabético no mayor a XX caracteres),código de la asignatura(alfanumerico no mayor a 8 caracteres), créditos de la asignatura (numerico de 1 digito), tipo de asignatura(lista seleccionable entre asignatura basica, profesional, electiva complementaria, act. extracurricular), horas de clase (numerico 1 digito)
 
 3. El administrador puede quitar un semestre o una asignatura del formulario antes de guardar.
 3.1 Al presionar guardar se mostrará un cuadro de dialogo preguntando si la información ingresada es correcta, con las opciones de aceptar para guardar la información y cancelar para regresar al formulario y editar la información erronea.
@@ -278,7 +277,7 @@ Editar ","En Backlog"
 
 4.Sin resoluciones, muestra “No hay resoluciones registradas”. Sin coincidencias, “Sin resultados”.
 
-5.Si no carga, muestra “No se pudo cargar” con opción de reintentar.","Gestión de resolución de programa","1","M","5","En Backlog"
+5.Si no carga, muestra “No se pudo cargar” con opción de reintentar.","Gestión de resolución de programa","1","M","5.0","En Backlog"
 "HU-020","Yo como administrador, requiero asignar coordinadores a los programas academicos, para que puedan gestionar los respectivos docentes en la programación académica","1. Consultar programas
 1.1. Dado que el administrador ha iniciado sesión, cuando acceda al módulo de programas académicos, entonces el sistema debe mostrar los programas disponibles.
 
@@ -408,7 +407,7 @@ Editar ","En Backlog"
 4. Al aceptar, actualiza la relación y muestra “Coordinador actualizado”. El anterior pierde acceso a ese programa, y las asignaciones que ya hizo se conservan.
 5. Al cancelar, el coordinador actual se conserva.
 6. Si falla, muestra “No se pudo actualizar” y el coordinador actual se conserva.","Gestión de coordinador","3","M","","En Backlog"
-"HU-037","Yo como administrador,requiero ver programas y sus coordinadores, para saber cuales tienen coordinador y gestionarlos.","1.El sistema muestra los programas con resolución activa y su coordinador, o “Sin coordinador”.
+"HU-037","Yo como administrador,requiero ver programas académicos y sus coordinadores, para saber cuales tienen coordinador y gestionarlos.","1.El sistema muestra los programas académicos con resolución activa y su coordinador, o “Sin coordinador”.
 2.Permite buscar por programa o coordinador y filtrar los programas “Sin coordinador”.
 3.Cada fila muestra “Asignar coordinador” si no tiene, o “Cambiar coordinador” si tiene.
 4.Sin programas, muestra “No hay programas registrados”. Sin coincidencias, “Sin resultados”.
@@ -424,7 +423,7 @@ Editar ","En Backlog"
 "HU-039","Yo como coordinador, requiero recibir un recordatorio de las fechas de mi periodo, para asignar docentes a la resolución de mi programa.","1. El período es el de asignación de docentes.
 2. El correo incluye también las fechas de adición y cancelación del calendario, con el aviso de que en ese lapso solo se consulta, no se cambian asignaciones.
 3. El recordatorio de cierre no se envía si ya asigné docente a todas las materias de mis programas. (supuesto)","Notificaciones y alertas","5","M","","En Backlog"
-"HU-040","Yo como administrador, requiero crear y editar programas académicos, para tener la base sobre la que se registran mallas, cohortes y coordinadores.
+"HU-040","Yo como administrador, requiero crear y editar programas académicos, para tener la base sobre la que se registran mallas curriculares, cohortes y coordinadores.
 ","1. Formulario: código del programa (4 dígitos, único), nombre (máximo 100), jornada (diurna, nocturna o ambas), duración en semestres, ingreso (semestral o anual) y estado.
  2. Validaciones de obligatoriedad y unicidad. Pide confirmación al guardar.
  3. Un programa nuevo no tiene cohortes hasta que se configuran (HU-042).
