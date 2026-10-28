@@ -1653,6 +1653,22 @@
   color: var(--text-muted);
 }
 
+/* HU-015: errores de validación por campo */
+.form-group input.input-error {
+  border-color: #dc2626;
+}
+
+.field-error {
+  font-size: 0.8rem;
+  color: #dc2626;
+}
+
+.form-group input:disabled {
+  background-color: #f4f4f5;
+  color: #52525b;
+  cursor: not-allowed;
+}
+
 .alert-warning-box {
   background-color: #fffbeb;
   border-left: 4px solid var(--warning);
