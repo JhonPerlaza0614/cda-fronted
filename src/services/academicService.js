@@ -34,11 +34,17 @@ export async function requestBackend(endpoint, options = {}) {
     } catch {
       // Response was not JSON
     }
-    throw new Error(errorMsg)
+    const error = new Error(errorMsg)
+    error.status = response.status
+    throw error
   }
 
   if (response.status === 204) return true
   return await response.json()
+}
+
+function isBackendUnavailable(error) {
+  return error instanceof TypeError || !error?.status
 }
 
 // --- PROGRAMAS ---
@@ -84,7 +90,10 @@ export async function createPrograma(programa) {
       code_program: programa.code_program.trim().toUpperCase(),
       name_program: programa.name_program.trim(),
       numero_semestre: parseInt(programa.numero_semestre, 10) || 10,
-      id_facultad_programa: programa.id_facultad_programa ? parseInt(programa.id_facultad_programa, 10) : null
+      id_facultad_programa: programa.id_facultad_programa ? parseInt(programa.id_facultad_programa, 10) : null,
+      apertura: programa.apertura || null,
+      jornada: programa.jornada || 'DIURNA',
+      ingreso: programa.ingreso || 'SEMESTRAL'
     }
     return await requestBackend('/programas', {
       method: 'POST',
@@ -96,6 +105,7 @@ export async function createPrograma(programa) {
       code_program: programa.code_program.trim().toUpperCase(),
       name_program: programa.name_program.trim(),
       numero_semestre: parseInt(programa.numero_semestre, 10) || 10,
+      apertura: programa.apertura || null,
     }
     if (programa.id_facultad_programa) {
       insertPayload.id_facultad_programa = parseInt(programa.id_facultad_programa, 10)
@@ -117,6 +127,7 @@ export async function updatePrograma(code_program, changes) {
     if (changes.id_facultad_programa !== undefined) {
       payload.id_facultad_programa = changes.id_facultad_programa ? parseInt(changes.id_facultad_programa, 10) : null
     }
+    if (changes.apertura !== undefined) payload.apertura = changes.apertura || null
     return await requestBackend(`/programas/${encodeURIComponent(code_program)}`, {
       method: 'PUT',
       body: JSON.stringify(payload)
@@ -131,6 +142,7 @@ export async function updatePrograma(code_program, changes) {
     if (changes.id_facultad_programa !== undefined) {
       updateData.id_facultad_programa = changes.id_facultad_programa ? parseInt(changes.id_facultad_programa, 10) : null
     }
+    if (changes.apertura !== undefined) updateData.apertura = changes.apertura || null
     const { data, error } = await supabase
       .from('programas')
       .update(updateData)
@@ -287,6 +299,7 @@ export async function getPensumByProgram(code_program) {
       .from('pensum_academico')
       .select('*')
       .eq('code_program', code_program)
+      .eq('vigente', true)
       .order('semestre', { ascending: true })
 
     if (pensumError) throw pensumError
@@ -318,6 +331,142 @@ export async function getAllPensum() {
     const { data, error } = await supabase
       .from('pensum_academico')
       .select('*')
+      .eq('vigente', true)
+    if (error) throw error
+    return data || []
+  }
+}
+
+export async function savePensumVersion(code_program, items) {
+    try {
+      return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/guardar`, {
+        method: 'POST',
+        body: JSON.stringify({
+          code_program,
+          items: items.map(item => ({
+            code_course: item.code_course,
+            semestre: parseInt(item.semestre, 10)
+          }))
+        })
+      })
+    } catch (err) {
+      if (!isBackendUnavailable(err)) throw err
+      console.warn('Fallo backend en savePensumVersion, fallback a Supabase:', err.message)
+      const { data: current, error: currentError } = await supabase
+        .from('pensum_academico')
+        .select('version')
+        .eq('code_program', code_program)
+        .order('version', { ascending: false })
+        .limit(1)
+      if (currentError) throw currentError
+      const nextVersion = (current?.[0]?.version || 0) + 1
+      const now = new Date().toISOString()
+      const { error: deactivateError } = await supabase
+        .from('pensum_academico')
+        .update({ vigente: false, fecha_desactivacion: now })
+        .eq('code_program', code_program)
+        .eq('vigente', true)
+      if (deactivateError) throw deactivateError
+      const payload = items.map(item => ({
+        code_program,
+        code_course: item.code_course,
+        version: nextVersion,
+        semestre: parseInt(item.semestre, 10),
+        vigente: true,
+        activo: true
+      }))
+      if (payload.length === 0) return []
+      const { data, error } = await supabase.from('pensum_academico').insert(payload).select()
+      if (error) throw error
+      return data || []
+    }
+}
+
+export async function getPensumHistory(code_program) {
+  try {
+    return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/historial`)
+  } catch (err) {
+    if (!isBackendUnavailable(err)) throw err
+    console.warn('Fallo backend en getPensumHistory, usando Supabase:', err.message)
+    const { data, error } = await supabase
+      .from('pensum_academico')
+      .select('version, fecha_desactivacion, code_course')
+      .eq('code_program', code_program)
+      .eq('vigente', false)
+      .order('fecha_desactivacion', { ascending: false })
+    if (error) throw error
+    const grouped = new Map()
+    ;(data || []).forEach(item => {
+      const current = grouped.get(item.version) || {
+        version: item.version,
+        fechaDesactivacion: item.fecha_desactivacion,
+        totalAsignaturas: 0
+      }
+      current.totalAsignaturas += 1
+      grouped.set(item.version, current)
+    })
+    return [...grouped.values()]
+  }
+}
+
+export async function getPensumVersion(code_program, version) {
+  try {
+    return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/version/${version}`)
+  } catch (err) {
+    if (!isBackendUnavailable(err)) throw err
+    console.warn('Fallo backend en getPensumVersion, usando Supabase:', err.message)
+    const { data, error } = await supabase
+      .from('pensum_academico')
+      .select('*, asignaturas(name_course, credits)')
+      .eq('code_program', code_program)
+      .eq('version', version)
+      .order('semestre', { ascending: true })
+    if (error) throw error
+    return (data || []).map(item => ({
+      ...item,
+      name_course: item.asignaturas?.name_course || item.code_course,
+      credits: item.asignaturas?.credits || 0
+    }))
+  }
+}
+
+export async function deactivatePensum(code_program) {
+  try {
+    return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/desactivar`, { method: 'PATCH' })
+  } catch (err) {
+    if (!isBackendUnavailable(err)) throw err
+    console.warn('Fallo backend en deactivatePensum, usando Supabase:', err.message)
+    const { error } = await supabase
+      .from('pensum_academico')
+      .update({ vigente: false, fecha_desactivacion: new Date().toISOString() })
+      .eq('code_program', code_program)
+      .eq('vigente', true)
+    if (error) throw error
+    return true
+  }
+}
+
+export async function reactivatePensum(code_program, version) {
+  try {
+    return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/version/${version}/reactivar`, {
+      method: 'PATCH'
+    })
+  } catch (err) {
+    if (!isBackendUnavailable(err)) throw err
+    console.warn('Fallo backend en reactivatePensum, usando Supabase:', err.message)
+    const now = new Date().toISOString()
+    const { error: deactivateError } = await supabase
+      .from('pensum_academico')
+      .update({ vigente: false, fecha_desactivacion: now })
+      .eq('code_program', code_program)
+      .eq('vigente', true)
+    if (deactivateError) throw deactivateError
+    const { data, error } = await supabase
+      .from('pensum_academico')
+      .update({ vigente: true, fecha_desactivacion: null, fecha_reactivacion: now })
+      .eq('code_program', code_program)
+      .eq('version', version)
+      .select()
     if (error) throw error
     return data || []
   }
@@ -439,7 +588,11 @@ export async function checkDatabaseHealth() {
   }
 
   try {
-    const res = await fetch(`${BACKEND_URL}/programas`, { method: 'GET' })
+    const token = getAuthToken()
+    const res = await fetch(`${BACKEND_URL}/programas`, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
     if (res.ok) {
       results.connected = true
       results.backendConnected = true
@@ -449,8 +602,11 @@ export async function checkDatabaseHealth() {
       results.tables.Facultad = true
       return results
     }
+    if (res.status !== 401 && res.status !== 403) {
+      results.error = `El backend respondió ${res.status} al consultar programas`
+    }
   } catch {
-    // Backend no disponible
+    // Se intenta la conexión directa a Supabase.
   }
 
   try {

@@ -37,6 +37,7 @@ export default function ProgramasView({
     name_program: '',
     numero_semestre: 10,
     id_facultad_programa: '',
+    apertura: '',
   })
 
   // Filtered programs
@@ -96,6 +97,7 @@ export default function ProgramasView({
       name_program: '',
       numero_semestre: 10,
       id_facultad_programa: '',
+      apertura: '',
     })
     setIsModalOpen(true)
   }
@@ -110,6 +112,7 @@ export default function ProgramasView({
       name_program: prog.name_program,
       numero_semestre: prog.numero_semestre !== undefined && prog.numero_semestre !== null ? prog.numero_semestre : 10,
       id_facultad_programa: prog.id_facultad_programa ? String(prog.id_facultad_programa) : '',
+      apertura: prog.apertura || '',
     })
     setIsModalOpen(true)
   }
@@ -134,6 +137,7 @@ export default function ProgramasView({
           name_program: formData.name_program,
           numero_semestre: numSemestres,
           id_facultad_programa: formData.id_facultad_programa ? parseInt(formData.id_facultad_programa, 10) : null,
+          apertura: formData.apertura || null,
         })
         onShowToast('Programa actualizado correctamente', 'success')
       } else {
@@ -146,6 +150,7 @@ export default function ProgramasView({
           ...formData,
           numero_semestre: numSemestres,
           id_facultad_programa: formData.id_facultad_programa ? parseInt(formData.id_facultad_programa, 10) : null,
+          apertura: formData.apertura || null,
         })
         onShowToast('Programa creado exitosamente', 'success')
       }
@@ -298,6 +303,21 @@ export default function ProgramasView({
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
+                <div className="form-group">
+                  <label htmlFor="apertura">Apertura</label>
+                  <select
+                    id="apertura"
+                    value={formData.apertura}
+                    onChange={(e) => setFormData({ ...formData, apertura: e.target.value })}
+                    className="select-input"
+                  >
+                    <option value="">-- Sin definir --</option>
+                    <option value="SEMESTRAL">Semestral</option>
+                    <option value="ANUAL">Anual</option>
+                  </select>
+                  <small className="form-hint">Campo opcional: indica la frecuencia de apertura del programa.</small>
+                </div>
+
                 <div className="form-group">
                   <label htmlFor="code_program">Código del Programa *</label>
                   <input

@@ -46,6 +46,58 @@ export default function App({ user, onLogout }) {
     setToast({ message, type })
   }, [])
 
+  const loadAcademicResources = useCallback(async () => {
+    if (!canSeeAcademicData) {
+      return { programas: [], asignaturas: [], pensum: [], errors: [] }
+    }
+
+    const results = await Promise.allSettled([
+      getProgramas(),
+      getAsignaturas(),
+      getAllPensum()
+    ])
+    const labels = ['programas', 'asignaturas', 'malla curricular']
+    const errors = []
+    const values = results.map((result, index) => {
+      if (result.status === 'fulfilled') return result.value || []
+      errors.push(`${labels[index]}: ${result.reason?.message || 'consulta fallida'}`)
+      console.error(`Error al cargar ${labels[index]}:`, result.reason)
+      return []
+    })
+
+    return {
+      programas: values[0],
+      asignaturas: values[1],
+      pensum: values[2],
+      errors
+    }
+  }, [canSeeAcademicData])
+
+  const applyAcademicResources = useCallback(({ programas: progs, asignaturas: asigs, pensum, errors }) => {
+    const asigMap = new Map(asigs.map(a => [a.code_course, a]))
+    const enrichedPensum = pensum.map(item => {
+      const asig = asigMap.get(item.code_course)
+      return {
+        ...item,
+        name_course: asig?.name_course || item.code_course,
+        credits: asig?.credits !== undefined && asig?.credits !== null ? asig.credits : 0,
+      }
+    })
+
+    setProgramas(progs)
+    setAsignaturas(asigs)
+    setPensumList(enrichedPensum)
+
+    if (progs.length > 0) {
+      setSelectedProgramCode(prev => {
+        const exists = progs.some(p => p.code_program === prev)
+        return exists ? prev : progs[0].code_program
+      })
+    }
+
+    return errors
+  }, [])
+
   // Carga global de datos desde Backend / Supabase
   const loadData = useCallback(async (isSilent = false) => {
     if (isDocente) {
@@ -60,41 +112,17 @@ export default function App({ user, onLogout }) {
       const health = await checkDatabaseHealth()
       setIsConnected(health.connected)
 
-      // Cargar en paralelo datos académicos si tiene permisos
-      const [progs, asigs, pensum] = canSeeAcademicData
-        ? await Promise.all([getProgramas(), getAsignaturas(), getAllPensum()])
-        : [[], [], []]
-
-      // Asociar nombres y créditos de asignaturas al pensum
-      const asigMap = new Map(asigs.map(a => [a.code_course, a]))
-      const enrichedPensum = pensum.map(item => {
-        const asig = asigMap.get(item.code_course)
-        return {
-          ...item,
-          name_course: asig?.name_course || item.code_course,
-          credits: asig?.credits !== undefined && asig?.credits !== null ? asig.credits : 0,
-        }
-      })
-
-      setProgramas(progs)
-      setAsignaturas(asigs)
-      setPensumList(enrichedPensum)
-
-      // Si no hay programa seleccionado, seleccionar el primero
-      if (progs.length > 0) {
-        setSelectedProgramCode(prev => {
-          const exists = progs.some(p => p.code_program === prev)
-          return exists ? prev : progs[0].code_program
-        })
+      const errors = applyAcademicResources(await loadAcademicResources())
+      if (errors.length > 0) {
+        setInitialError(`No se pudo cargar completamente la información académica: ${errors.join('; ')}`)
       }
     } catch (err) {
       console.error('Error al cargar datos:', err)
-      setInitialError(err.message || 'Error al comunicarse con la base de datos')
-      setIsConnected(false)
+      setInitialError(err.message || 'No fue posible cargar la información académica')
     } finally {
       if (!isSilent) setLoading(false)
     }
-  }, [canSeeAcademicData, isDocente])
+  }, [canSeeAcademicData, isDocente, applyAcademicResources, loadAcademicResources])
 
   useEffect(() => {
     let isMounted = true
@@ -110,33 +138,16 @@ export default function App({ user, onLogout }) {
         if (!isMounted) return
         setIsConnected(health.connected)
 
-        const [progs, asigs, pensum] = canSeeAcademicData
-          ? await Promise.all([getProgramas(), getAsignaturas(), getAllPensum()])
-          : [[], [], []]
         if (!isMounted) return
 
-        const asigMap = new Map(asigs.map(a => [a.code_course, a]))
-        const enrichedPensum = pensum.map(item => {
-          const asig = asigMap.get(item.code_course)
-          return {
-            ...item,
-            name_course: asig?.name_course || item.code_course,
-            credits: asig?.credits !== undefined && asig?.credits !== null ? asig.credits : 0,
-          }
-        })
-
-        setProgramas(progs)
-        setAsignaturas(asigs)
-        setPensumList(enrichedPensum)
-
-        if (progs.length > 0) {
-          setSelectedProgramCode(progs[0].code_program)
+        const errors = applyAcademicResources(await loadAcademicResources())
+        if (errors.length > 0) {
+          setInitialError(`No se pudo cargar completamente la información académica: ${errors.join('; ')}`)
         }
       } catch (err) {
         if (!isMounted) return
         console.error('Error al inicializar datos:', err)
         setInitialError(err.message || 'Error al comunicarse con la base de datos')
-        setIsConnected(false)
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -146,7 +157,7 @@ export default function App({ user, onLogout }) {
     return () => {
       isMounted = false
     }
-  }, [canSeeAcademicData, isDocente])
+  }, [canSeeAcademicData, isDocente, applyAcademicResources, loadAcademicResources])
 
   const handleSelectProgramForPensum = (code) => {
     setSelectedProgramCode(code)
@@ -191,9 +202,9 @@ export default function App({ user, onLogout }) {
           <div className="alert-content">
             <AlertCircle size={20} className="text-warning" />
             <div>
-              <strong>Aviso de Base de Datos:</strong> {initialError}
+              <strong>Aviso de carga académica:</strong> {initialError}
               <p className="alert-hint">
-                Si las tablas son nuevas o tienen RLS activado sin políticas, debes ejecutar el script SQL en Supabase para otorgar permisos.
+                El inicio de sesión puede funcionar aunque falle una consulta académica. Revisa el backend y las migraciones si el problema persiste.
               </p>
             </div>
           </div>
@@ -243,6 +254,7 @@ export default function App({ user, onLogout }) {
                 onShowToast={showToast}
                 onNavigateToAsignaturas={() => setActiveTab('asignaturas')}
                 onNavigateToProgramas={() => setActiveTab('programas')}
+                canEdit
               />
             )}
 
