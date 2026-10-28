@@ -8,6 +8,7 @@ import { getAuthToken } from './authService'
  */
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api'
+const API_ROOT = BACKEND_URL.replace(/\/api\/?$/, '')
 
 export async function requestBackend(endpoint, options = {}) {
   const url = `${BACKEND_URL}${endpoint}`
@@ -439,7 +440,8 @@ export async function checkDatabaseHealth() {
   }
 
   try {
-    const res = await fetch(`${BACKEND_URL}/programas`, { method: 'GET' })
+    // /actuator/health es público: no requiere token y no descarga datos
+    const res = await fetch(`${API_ROOT}/actuator/health`, { method: 'GET' })
     if (res.ok) {
       results.connected = true
       results.backendConnected = true
@@ -557,7 +559,7 @@ export async function getCategorias() {
     try {
       const { data, error } = await supabase.from('categoria').select('*').order('nombre', { ascending: true })
       if (!error && data && data.length > 0) return data
-    } catch {}
+    } catch { }
     return [
       { id: 1, nombre: 'Auxiliar' },
       { id: 2, nombre: 'Asistente' },
@@ -574,7 +576,7 @@ export async function getTiposContrato() {
     try {
       const { data, error } = await supabase.from('tipo_contrato').select('*').order('nombre', { ascending: true })
       if (!error && data && data.length > 0) return data
-    } catch {}
+    } catch { }
     return [
       { id: 1, nombre: 'Nombrado' },
       { id: 2, nombre: 'Ocasional' },

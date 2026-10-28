@@ -1,0 +1,185 @@
+/* Malla curricular tipo tablero: columnas que se ajustan a la pantalla, tarjetas compactas,
+   un solo scroll vertical (el de la página) y arrastre entre semestres.
+   Los selectores llevan .pensum-container para ganarle a App.css sin tocarlo. */
+
+/* ---------- Barra de semestres: queda pegada debajo del navbar ---------- */
+.pensum-container .malla-nav {
+    position: sticky;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 0.4rem 0.5rem;
+    box-shadow: var(--shadow-md);
+}
+
+.malla-nav-chips {
+    display: flex;
+    gap: 0.35rem;
+    flex: 1;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.malla-nav-chips::-webkit-scrollbar {
+    display: none;
+}
+
+.malla-nav-btn,
+.malla-nav-chip {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    color: #475569;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.malla-nav-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.malla-nav-chip {
+    padding: 0.3rem 0.65rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.malla-nav-btn:hover,
+.malla-nav-chip:hover {
+    background-color: var(--primary-light);
+    border-color: var(--primary-border);
+    color: var(--primary);
+}
+
+/* ---------- Tablero ---------- */
+/* Sin scroll vertical propio: solo se desplaza hacia los lados si no caben las columnas */
+.pensum-container .malla-grid-wrapper {
+    overflow-x: auto;
+    max-height: none;
+    padding: 0 0 0.75rem;
+    cursor: grab;
+    overscroll-behavior-x: contain;
+}
+
+.pensum-container .malla-grid-wrapper.is-dragging {
+    cursor: grabbing;
+    user-select: none;
+}
+
+/* Columnas del mismo alto y flexibles: con pocos semestres llenan la pantalla sin scroll */
+.pensum-container .malla-grid {
+    gap: 0.85rem;
+    align-items: stretch;
+}
+
+.pensum-container .semester-column {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 215px;
+    max-width: 330px;
+    overflow: clip;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pensum-container .semester-column.drop-target {
+    background-color: #eff6ff;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+}
+
+.pensum-container .semester-column-header {
+    padding: 0.65rem 0.8rem;
+}
+
+.pensum-container .semester-courses-list {
+    flex: 1;
+    min-height: 140px;
+    padding: 0.6rem;
+    gap: 0.5rem;
+}
+
+/* ---------- Tarjetas compactas ---------- */
+.pensum-container .pensum-course-card {
+    position: relative;
+    padding: 0.55rem 0.65rem;
+    gap: 0.35rem;
+    cursor: grab;
+}
+
+.pensum-container .pensum-course-card.is-dragging-card {
+    opacity: 0.45;
+    border-style: dashed;
+}
+
+.pensum-container .pensum-card-badge-row {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.pensum-container .pensum-course-name {
+    font-size: 0.85rem;
+    line-height: 1.3;
+}
+
+/* Las herramientas aparecen al pasar el mouse (siempre visibles en pantallas táctiles) */
+.pensum-container .pensum-card-tools {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    gap: 0.1rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.1rem;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+}
+
+.pensum-container .pensum-course-card:hover .pensum-card-tools,
+.pensum-container .pensum-course-card:focus-within .pensum-card-tools {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.pensum-container .btn-card-tool:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+@media (hover: none) {
+    .pensum-container .pensum-card-tools {
+        position: static;
+        opacity: 1;
+        pointer-events: auto;
+        box-shadow: none;
+        border: none;
+        padding: 0;
+    }
+
+    .pensum-container .pensum-course-card {
+        cursor: default;
+    }
+}
+
+@media print {
+    .pensum-container .malla-grid-wrapper {
+        overflow: visible;
+    }
+
+    .pensum-container .semester-column {
+        flex: 0 0 auto;
+        width: 275px;
+    }
+}

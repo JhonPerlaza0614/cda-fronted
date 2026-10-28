@@ -26,6 +26,7 @@ import {
   getFacultades,
   updatePrograma
 } from '../services/academicService'
+import './MallaScroll.css'
 
 export default function PensumView({
   programas,
@@ -33,7 +34,9 @@ export default function PensumView({
   selectedProgramCode,
   setSelectedProgramCode,
   pensumList,
-  onRefresh,
+  onRefreshProgram,
+  onPatchItem,
+  onRemoveItem,
   onShowToast,
   onNavigateToAsignaturas,
   onNavigateToProgramas
@@ -64,6 +67,59 @@ export default function PensumView({
   const [programDropdownOpen, setProgramDropdownOpen] = useState(false)
   const programInputRef = useRef(null)
   const comboboxRef = useRef(null)
+
+  // Estado del arrastre de tarjetas entre semestres (drag & drop)
+  const dragItemRef = useRef(null)
+  const [draggingCode, setDraggingCode] = useState(null)
+  const [dragOverSem, setDragOverSem] = useState(null)
+
+  // La barra de semestres se pega justo debajo del navbar, mida lo que mida (zoom, móvil)
+  const [stickyTop, setStickyTop] = useState(76)
+  useEffect(() => {
+    const measure = () => {
+      const nav = document.querySelector('.navbar')
+      if (nav) setStickyTop(nav.offsetHeight + 8)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
+
+  // Navegación de la malla: scroll horizontal, arrastre con el mouse y saltos por semestre
+  const mallaRef = useRef(null)
+  const dragRef = useRef({ active: false, startX: 0, startLeft: 0 })
+
+  const scrollMalla = (direction) => {
+    mallaRef.current?.scrollBy({ left: direction * 300, behavior: 'smooth' })
+  }
+
+  const scrollToSemester = (num) => {
+    const wrapper = mallaRef.current
+    const column = wrapper?.querySelector(`[data-sem="${num}"]`)
+    if (wrapper && column) {
+      wrapper.scrollTo({ left: Math.max(0, column.offsetLeft - 16), behavior: 'smooth' })
+    }
+  }
+
+  const handleMallaMouseDown = (e) => {
+    if (e.button !== 0 || e.target.closest('button, input, select, a, label, .pensum-course-card')) return
+    dragRef.current = { active: true, startX: e.clientX, startLeft: mallaRef.current.scrollLeft }
+  }
+
+  const handleMallaMouseMove = (e) => {
+    const drag = dragRef.current
+    if (!drag.active) return
+    const dx = e.clientX - drag.startX
+    if (Math.abs(dx) > 4) {
+      mallaRef.current.classList.add('is-dragging')
+      mallaRef.current.scrollLeft = drag.startLeft - dx
+    }
+  }
+
+  const endMallaDrag = () => {
+    dragRef.current.active = false
+    mallaRef.current?.classList.remove('is-dragging')
+  }
 
   // Current active program
   const currentProgram = useMemo(() => {
@@ -183,7 +239,7 @@ export default function PensumView({
     }
 
     // Si coincide con alguna otra facultad registrada (ej. Ciencias Humanas, Psicología)
-    const matchingFac = facultadesList.find(f => 
+    const matchingFac = facultadesList.find(f =>
       f.id !== 2 && f.id !== 3 && pName.includes((f.nombre || '').toLowerCase())
     )
     if (matchingFac) {
@@ -215,8 +271,8 @@ export default function PensumView({
   const allElectivasDisponibles = useMemo(() => {
     return asignaturas.filter(a => {
       return Boolean(
-        a.is_elective || 
-        a.es_complementaria || 
+        a.is_elective ||
+        a.es_complementaria ||
         a.name_course?.toLowerCase().includes('electiv') ||
         a.code_course?.toLowerCase().startsWith('ele')
       )
@@ -227,8 +283,8 @@ export default function PensumView({
   const electivasComunes = useMemo(() => {
     return allElectivasDisponibles.filter(a => {
       const isComun = Boolean(
-        a.es_complementaria || 
-        String(a.id_facultad) === '2' || 
+        a.es_complementaria ||
+        String(a.id_facultad) === '2' ||
         a.name_course?.toLowerCase().includes('complementar')
       )
       if (!isComun) return false
@@ -248,8 +304,8 @@ export default function PensumView({
 
     return allElectivasDisponibles.filter(a => {
       const isComun = Boolean(
-        a.es_complementaria || 
-        String(a.id_facultad) === '2' || 
+        a.es_complementaria ||
+        String(a.id_facultad) === '2' ||
         a.name_course?.toLowerCase().includes('complementar')
       )
       if (isComun) return false
@@ -357,7 +413,7 @@ export default function PensumView({
       }
 
       setIsAddModalOpen(false)
-      onRefresh()
+      onRefreshProgram(currentProgram.code_program, { withAsignaturas: addMode === 'elective' })
     } catch (err) {
       onShowToast(`Error: ${err.message || 'No se pudo agregar la asignatura'}`, 'error')
     } finally {
@@ -365,14 +421,11 @@ export default function PensumView({
     }
   }
 
-  // Handle quick move semester
-  const handleShiftSemester = async (item, delta) => {
-    const newSem = item.semestre + delta
-    if (newSem < 1 || newSem > totalSemesters) {
-      onShowToast(`El semestre debe estar entre 1 y ${totalSemesters}`, 'error')
-      return
-    }
-
+  // Mueve una materia a otro semestre: se ve al instante y se revierte si el servidor falla
+  const moveCourseTo = async (item, newSem) => {
+    if (newSem === item.semestre) return
+    const prevSem = item.semestre
+    onPatchItem(item.code_program, item.code_course, { semestre: newSem })
     try {
       await updateCourseSemester({
         code_program: item.code_program,
@@ -380,10 +433,58 @@ export default function PensumView({
         semestre: newSem
       })
       onShowToast(`Movida a Semestre ${newSem}`, 'success')
-      onRefresh()
     } catch (err) {
+      onPatchItem(item.code_program, item.code_course, { semestre: prevSem })
       onShowToast(`Error: ${err.message}`, 'error')
     }
+  }
+
+  // Handle quick move semester (flechas de la tarjeta)
+  const handleShiftSemester = (item, delta) => {
+    const newSem = item.semestre + delta
+    if (newSem < 1 || newSem > totalSemesters) {
+      onShowToast(`El semestre debe estar entre 1 y ${totalSemesters}`, 'error')
+      return
+    }
+    moveCourseTo(item, newSem)
+  }
+
+  // Drag & drop de tarjetas entre columnas
+  const handleCardDragStart = (e, item) => {
+    dragItemRef.current = item
+    setDraggingCode(item.code_course)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', item.code_course)
+  }
+
+  const handleCardDragEnd = () => {
+    dragItemRef.current = null
+    setDraggingCode(null)
+    setDragOverSem(null)
+  }
+
+  const handleColumnDragOver = (e, semNum) => {
+    if (!dragItemRef.current) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverSem !== semNum) setDragOverSem(semNum)
+  }
+
+  const handleColumnDrop = (e, semNum) => {
+    e.preventDefault()
+    const item = dragItemRef.current
+    handleCardDragEnd()
+    if (item) moveCourseTo(item, semNum)
+  }
+
+  // Al arrastrar cerca de los bordes, la malla se desplaza sola
+  const handleMallaDragOver = (e) => {
+    const wrapper = mallaRef.current
+    if (!wrapper || !dragItemRef.current) return
+    const rect = wrapper.getBoundingClientRect()
+    const edge = 90
+    if (e.clientX < rect.left + edge) wrapper.scrollLeft -= 18
+    else if (e.clientX > rect.right - edge) wrapper.scrollLeft += 18
   }
 
   // Handle change semester from modal
@@ -398,9 +499,9 @@ export default function PensumView({
         code_course: movingCourse.code_course,
         semestre: targetSemester
       })
+      onPatchItem(movingCourse.code_program, movingCourse.code_course, { semestre: targetSemester })
       onShowToast(`Asignatura transferida al Semestre ${targetSemester}`, 'success')
       setMovingCourse(null)
-      onRefresh()
     } catch (err) {
       onShowToast(`Error: ${err.message}`, 'error')
     } finally {
@@ -419,8 +520,8 @@ export default function PensumView({
         code_program: item.code_program,
         code_course: item.code_course
       })
+      onRemoveItem(item.code_program, item.code_course)
       onShowToast(`Asignatura retirada del pensum`, 'success')
-      onRefresh()
     } catch (err) {
       onShowToast(`Error al retirar: ${err.message}`, 'error')
     }
@@ -500,7 +601,7 @@ export default function PensumView({
                     >
                       <span className="prog-item-code">{prog.code_program}</span>
                       <span className="prog-item-name">{prog.name_program}</span>
-                      
+
                     </button>
                   ))
                 )}
@@ -539,7 +640,7 @@ export default function PensumView({
             <h1 className="program-banner-title">{currentProgram.name_program}</h1>
             <div className="program-tags-row">
               <span className="code-chip">Código: <strong>{currentProgram.code_program}</strong></span>
-              
+
               <span className="group-chip">Duración: <strong>{totalSemesters} Semestres</strong></span>
             </div>
           </div>
@@ -585,13 +686,43 @@ export default function PensumView({
       )}
 
       {/* Malla Curricular Grid (Semesters Columns) */}
-      <div className="malla-grid-wrapper">
+      <div className="malla-nav print-hide" style={{ top: stickyTop }}>
+        <button type="button" className="malla-nav-btn" onClick={() => scrollMalla(-1)} title="Desplazar a la izquierda">
+          <ChevronLeft size={16} />
+        </button>
+        <div className="malla-nav-chips">
+          {sortedSemesters.map((num) => (
+            <button key={num} type="button" className="malla-nav-chip" onClick={() => scrollToSemester(num)}>
+              S{num}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="malla-nav-btn" onClick={() => scrollMalla(1)} title="Desplazar a la derecha">
+          <ChevronRight size={16} />
+        </button>
+      </div>
+
+      <div
+        className="malla-grid-wrapper"
+        ref={mallaRef}
+        onMouseDown={handleMallaMouseDown}
+        onMouseMove={handleMallaMouseMove}
+        onMouseUp={endMallaDrag}
+        onMouseLeave={endMallaDrag}
+        onDragOver={handleMallaDragOver}
+      >
         <div className="malla-grid">
           {sortedSemesters.map((semNum) => {
             const coursesInSem = semesterMap[semNum] || []
             const semCredits = coursesInSem.reduce((sum, c) => sum + (c.credits || 0), 0)
             return (
-              <div key={semNum} className="semester-column">
+              <div
+                key={semNum}
+                className={`semester-column ${dragOverSem === semNum ? 'drop-target' : ''}`}
+                data-sem={semNum}
+                onDragOver={(e) => handleColumnDragOver(e, semNum)}
+                onDrop={(e) => handleColumnDrop(e, semNum)}
+              >
                 <div className="semester-column-header">
                   <div className="semester-title">
                     <span className="semester-badge">Semestre {semNum}</span>
@@ -628,7 +759,13 @@ export default function PensumView({
                     coursesInSem.map((item) => {
                       const isElective = item.name_course?.toLowerCase().includes('electiv') || item.code_course?.toLowerCase().startsWith('ele')
                       return (
-                        <div key={item.code_course} className="pensum-course-card">
+                        <div
+                          key={item.code_course}
+                          className={`pensum-course-card ${draggingCode === item.code_course ? 'is-dragging-card' : ''}`}
+                          draggable
+                          onDragStart={(e) => handleCardDragStart(e, item)}
+                          onDragEnd={handleCardDragEnd}
+                        >
                           <div className="pensum-course-card-top">
                             <div className="pensum-card-badge-row">
                               <span className="course-code-pill">{item.code_course}</span>
@@ -642,6 +779,22 @@ export default function PensumView({
                               </span>
                             </div>
                             <div className="pensum-card-tools print-hide">
+                              <button
+                                className="btn-card-tool"
+                                disabled={semNum <= 1}
+                                onClick={() => handleShiftSemester(item, -1)}
+                                title="Mover a semestre anterior"
+                              >
+                                <ChevronLeft size={14} />
+                              </button>
+                              <button
+                                className="btn-card-tool"
+                                disabled={semNum >= totalSemesters}
+                                onClick={() => handleShiftSemester(item, 1)}
+                                title="Mover a semestre siguiente"
+                              >
+                                <ChevronRight size={14} />
+                              </button>
                               <button
                                 className="btn-card-tool"
                                 onClick={() => {
@@ -663,26 +816,6 @@ export default function PensumView({
                           </div>
 
                           <h4 className="pensum-course-name">{item.name_course}</h4>
-
-                          <div className="pensum-card-navigation print-hide">
-                            <button
-                              className="btn-nav-shift"
-                              disabled={semNum <= 1}
-                              onClick={() => handleShiftSemester(item, -1)}
-                              title="Mover a semestre anterior"
-                            >
-                              <ChevronLeft size={14} />
-                            </button>
-                            <span className="sem-indicator">S{semNum}</span>
-                            <button
-                              className="btn-nav-shift"
-                              disabled={semNum >= totalSemesters}
-                              onClick={() => handleShiftSemester(item, 1)}
-                              title="Mover a semestre siguiente"
-                            >
-                              <ChevronRight size={14} />
-                            </button>
-                          </div>
                         </div>
                       )
                     })
@@ -713,7 +846,7 @@ export default function PensumView({
                 </span>
               </div>
               <p className="electives-dock-desc">
-                {currentFacultyObj 
+                {currentFacultyObj
                   ? <>Electivas especializadas de la facultad <strong>{currentFacultyObj.nombre || currentFacultyObj.Nombre}</strong> y electivas comunes / complementarias institucionales.</>
                   : <>Electivas especializadas de la propia carrera y electivas comunes / complementarias institucionales.</>
                 }
@@ -818,7 +951,7 @@ export default function PensumView({
                               </span>
                             </div>
                             <h5 className="dock-course-name">{el.name_course}</h5>
-                            
+
                             <div className="dock-card-actions">
                               {inPensum ? (
                                 <span className="dock-assigned-badge">
@@ -871,7 +1004,7 @@ export default function PensumView({
                               </span>
                             </div>
                             <h5 className="dock-course-name">{el.name_course}</h5>
-                            
+
                             <div className="dock-card-actions">
                               {inPensum ? (
                                 <span className="dock-assigned-badge">
@@ -984,10 +1117,10 @@ export default function PensumView({
                               onChange={() => setSelectedCourseForAdd(c.code_course)}
                             />
                             <div className="picker-item-details">
-                                <div className="picker-item-info">
-                                  <span className="picker-code">{c.code_course}</span>
-                                  <span className="picker-name">{c.name_course}</span>
-                                </div>
+                              <div className="picker-item-info">
+                                <span className="picker-code">{c.code_course}</span>
+                                <span className="picker-name">{c.name_course}</span>
+                              </div>
                               <span className="picker-credits-tag">
                                 {c.credits && c.credits > 0 ? `${c.credits} ${c.credits === 1 ? 'crédito' : 'créditos'}` : '? créditos'}
                               </span>
@@ -1081,8 +1214,8 @@ export default function PensumView({
                   {submitting
                     ? 'Guardando...'
                     : addMode === 'elective'
-                    ? 'Crear Electiva y Asignar'
-                    : 'Asignar al Semestre'}
+                      ? 'Crear Electiva y Asignar'
+                      : 'Asignar al Semestre'}
                 </button>
               </div>
             </form>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import Navbar from './components/Navbar'
 import PensumView from './components/PensumView'
 import ProgramasView from './components/ProgramasView'
@@ -13,10 +13,23 @@ import {
   getProgramas,
   getAsignaturas,
   getAllPensum,
+  getPensumByProgram,
   checkDatabaseHealth
 } from './services/academicService'
 import { AlertCircle, Database, RefreshCw, Sparkles, Clock } from 'lucide-react'
 import './App.css'
+
+// Si el backend ya trae nombre y créditos (lo normal) no se vuelve a cruzar nada en el navegador;
+// solo se completa cuando la fila viene del fallback de Supabase sin esos campos.
+const withCourseInfo = (item, asigMap) => {
+  if (item.name_course && item.credits !== undefined && item.credits !== null) return item
+  const asig = asigMap.get(item.code_course)
+  return {
+    ...item,
+    name_course: item.name_course || asig?.name_course || item.code_course,
+    credits: item.credits ?? asig?.credits ?? 0,
+  }
+}
 
 export default function App({ user, onLogout }) {
   const rol = user?.rol ?? 1 // 1: Admin, 2: Coordinador, 3: Docente
@@ -46,6 +59,9 @@ export default function App({ user, onLogout }) {
     setToast({ message, type })
   }, [])
 
+  // Evita que una carga lenta pise a una más reciente
+  const loadSeq = useRef(0)
+
   // Carga global de datos desde Backend / Supabase
   const loadData = useCallback(async (isSilent = false) => {
     if (isDocente) {
@@ -53,100 +69,82 @@ export default function App({ user, onLogout }) {
       return
     }
 
+    const seq = ++loadSeq.current
     if (!isSilent) setLoading(true)
     setInitialError(null)
 
-    try {
-      const health = await checkDatabaseHealth()
-      setIsConnected(health.connected)
+    // El health check corre en paralelo: ya no retrasa la carga de datos
+    checkDatabaseHealth()
+      .then(h => { if (seq === loadSeq.current) setIsConnected(h.connected) })
+      .catch(() => { if (seq === loadSeq.current) setIsConnected(false) })
 
-      // Cargar en paralelo datos académicos si tiene permisos
+    try {
       const [progs, asigs, pensum] = canSeeAcademicData
         ? await Promise.all([getProgramas(), getAsignaturas(), getAllPensum()])
         : [[], [], []]
+      if (seq !== loadSeq.current) return
 
-      // Asociar nombres y créditos de asignaturas al pensum
       const asigMap = new Map(asigs.map(a => [a.code_course, a]))
-      const enrichedPensum = pensum.map(item => {
-        const asig = asigMap.get(item.code_course)
-        return {
-          ...item,
-          name_course: asig?.name_course || item.code_course,
-          credits: asig?.credits !== undefined && asig?.credits !== null ? asig.credits : 0,
-        }
-      })
-
       setProgramas(progs)
       setAsignaturas(asigs)
-      setPensumList(enrichedPensum)
+      setPensumList(pensum.map(item => withCourseInfo(item, asigMap)))
 
-      // Si no hay programa seleccionado, seleccionar el primero
+      // Si no hay programa seleccionado (o ya no existe), seleccionar el primero
       if (progs.length > 0) {
-        setSelectedProgramCode(prev => {
-          const exists = progs.some(p => p.code_program === prev)
-          return exists ? prev : progs[0].code_program
-        })
+        setSelectedProgramCode(prev =>
+          progs.some(p => p.code_program === prev) ? prev : progs[0].code_program
+        )
       }
     } catch (err) {
+      if (seq !== loadSeq.current) return
       console.error('Error al cargar datos:', err)
       setInitialError(err.message || 'Error al comunicarse con la base de datos')
       setIsConnected(false)
     } finally {
-      if (!isSilent) setLoading(false)
+      if (seq === loadSeq.current && !isSilent) setLoading(false)
     }
   }, [canSeeAcademicData, isDocente])
 
   useEffect(() => {
-    let isMounted = true
+    loadData()
+  }, [loadData])
 
-    if (isDocente) {
-      setLoading(false)
-      return
+  // --- Actualizaciones parciales de la malla (sin recargar todo) ---
+
+  // Cambió algo en un programa: se vuelve a pedir SOLO el pensum de ese programa
+  const refreshProgram = useCallback(async (codeProgram, { withAsignaturas = false } = {}) => {
+    try {
+      const [rows, asigs] = await Promise.all([
+        getPensumByProgram(codeProgram),
+        withAsignaturas ? getAsignaturas() : Promise.resolve(null),
+      ])
+      const asigMap = new Map((asigs || []).map(a => [a.code_course, a]))
+      setPensumList(prev => [
+        ...prev.filter(item => item.code_program !== codeProgram),
+        ...rows.map(item => withCourseInfo(item, asigMap)),
+      ])
+      if (asigs) setAsignaturas(asigs)
+    } catch (err) {
+      console.error('Error al refrescar el programa, recarga completa:', err)
+      loadData(true)
     }
+  }, [loadData])
 
-    const init = async () => {
-      try {
-        const health = await checkDatabaseHealth()
-        if (!isMounted) return
-        setIsConnected(health.connected)
+  // Una materia cambió de semestre: se actualiza en memoria, sin pedir nada
+  const patchPensumItem = useCallback((codeProgram, codeCourse, patch) => {
+    setPensumList(prev => prev.map(item =>
+      item.code_program === codeProgram && item.code_course === codeCourse
+        ? { ...item, ...patch }
+        : item
+    ))
+  }, [])
 
-        const [progs, asigs, pensum] = canSeeAcademicData
-          ? await Promise.all([getProgramas(), getAsignaturas(), getAllPensum()])
-          : [[], [], []]
-        if (!isMounted) return
-
-        const asigMap = new Map(asigs.map(a => [a.code_course, a]))
-        const enrichedPensum = pensum.map(item => {
-          const asig = asigMap.get(item.code_course)
-          return {
-            ...item,
-            name_course: asig?.name_course || item.code_course,
-            credits: asig?.credits !== undefined && asig?.credits !== null ? asig.credits : 0,
-          }
-        })
-
-        setProgramas(progs)
-        setAsignaturas(asigs)
-        setPensumList(enrichedPensum)
-
-        if (progs.length > 0) {
-          setSelectedProgramCode(progs[0].code_program)
-        }
-      } catch (err) {
-        if (!isMounted) return
-        console.error('Error al inicializar datos:', err)
-        setInitialError(err.message || 'Error al comunicarse con la base de datos')
-        setIsConnected(false)
-      } finally {
-        if (isMounted) setLoading(false)
-      }
-    }
-
-    init()
-    return () => {
-      isMounted = false
-    }
-  }, [canSeeAcademicData, isDocente])
+  // Una materia salió del pensum
+  const removePensumItem = useCallback((codeProgram, codeCourse) => {
+    setPensumList(prev => prev.filter(item =>
+      !(item.code_program === codeProgram && item.code_course === codeCourse)
+    ))
+  }, [])
 
   const handleSelectProgramForPensum = (code) => {
     setSelectedProgramCode(code)
@@ -240,6 +238,9 @@ export default function App({ user, onLogout }) {
                 setSelectedProgramCode={setSelectedProgramCode}
                 pensumList={pensumList}
                 onRefresh={() => loadData(true)}
+                onRefreshProgram={refreshProgram}
+                onPatchItem={patchPensumItem}
+                onRemoveItem={removePensumItem}
                 onShowToast={showToast}
                 onNavigateToAsignaturas={() => setActiveTab('asignaturas')}
                 onNavigateToProgramas={() => setActiveTab('programas')}
