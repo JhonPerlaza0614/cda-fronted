@@ -1653,6 +1653,22 @@
   color: var(--text-muted);
 }
 
+/* HU-015: errores de validación por campo */
+.form-group input.input-error {
+  border-color: #dc2626;
+}
+
+.field-error {
+  font-size: 0.8rem;
+  color: #dc2626;
+}
+
+.form-group input:disabled {
+  background-color: #f4f4f5;
+  color: #52525b;
+  cursor: not-allowed;
+}
+
 .alert-warning-box {
   background-color: #fffbeb;
   border-left: 4px solid var(--warning);
@@ -2873,4 +2889,83 @@
     flex-direction: column;
     align-items: stretch;
   }
+}
+
+/* ==============================================================================
+   Períodos: destacado, historial y detalle
+   ============================================================================== */
+
+.periodo-seccion-titulo {
+  color: #d1d5db;
+  font-size: .8rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin: 1.75rem 0 .75rem;
+}
+
+/* La tarjeta pasa a ser una columna: cabecera arriba y detalle debajo */
+.periodo-card {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.periodo-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.periodo-toggle { flex-shrink: 0; }
+.periodo-chevron { transition: transform .2s ease; }
+.periodo-chevron.abierto { transform: rotate(180deg); }
+
+.periodo-status.estado-historial { color: #9ca3af; }
+.periodo-status.estado-desactivado { color: #fca5a5; }
+
+.periodo-vacio {
+  background: #1f2937;
+  border: 1px dashed #4b5563;
+  border-radius: 12px;
+  padding: 1.5rem;
+  color: #9ca3af;
+  text-align: center;
+  font-weight: 600;
+}
+
+.periodo-detalle {
+  border-top: 1px solid #374151;
+  margin-top: .75rem;
+  padding-top: 1.25rem;
+}
+
+.periodo-detalle-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: .75rem;
+  margin-bottom: 1.25rem;
+}
+
+.periodo-detalle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.5rem;
+  margin: 0;
+}
+
+.periodo-dato dt { color: #9ca3af; font-size: .78rem; margin-bottom: .2rem; }
+.periodo-dato dd { margin: 0; color: #f9fafb; font-size: .92rem; }
+.periodo-dato a { color: #93c5fd; display: inline-flex; align-items: center; gap: .35rem; }
+
+.periodo-nota-desactivado {
+  margin: 1.25rem 0 0;
+  color: #fca5a5;
+  font-size: .85rem;
+}
+
+@media (max-width: 760px) {
+  .periodo-card-top { flex-direction: column; align-items: flex-start; }
+  .periodo-detalle-grid { grid-template-columns: 1fr; }
+  .periodo-detalle-acciones { justify-content: flex-start; flex-wrap: wrap; }
 }

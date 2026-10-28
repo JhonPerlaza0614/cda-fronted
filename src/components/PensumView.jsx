@@ -16,15 +16,21 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCircle2,
-  Award
+  Award,
+  Save,
+  History,
+  Archive,
+  RotateCcw,
+  AlertTriangle
 } from 'lucide-react'
 import {
-  addCourseToPensum,
-  updateCourseSemester,
-  removeCourseFromPensum,
   createAsignatura,
   getFacultades,
-  updatePrograma
+  savePensumVersion,
+  getPensumHistory,
+  getPensumVersion,
+  deactivatePensum,
+  reactivatePensum
 } from '../services/academicService'
 
 export default function PensumView({
@@ -36,7 +42,8 @@ export default function PensumView({
   onRefresh,
   onShowToast,
   onNavigateToAsignaturas,
-  onNavigateToProgramas
+  onNavigateToProgramas,
+  canEdit = true
 }) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [selectedSemesterForAdd, setSelectedSemesterForAdd] = useState(1)
@@ -45,6 +52,13 @@ export default function PensumView({
   const [submitting, setSubmitting] = useState(false)
   const [movingCourse, setMovingCourse] = useState(null) // for changing semester modal
   const [targetSemester, setTargetSemester] = useState(1)
+  const [draftPensum, setDraftPensum] = useState([])
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyItems, setHistoryItems] = useState([])
+  const [selectedHistoryVersion, setSelectedHistoryVersion] = useState(null)
+  const [historyDetail, setHistoryDetail] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   // Elective form mode & state in modal
   const [addMode, setAddMode] = useState('catalog') // 'catalog' | 'elective'
@@ -101,10 +115,17 @@ export default function PensumView({
   }
 
   // Current program's pensum entries
-  const currentPensum = useMemo(() => {
+  const savedPensum = useMemo(() => {
     if (!currentProgram) return []
     return pensumList.filter(item => item.code_program === currentProgram.code_program)
   }, [pensumList, currentProgram])
+
+  const currentPensum = hasUnsavedChanges ? draftPensum : savedPensum
+
+  useEffect(() => {
+    setDraftPensum(savedPensum)
+    setHasUnsavedChanges(false)
+  }, [selectedProgramCode, pensumList])
 
   // Total credits in program
   const totalProgramCredits = useMemo(() => {
@@ -334,12 +355,17 @@ export default function PensumView({
             credits: creditsNum
           })
         }
-
-        await addCourseToPensum({
+        const elective = {
           code_program: currentProgram.code_program,
           code_course: codeClean,
-          semestre: selectedSemesterForAdd
-        })
+          name_course: nameClean,
+          credits: creditsNum,
+          semestre: selectedSemesterForAdd,
+          is_elective: true,
+          activo: true
+        }
+        setDraftPensum(previous => [...previous, elective])
+        setHasUnsavedChanges(true)
         onShowToast(`Electiva "${nameClean}" agregada al Semestre ${selectedSemesterForAdd}`, 'success')
       } else {
         if (!selectedCourseForAdd) {
@@ -348,16 +374,18 @@ export default function PensumView({
           return
         }
 
-        await addCourseToPensum({
+        const course = asignaturas.find(item => item.code_course === selectedCourseForAdd)
+        setDraftPensum(previous => [...previous, {
+          ...course,
           code_program: currentProgram.code_program,
-          code_course: selectedCourseForAdd,
-          semestre: selectedSemesterForAdd
-        })
+          semestre: selectedSemesterForAdd,
+          activo: true
+        }])
+        setHasUnsavedChanges(true)
         onShowToast(`Asignatura agregada al Semestre ${selectedSemesterForAdd}`, 'success')
       }
 
       setIsAddModalOpen(false)
-      onRefresh()
     } catch (err) {
       onShowToast(`Error: ${err.message || 'No se pudo agregar la asignatura'}`, 'error')
     } finally {
@@ -374,13 +402,11 @@ export default function PensumView({
     }
 
     try {
-      await updateCourseSemester({
-        code_program: item.code_program,
-        code_course: item.code_course,
-        semestre: newSem
-      })
+      setDraftPensum(previous => previous.map(course =>
+        course.code_course === item.code_course ? { ...course, semestre: newSem } : course
+      ))
+      setHasUnsavedChanges(true)
       onShowToast(`Movida a Semestre ${newSem}`, 'success')
-      onRefresh()
     } catch (err) {
       onShowToast(`Error: ${err.message}`, 'error')
     }
@@ -393,14 +419,14 @@ export default function PensumView({
 
     setSubmitting(true)
     try {
-      await updateCourseSemester({
-        code_program: movingCourse.code_program,
-        code_course: movingCourse.code_course,
-        semestre: targetSemester
-      })
+      setDraftPensum(previous => previous.map(course =>
+        course.code_course === movingCourse.code_course
+          ? { ...course, semestre: targetSemester }
+          : course
+      ))
+      setHasUnsavedChanges(true)
       onShowToast(`Asignatura transferida al Semestre ${targetSemester}`, 'success')
       setMovingCourse(null)
-      onRefresh()
     } catch (err) {
       onShowToast(`Error: ${err.message}`, 'error')
     } finally {
@@ -415,14 +441,93 @@ export default function PensumView({
     }
 
     try {
-      await removeCourseFromPensum({
-        code_program: item.code_program,
-        code_course: item.code_course
-      })
+      setDraftPensum(previous => previous.filter(course => course.code_course !== item.code_course))
+      setHasUnsavedChanges(true)
       onShowToast(`Asignatura retirada del pensum`, 'success')
-      onRefresh()
     } catch (err) {
       onShowToast(`Error al retirar: ${err.message}`, 'error')
+    }
+
+  }
+
+  const handleSavePensum = async () => {
+      if (!currentProgram || !hasUnsavedChanges) return
+      if (!window.confirm(`¿Desea guardar esta malla curricular? Pasará a ser la malla vigente de ${currentProgram.name_program}.`)) return
+      setSubmitting(true)
+      try {
+        await savePensumVersion(currentProgram.code_program, draftPensum)
+        setHasUnsavedChanges(false)
+        onShowToast('Malla curricular guardada y marcada como vigente', 'success')
+        await onRefresh()
+      } catch (err) {
+        onShowToast(`Error al guardar la malla: ${err.message}`, 'error')
+      } finally {
+        setSubmitting(false)
+      }
+    }
+
+  const handleDeactivatePensum = async () => {
+      if (hasUnsavedChanges) {
+        onShowToast('Guarda o descarta los cambios antes de desactivar la malla', 'error')
+        return
+      }
+      if (!window.confirm(`¿Desactivar la malla vigente de ${currentProgram.name_program}? Podrás reactivarla desde el historial.`)) return
+      setSubmitting(true)
+      try {
+        await deactivatePensum(currentProgram.code_program)
+        onShowToast('Malla desactivada correctamente', 'success')
+        await onRefresh()
+      } catch (err) {
+        onShowToast(`Error al desactivar la malla: ${err.message}`, 'error')
+      } finally {
+        setSubmitting(false)
+      }
+    }
+
+  const handleOpenHistory = async () => {
+      setHistoryOpen(true)
+      setHistoryLoading(true)
+      try {
+        const history = await getPensumHistory(currentProgram.code_program)
+        setHistoryItems(history || [])
+        setSelectedHistoryVersion(null)
+        setHistoryDetail([])
+      } catch (err) {
+        onShowToast(`Error al cargar el historial: ${err.message}`, 'error')
+      } finally {
+        setHistoryLoading(false)
+      }
+    }
+
+  const handleSelectHistory = async (version) => {
+      setSelectedHistoryVersion(version)
+      setHistoryLoading(true)
+      try {
+        setHistoryDetail(await getPensumVersion(currentProgram.code_program, version))
+      } catch (err) {
+        onShowToast(`Error al cargar el detalle: ${err.message}`, 'error')
+      } finally {
+        setHistoryLoading(false)
+      }
+    }
+
+  const handleReactivatePensum = async () => {
+      if (selectedHistoryVersion === null) return
+      const hasCurrent = savedPensum.length > 0
+      const message = hasCurrent
+        ? 'La malla vigente actual será desactivada. ¿Desea reactivar la versión seleccionada?'
+        : '¿Desea reactivar la versión seleccionada como malla vigente?'
+      if (!window.confirm(message)) return
+      setSubmitting(true)
+      try {
+        await reactivatePensum(currentProgram.code_program, selectedHistoryVersion)
+        setHistoryOpen(false)
+        onShowToast('Malla reactivada correctamente', 'success')
+        await onRefresh()
+      } catch (err) {
+        onShowToast(`Error al reactivar la malla: ${err.message}`, 'error')
+      } finally {
+        setSubmitting(false)
     }
   }
 
@@ -512,6 +617,35 @@ export default function PensumView({
         <div className="pensum-header-actions">
           <button
             className="btn-secondary"
+            onClick={handleOpenHistory}
+            disabled={submitting}
+          >
+            <History size={16} />
+            <span>Historial</span>
+          </button>
+          {canEdit && (
+            <>
+              <button
+                className="btn-secondary"
+                onClick={handleDeactivatePensum}
+                disabled={submitting || savedPensum.length === 0 || hasUnsavedChanges}
+                title={hasUnsavedChanges ? 'Guarda primero los cambios pendientes' : 'Desactivar malla vigente'}
+              >
+                <Archive size={16} />
+                <span>Desactivar malla</span>
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleSavePensum}
+                disabled={submitting || !hasUnsavedChanges}
+              >
+                <Save size={16} />
+                <span>{submitting ? 'Guardando...' : 'Guardar malla'}</span>
+              </button>
+            </>
+          )}
+          <button
+            className="btn-secondary"
             onClick={handlePrint}
             title="Imprimir o exportar en PDF la malla curricular"
           >
@@ -519,17 +653,33 @@ export default function PensumView({
             <span>Imprimir / Exportar Malla</span>
           </button>
 
-          <button
-            className="btn-primary"
-            onClick={() => handleOpenAddModal(1)}
-            disabled={availableCourses.length === 0}
-            title={availableCourses.length === 0 ? 'No hay más asignaturas disponibles para agregar' : 'Agregar materia a este programa'}
-          >
-            <Plus size={16} />
-            <span>Agregar Materia al Pensum</span>
-          </button>
+          {canEdit && (
+            <button
+              className="btn-primary"
+              onClick={() => handleOpenAddModal(1)}
+              disabled={availableCourses.length === 0}
+              title={availableCourses.length === 0 ? 'No hay más asignaturas disponibles para agregar' : 'Agregar materia a este programa'}
+            >
+              <Plus size={16} />
+              <span>Agregar Materia al Pensum</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {hasUnsavedChanges && (
+        <div className="warning-banner print-hide">
+          <AlertTriangle size={18} />
+          <span>Hay cambios sin guardar en esta malla curricular.</span>
+        </div>
+      )}
+
+      {!canEdit && (
+        <div className="info-banner print-hide">
+          <BookOpen size={18} />
+          <span>Modo consulta: puedes visualizar la malla vigente y consultar su historial, pero no modificarla.</span>
+        </div>
+      )}
 
       {/* Program Overview Banner */}
       {currentProgram && (
@@ -568,9 +718,11 @@ export default function PensumView({
           <span>
             Todas las asignaturas registradas ({asignaturas.length}) ya están asignadas en este pensum.
           </span>
-          <button className="btn-link" onClick={onNavigateToAsignaturas}>
-            Crear nuevas asignaturas en el Banco
-          </button>
+          {canEdit && (
+            <button className="btn-link" onClick={onNavigateToAsignaturas}>
+              Crear nuevas asignaturas en el Banco
+            </button>
+          )}
         </div>
       )}
 
@@ -578,9 +730,19 @@ export default function PensumView({
         <div className="warning-banner print-hide">
           <HelpCircle size={18} />
           <span>El banco de asignaturas está vacío. Agrega materias al catálogo para incluirlas en el pensum.</span>
-          <button className="btn-secondary btn-sm" onClick={onNavigateToAsignaturas}>
-            Ir a Asignaturas
-          </button>
+          {canEdit && (
+            <button className="btn-secondary btn-sm" onClick={onNavigateToAsignaturas}>
+              Ir a Asignaturas
+            </button>
+          )}
+        </div>
+      )}
+
+      {currentPensum.length === 0 && (
+        <div className="info-banner print-hide">
+          <Archive size={18} />
+          <span>Este programa no tiene una malla vigente. Puedes crear una con las asignaturas disponibles o revisar el historial.</span>
+          <button className="btn-link" onClick={handleOpenHistory}>Ver historial</button>
         </div>
       )}
 
@@ -604,25 +766,29 @@ export default function PensumView({
                       </span>
                     </div>
                   </div>
-                  <button
-                    className="btn-quick-add print-hide"
-                    onClick={() => handleOpenAddModal(semNum)}
-                    title={`Agregar materia al semestre ${semNum}`}
-                  >
-                    <Plus size={14} />
-                  </button>
+                  {canEdit && (
+                    <button
+                      className="btn-quick-add print-hide"
+                      onClick={() => handleOpenAddModal(semNum)}
+                      title={`Agregar materia al semestre ${semNum}`}
+                    >
+                      <Plus size={14} />
+                    </button>
+                  )}
                 </div>
 
                 <div className="semester-courses-list">
                   {coursesInSem.length === 0 ? (
                     <div className="semester-empty-placeholder">
                       <span>Semestre sin materias</span>
-                      <button
-                        className="btn-add-ghost print-hide"
-                        onClick={() => handleOpenAddModal(semNum)}
-                      >
-                        + Asignar materia
-                      </button>
+                      {canEdit && (
+                        <button
+                          className="btn-add-ghost print-hide"
+                          onClick={() => handleOpenAddModal(semNum)}
+                        >
+                          + Asignar materia
+                        </button>
+                      )}
                     </div>
                   ) : (
                     coursesInSem.map((item) => {
@@ -641,48 +807,52 @@ export default function PensumView({
                                 {item.credits ?? 0} {item.credits === 1 ? 'créd' : 'créds'}
                               </span>
                             </div>
-                            <div className="pensum-card-tools print-hide">
-                              <button
-                                className="btn-card-tool"
-                                onClick={() => {
-                                  setMovingCourse(item)
-                                  setTargetSemester(item.semestre)
-                                }}
-                                title="Cambiar de semestre"
-                              >
-                                <ArrowRightLeft size={13} />
-                              </button>
-                              <button
-                                className="btn-card-tool tool-danger"
-                                onClick={() => handleRemoveCourse(item)}
-                                title="Quitar del pensum"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
+                            {canEdit && (
+                              <div className="pensum-card-tools print-hide">
+                                <button
+                                  className="btn-card-tool"
+                                  onClick={() => {
+                                    setMovingCourse(item)
+                                    setTargetSemester(item.semestre)
+                                  }}
+                                  title="Cambiar de semestre"
+                                >
+                                  <ArrowRightLeft size={13} />
+                                </button>
+                                <button
+                                  className="btn-card-tool tool-danger"
+                                  onClick={() => handleRemoveCourse(item)}
+                                  title="Quitar del pensum"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                           <h4 className="pensum-course-name">{item.name_course}</h4>
 
-                          <div className="pensum-card-navigation print-hide">
-                            <button
-                              className="btn-nav-shift"
-                              disabled={semNum <= 1}
-                              onClick={() => handleShiftSemester(item, -1)}
-                              title="Mover a semestre anterior"
-                            >
-                              <ChevronLeft size={14} />
-                            </button>
-                            <span className="sem-indicator">S{semNum}</span>
-                            <button
-                              className="btn-nav-shift"
-                              disabled={semNum >= totalSemesters}
-                              onClick={() => handleShiftSemester(item, 1)}
-                              title="Mover a semestre siguiente"
-                            >
-                              <ChevronRight size={14} />
-                            </button>
-                          </div>
+                          {canEdit && (
+                            <div className="pensum-card-navigation print-hide">
+                              <button
+                                className="btn-nav-shift"
+                                disabled={semNum <= 1}
+                                onClick={() => handleShiftSemester(item, -1)}
+                                title="Mover a semestre anterior"
+                              >
+                                <ChevronLeft size={14} />
+                              </button>
+                              <span className="sem-indicator">S{semNum}</span>
+                              <button
+                                className="btn-nav-shift"
+                                disabled={semNum >= totalSemesters}
+                                onClick={() => handleShiftSemester(item, 1)}
+                                title="Mover a semestre siguiente"
+                              >
+                                <ChevronRight size={14} />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )
                     })
@@ -896,6 +1066,85 @@ export default function PensumView({
       </div>
 
       {/* Modal: Asignar Asignatura al Pensum */}
+      {historyOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-card" style={{ maxWidth: '760px' }}>
+            <div className="modal-header">
+              <h2>Historial de mallas</h2>
+              <button className="modal-close-btn" onClick={() => setHistoryOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              {historyLoading ? (
+                <p>Cargando historial...</p>
+              ) : historyItems.length === 0 ? (
+                <div className="empty-picker-notice">
+                  <p>No hay mallas históricas para este programa.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(190px, 0.8fr) 1.5fr', gap: '1rem' }}>
+                  <div className="course-picker-list">
+                    {historyItems.map(item => (
+                      <button
+                        key={item.version}
+                        type="button"
+                        className={`course-picker-item ${selectedHistoryVersion === item.version ? 'selected' : ''}`}
+                        onClick={() => handleSelectHistory(item.version)}
+                        style={{ textAlign: 'left', border: 0 }}
+                      >
+                        <div className="picker-item-details">
+                          <strong>Versión {item.version}</strong>
+                          <small>
+                            Desactivada: {item.fechaDesactivacion
+                              ? new Date(item.fechaDesactivacion).toLocaleString()
+                              : 'Sin fecha'}
+                          </small>
+                          <small>{item.totalAsignaturas} asignaturas</small>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    {selectedHistoryVersion === null ? (
+                      <div className="empty-picker-notice">
+                        <p>Selecciona una versión para consultar sus asignaturas.</p>
+                      </div>
+                    ) : (
+                      <>
+                        <h3>Detalle de la versión {selectedHistoryVersion}</h3>
+                        <div className="course-picker-list">
+                          {historyDetail.map(item => (
+                            <div key={item.code_course} className="course-picker-item">
+                              <div className="picker-item-details">
+                                <strong>{item.name_course}</strong>
+                                <small>{item.code_course} · Semestre {item.semestre}</small>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={handleReactivatePensum}
+                            disabled={submitting}
+                            style={{ marginTop: '1rem' }}
+                          >
+                            <RotateCcw size={16} />
+                            {submitting ? 'Reactivando...' : 'Reactivar malla'}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isAddModalOpen && (
         <div className="modal-backdrop">
           <div className="modal-card">

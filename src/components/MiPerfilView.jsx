@@ -10,9 +10,11 @@ import {
     XCircle,
     Star,
     Shield,
-    Phone
+    Phone,
+    Pencil
 } from 'lucide-react'
-import { getMiPerfil, getMiPerfilCoordinador } from '../services/docenteService'
+import { getMiFoto, getMiPerfil, getMiPerfilCoordinador } from '../services/docenteService'
+import EditarPerfilDocente from './EditarPerfilDocente'
 
 // 1: Administrador, 2: Coordinador, 3: Docente (igual que en el login)
 const ROLES = { 1: 'Administrador', 2: 'Coordinador', 3: 'Docente' }
@@ -70,6 +72,10 @@ export default function MiPerfilView({ user, onShowToast }) {
     const [docente, setDocente] = useState(null)
     const [docenteStatus, setDocenteStatus] = useState('idle') // idle | loading | ok | notfound | error
     const [fotoError, setFotoError] = useState(false)
+    // HU-015: la foto se descarga con el token y se muestra como object URL
+    const [fotoSrc, setFotoSrc] = useState(null)
+    const [fotoVersion, setFotoVersion] = useState(0)
+    const [editando, setEditando] = useState(false)
 
     // Datos adicionales solo para coordinadores
     const [coordinador, setCoordinador] = useState(null)
@@ -113,7 +119,7 @@ export default function MiPerfilView({ user, onShowToast }) {
         setDocenteStatus('loading')
         setFotoError(false)
 
-        getMiPerfil(user.email)
+        getMiPerfil()
             .then((data) => {
                 if (cancelled) return
                 setDocente(data)
@@ -134,6 +140,42 @@ export default function MiPerfilView({ user, onShowToast }) {
         }
     }, [esDocente, user?.email])
 
+    const tieneFoto = docenteStatus === 'ok' && Boolean(docente?.tiene_foto)
+
+    // Sin foto activa no se descarga nada: fotoUrl ya depende de tieneFoto
+    useEffect(() => {
+        if (!tieneFoto) return
+        let cancelled = false
+        let url = null
+
+        getMiFoto()
+            .then((blob) => {
+                if (cancelled || !blob) return
+                url = URL.createObjectURL(blob)
+                setFotoSrc(url)
+            })
+            .catch(() => {
+                if (!cancelled) setFotoError(true)
+            })
+
+        return () => {
+            cancelled = true
+            if (url) URL.revokeObjectURL(url)
+        }
+    }, [tieneFoto, fotoVersion])
+
+    // HU-015: tras subir o eliminar la foto se actualiza el perfil y se recarga la imagen
+    const handleFotoChange = (actualizado) => {
+        setDocente(actualizado)
+        setFotoError(false)
+        setFotoVersion((v) => v + 1)
+    }
+
+    const handleContactoGuardado = (actualizado) => {
+        setDocente(actualizado)
+        setEditando(false)
+    }
+
     if (!user) {
         return (
             <div className="view-container">
@@ -148,7 +190,7 @@ export default function MiPerfilView({ user, onShowToast }) {
 
     const nombreCompleto = `${user.nombre ?? ''} ${user.apellido ?? ''}`.trim() || 'Usuario'
     const iniciales = `${user.nombre?.[0] ?? ''}${user.apellido?.[0] ?? ''}`.toUpperCase()
-    const fotoUrl = docenteStatus === 'ok' && docente?.foto_url && !fotoError ? docente.foto_url : null
+    const fotoUrl = tieneFoto && fotoSrc && !fotoError ? fotoSrc : null
 
     const tieneEvaluacion = docente && docente.evaluacion_valor !== null && docente.evaluacion_valor !== undefined
 
@@ -160,7 +202,11 @@ export default function MiPerfilView({ user, onShowToast }) {
                         <UserCircle size={28} className="text-primary" />
                         Mi perfil
                     </h1>
-                    <p className="view-subtitle">Información de tu cuenta (solo lectura)</p>
+                    <p className="view-subtitle">
+                        {esDocente
+                            ? 'Información de tu cuenta. Puedes editar tu foto, correo personal y teléfono.'
+                            : 'Información de tu cuenta (solo lectura)'}
+                    </p>
                 </div>
             </div>
 
@@ -271,7 +317,33 @@ export default function MiPerfilView({ user, onShowToast }) {
             {/* Perfil de docente: solo si el usuario tiene rol Docente */}
             {esDocente && (
                 <div style={{ ...cardStyle, marginTop: '1.25rem' }}>
-                    <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', color: '#18181b' }}>Perfil de docente</h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#18181b' }}>
+                            {editando ? 'Editar perfil' : 'Perfil de docente'}
+                        </h3>
+                        {docenteStatus === 'ok' && docente && !editando && (
+                            <button
+                                type="button"
+                                className="btn-primary btn-sm flex-align-center"
+                                style={{ gap: '0.35rem' }}
+                                onClick={() => setEditando(true)}
+                            >
+                                <Pencil size={15} />
+                                Editar perfil
+                            </button>
+                        )}
+                    </div>
+
+                    {docenteStatus === 'ok' && docente && editando && (
+                        <EditarPerfilDocente
+                            docente={docente}
+                            fotoSrc={fotoUrl}
+                            onCancel={() => setEditando(false)}
+                            onSaved={handleContactoGuardado}
+                            onFotoChange={handleFotoChange}
+                            onShowToast={onShowToast}
+                        />
+                    )}
 
                     {docenteStatus === 'loading' && (
                         <div className="loading-state-container">
@@ -292,7 +364,7 @@ export default function MiPerfilView({ user, onShowToast }) {
                         </p>
                     )}
 
-                    {docenteStatus === 'ok' && docente && (
+                    {docenteStatus === 'ok' && docente && !editando && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
                             <div>
                                 <Badge ok={docente.estado} okText="Activo" noText="Inactivo" />
@@ -301,7 +373,8 @@ export default function MiPerfilView({ user, onShowToast }) {
                             <Row icon={<IdCard size={15} />} label="Documento">
                                 {docente.tipo_documento} {docente.numero_documento}
                             </Row>
-                            {docente.telefono && <Row icon={<Phone size={15} />} label="Teléfono">{docente.telefono}</Row>}
+                            <Row icon={<Mail size={15} />} label="Correo personal">{docente.correo_personal || '—'}</Row>
+                            <Row icon={<Phone size={15} />} label="Teléfono">{docente.telefono || '—'}</Row>
                             <Row icon={<Briefcase size={15} />} label="Tipo de docente">
                                 {TIPO_DOCENTE_LABEL[docente.tipo_docente] || docente.tipo_docente}
                             </Row>
