@@ -2986,3 +2986,115 @@
   .periodo-detalle-grid { grid-template-columns: 1fr; }
   .periodo-detalle-acciones { justify-content: flex-start; flex-wrap: wrap; }
 }
+
+/* =========================================
+   HU-037: PROGRAMAS Y COORDINADORES
+   ========================================= */
+.prog-coord-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-sub);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.prog-coord-table-wrap {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  transition: opacity 0.15s ease;
+}
+
+.prog-coord-table-wrap.is-loading {
+  opacity: 0.6;
+}
+
+.prog-coord-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.prog-coord-table th,
+.prog-coord-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.prog-coord-table th {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  background-color: var(--secondary-light);
+}
+
+.prog-coord-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.prog-coord-person {
+  display: flex;
+  flex-direction: column;
+}
+
+.prog-coord-email {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.prog-coord-action {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* En móvil cada fila se muestra como tarjeta */
+@media (max-width: 640px) {
+  .prog-coord-table thead {
+    display: none;
+  }
+
+  .prog-coord-table tr {
+    display: block;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .prog-coord-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.35rem 0;
+    border-bottom: none;
+  }
+
+  .prog-coord-table td[data-label]::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .prog-coord-action {
+    justify-content: flex-end;
+    padding-top: 0.6rem;
+  }
+}

@@ -66,6 +66,16 @@ export async function getProgramas() {
 
 }
 
+// HU-037: programas activos con su coordinador (docs/contratos/HU-037.md en cda-backend).
+// Sin fallback a Supabase: la búsqueda y el filtro son del servidor y un fallo debe verse (criterio 5).
+export async function getProgramasConCoordinador({ q = '', sinCoordinador = false } = {}) {
+  const params = new URLSearchParams()
+  if (q.trim()) params.set('q', q.trim())
+  if (sinCoordinador) params.set('sinCoordinador', 'true')
+  const query = params.toString()
+  return requestBackend(`/programas/coordinadores${query ? `?${query}` : ''}`)
+}
+
 // --- PERIODOS ACADEMICOS (HU-002 / HU-003) ---
 
 export async function getPeriodos() {
