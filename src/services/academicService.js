@@ -8,6 +8,7 @@ import { getAuthToken } from './authService'
  */
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api'
+const API_ROOT = BACKEND_URL.replace(/\/api\/?$/, '')
 
 export async function requestBackend(endpoint, options = {}) {
   const url = `${BACKEND_URL}${endpoint}`
@@ -290,6 +291,74 @@ export async function deleteAsignatura(code_course) {
 
 // --- PENSUM ACADÉMICO ---
 
+function parsePensumMeta(rawFacultad) {
+  if (!rawFacultad || !String(rawFacultad).startsWith('META|')) {
+    return {
+      facultad: rawFacultad || null,
+      horas_clase: 4,
+      horas_independiente: 8,
+      tipo_asignatura: 'Profesional',
+      descripcion: ''
+    }
+  }
+  const result = {
+    facultad: null,
+    horas_clase: 4,
+    horas_independiente: 8,
+    tipo_asignatura: 'Profesional',
+    descripcion: ''
+  }
+  const parts = String(rawFacultad).substring(5).split('|')
+  for (const part of parts) {
+    const idx = part.indexOf('=')
+    if (idx <= 0) continue
+    const k = part.substring(0, idx)
+    const v = part.substring(idx + 1)
+    if (k === 'hc') result.horas_clase = parseInt(v, 10) || 4
+    else if (k === 'hi') result.horas_independiente = parseInt(v, 10) || 8
+    else if (k === 'tipo' && v) result.tipo_asignatura = v
+    else if (k === 'desc') result.descripcion = v
+  }
+  return result
+}
+
+function encodePensumMeta({ horas_clase, horas_independiente, tipo_asignatura, descripcion }) {
+  const hc = horas_clase !== undefined && horas_clase !== null ? parseInt(horas_clase, 10) : 4
+  const hi = horas_independiente !== undefined && horas_independiente !== null ? parseInt(horas_independiente, 10) : 8
+  const tipo = String(tipo_asignatura || 'Profesional').replace(/[|=]/g, ' ').trim()
+  let desc = String(descripcion || '').replace(/[|=]/g, ' ').trim()
+  if (desc.length > 75) desc = desc.substring(0, 75)
+  const raw = `META|hc=${hc}|hi=${hi}|tipo=${tipo}|desc=${desc}`
+  return raw.length > 150 ? raw.substring(0, 150) : raw
+}
+
+function buildPensumRequestPayload(code_program, itemsOrPayload) {
+  const isArray = Array.isArray(itemsOrPayload)
+  const rawItems = isArray ? itemsOrPayload : (itemsOrPayload?.items || [])
+  const payload = {
+    code_program,
+    items: rawItems.map(item => ({
+      code_course: String(item.code_course || '').trim().toUpperCase(),
+      name_course: item.name_course ? String(item.name_course).trim() : undefined,
+      credits: item.credits !== undefined && item.credits !== '' ? parseInt(item.credits, 10) : undefined,
+      semestre: parseInt(item.semestre, 10),
+      horas_clase: item.horas_clase !== undefined && item.horas_clase !== '' ? parseInt(item.horas_clase, 10) : undefined,
+      horas_independiente: item.horas_independiente !== undefined && item.horas_independiente !== '' ? parseInt(item.horas_independiente, 10) : undefined,
+      tipo_asignatura: item.tipo_asignatura || undefined,
+      original_code_course: item.original_code_course || undefined
+    }))
+  }
+  if (!isArray && itemsOrPayload) {
+    if (itemsOrPayload.name_program !== undefined) payload.name_program = itemsOrPayload.name_program
+    if (itemsOrPayload.descripcion !== undefined) payload.descripcion = itemsOrPayload.descripcion
+    if (itemsOrPayload.jornada !== undefined) payload.jornada = itemsOrPayload.jornada
+    if (itemsOrPayload.periodo_oferta !== undefined) payload.periodo_oferta = itemsOrPayload.periodo_oferta
+    if (itemsOrPayload.numero_semestre !== undefined) payload.numero_semestre = parseInt(itemsOrPayload.numero_semestre, 10)
+    if (itemsOrPayload.numero_resolucion !== undefined) payload.numero_resolucion = itemsOrPayload.numero_resolucion
+  }
+  return payload
+}
+
 export async function getPensumByProgram(code_program) {
   try {
     return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}`)
@@ -314,10 +383,15 @@ export async function getPensumByProgram(code_program) {
     const courseMap = new Map((coursesData || []).map(c => [c.code_course, c]))
     return pensumData.map(item => {
       const course = courseMap.get(item.code_course)
+      const meta = parsePensumMeta(item.facultad)
       return {
         ...item,
         name_course: course?.name_course || item.code_course,
         credits: course?.credits !== undefined && course?.credits !== null ? course.credits : 0,
+        horas_clase: meta.horas_clase,
+        horas_independiente: meta.horas_independiente,
+        tipo_asignatura: meta.tipo_asignatura,
+        descripcion: meta.descripcion
       }
     })
   }
@@ -333,53 +407,144 @@ export async function getAllPensum() {
       .select('*')
       .eq('vigente', true)
     if (error) throw error
+    return (data || []).map(item => {
+      const meta = parsePensumMeta(item.facultad)
+      return {
+        ...item,
+        horas_clase: meta.horas_clase,
+        horas_independiente: meta.horas_independiente,
+        tipo_asignatura: meta.tipo_asignatura,
+        descripcion: meta.descripcion
+      }
+    })
+  }
+}
+
+export async function savePensumVersion(code_program, itemsOrPayload) {
+  const bodyPayload = buildPensumRequestPayload(code_program, itemsOrPayload)
+  try {
+    return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/guardar`, {
+      method: 'POST',
+      body: JSON.stringify(bodyPayload)
+    })
+  } catch (err) {
+    if (!isBackendUnavailable(err)) throw err
+    console.warn('Fallo backend en savePensumVersion, fallback a Supabase:', err.message)
+    const items = bodyPayload.items || []
+    const { data: current, error: currentError } = await supabase
+      .from('pensum_academico')
+      .select('version')
+      .eq('code_program', code_program)
+      .order('version', { ascending: false })
+      .limit(1)
+    if (currentError) throw currentError
+    const nextVersion = (current?.[0]?.version || 0) + 1
+    const now = new Date().toISOString()
+    const { error: deactivateError } = await supabase
+      .from('pensum_academico')
+      .update({ vigente: false, fecha_desactivacion: now })
+      .eq('code_program', code_program)
+      .eq('vigente', true)
+    if (deactivateError) throw deactivateError
+    for (const item of items) {
+      if (item.name_course) {
+        await supabase.from('asignaturas').upsert([{
+          code_course: item.code_course,
+          name_course: item.name_course,
+          credits: item.credits ?? 3,
+          is_elective: (item.tipo_asignatura || '').toLowerCase().includes('electiv') || (item.tipo_asignatura || '').toLowerCase().includes('extracurricular'),
+          es_complementaria: (item.tipo_asignatura || '').toLowerCase().includes('complementar'),
+          es_basica: (item.tipo_asignatura || '').toLowerCase().includes('básic') || (item.tipo_asignatura || '').toLowerCase().includes('basic')
+        }], { onConflict: 'code_course' })
+      }
+    }
+    const payload = items.map(item => ({
+      code_program,
+      code_course: item.code_course,
+      version: nextVersion,
+      semestre: parseInt(item.semestre, 10),
+      vigente: true,
+      activo: true,
+      numero_resolucion: bodyPayload.numero_resolucion || null,
+      numero_semestres: bodyPayload.numero_semestre || null,
+      editada: false,
+      fecha_edicion: null,
+      facultad: encodePensumMeta({
+        horas_clase: item.horas_clase,
+        horas_independiente: item.horas_independiente,
+        tipo_asignatura: item.tipo_asignatura,
+        descripcion: bodyPayload.descripcion
+      })
+    }))
+    if (payload.length === 0) return []
+    const { data, error } = await supabase.from('pensum_academico').insert(payload).select()
+    if (error) throw error
     return data || []
   }
 }
 
-export async function savePensumVersion(code_program, items) {
-    try {
-      return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/guardar`, {
-        method: 'POST',
-        body: JSON.stringify({
-          code_program,
-          items: items.map(item => ({
-            code_course: item.code_course,
-            semestre: parseInt(item.semestre, 10)
-          }))
-        })
-      })
-    } catch (err) {
-      if (!isBackendUnavailable(err)) throw err
-      console.warn('Fallo backend en savePensumVersion, fallback a Supabase:', err.message)
-      const { data: current, error: currentError } = await supabase
-        .from('pensum_academico')
-        .select('version')
-        .eq('code_program', code_program)
-        .order('version', { ascending: false })
-        .limit(1)
-      if (currentError) throw currentError
-      const nextVersion = (current?.[0]?.version || 0) + 1
-      const now = new Date().toISOString()
-      const { error: deactivateError } = await supabase
-        .from('pensum_academico')
-        .update({ vigente: false, fecha_desactivacion: now })
-        .eq('code_program', code_program)
-        .eq('vigente', true)
-      if (deactivateError) throw deactivateError
-      const payload = items.map(item => ({
-        code_program,
-        code_course: item.code_course,
-        version: nextVersion,
-        semestre: parseInt(item.semestre, 10),
-        vigente: true,
-        activo: true
-      }))
-      if (payload.length === 0) return []
-      const { data, error } = await supabase.from('pensum_academico').insert(payload).select()
-      if (error) throw error
-      return data || []
+export async function updatePensumVersion(code_program, itemsOrPayload) {
+  const bodyPayload = buildPensumRequestPayload(code_program, itemsOrPayload)
+  try {
+    return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/editar`, {
+      method: 'PUT',
+      body: JSON.stringify(bodyPayload)
+    })
+  } catch (err) {
+    if (!isBackendUnavailable(err)) throw err
+    console.warn('Fallo backend en updatePensumVersion, fallback a Supabase:', err.message)
+    const items = bodyPayload.items || []
+    const { data: activeRows, error: activeError } = await supabase
+      .from('pensum_academico')
+      .select('*')
+      .eq('code_program', code_program)
+      .eq('vigente', true)
+    if (activeError) throw activeError
+    if (!activeRows || activeRows.length === 0) {
+      throw new Error('Solo las mallas activas pueden ser editadas. Las mallas inactivas son de solo consulta.')
     }
+    const activeVersion = activeRows[0].version || 1
+    for (const item of items) {
+      if (item.name_course) {
+        await supabase.from('asignaturas').upsert([{
+          code_course: item.code_course,
+          name_course: item.name_course,
+          credits: item.credits ?? 3,
+          is_elective: (item.tipo_asignatura || '').toLowerCase().includes('electiv') || (item.tipo_asignatura || '').toLowerCase().includes('extracurricular'),
+          es_complementaria: (item.tipo_asignatura || '').toLowerCase().includes('complementar'),
+          es_basica: (item.tipo_asignatura || '').toLowerCase().includes('básic') || (item.tipo_asignatura || '').toLowerCase().includes('basic')
+        }], { onConflict: 'code_course' })
+      }
+    }
+    const { error: delError } = await supabase
+      .from('pensum_academico')
+      .delete()
+      .eq('code_program', code_program)
+      .eq('version', activeVersion)
+    if (delError) throw delError
+    const nowEdit = new Date().toISOString()
+    const payload = items.map(item => ({
+      code_program,
+      code_course: item.code_course,
+      version: activeVersion,
+      semestre: parseInt(item.semestre, 10),
+      vigente: true,
+      activo: true,
+      numero_resolucion: bodyPayload.numero_resolucion || activeRows[0]?.numero_resolucion || null,
+      numero_semestres: bodyPayload.numero_semestre || activeRows[0]?.numero_semestres || null,
+      editada: true,
+      fecha_edicion: nowEdit,
+      facultad: encodePensumMeta({
+        horas_clase: item.horas_clase,
+        horas_independiente: item.horas_independiente,
+        tipo_asignatura: item.tipo_asignatura,
+        descripcion: bodyPayload.descripcion
+      })
+    }))
+    const { data, error } = await supabase.from('pensum_academico').insert(payload).select()
+    if (error) throw error
+    return data || []
+  }
 }
 
 export async function getPensumHistory(code_program) {
@@ -390,7 +555,7 @@ export async function getPensumHistory(code_program) {
     console.warn('Fallo backend en getPensumHistory, usando Supabase:', err.message)
     const { data, error } = await supabase
       .from('pensum_academico')
-      .select('version, fecha_desactivacion, code_course')
+      .select('version, fecha_desactivacion, code_course, numero_resolucion, numero_semestres, editada, fecha_edicion')
       .eq('code_program', code_program)
       .eq('vigente', false)
       .order('fecha_desactivacion', { ascending: false })
@@ -400,9 +565,17 @@ export async function getPensumHistory(code_program) {
       const current = grouped.get(item.version) || {
         version: item.version,
         fechaDesactivacion: item.fecha_desactivacion,
-        totalAsignaturas: 0
+        totalAsignaturas: 0,
+        numero_resolucion: item.numero_resolucion || null,
+        numero_semestres: item.numero_semestres || null,
+        editada: Boolean(item.editada),
+        fecha_edicion: item.fecha_edicion || null
       }
       current.totalAsignaturas += 1
+      if (item.editada) current.editada = true
+      if (item.fecha_edicion && (!current.fecha_edicion || item.fecha_edicion > current.fecha_edicion)) {
+        current.fecha_edicion = item.fecha_edicion
+      }
       grouped.set(item.version, current)
     })
     return [...grouped.values()]
@@ -588,11 +761,8 @@ export async function checkDatabaseHealth() {
   }
 
   try {
-    const token = getAuthToken()
-    const res = await fetch(`${BACKEND_URL}/programas`, {
-      method: 'GET',
-      headers: token ? { Authorization: `Bearer ${token}` } : {}
-    })
+    // /actuator/health es público: no requiere token y no descarga datos
+    const res = await fetch(`${API_ROOT}/actuator/health`, { method: 'GET' })
     if (res.ok) {
       results.connected = true
       results.backendConnected = true
@@ -713,7 +883,7 @@ export async function getCategorias() {
     try {
       const { data, error } = await supabase.from('categoria').select('*').order('nombre', { ascending: true })
       if (!error && data && data.length > 0) return data
-    } catch {}
+    } catch { }
     return [
       { id: 1, nombre: 'Auxiliar' },
       { id: 2, nombre: 'Asistente' },
@@ -730,7 +900,7 @@ export async function getTiposContrato() {
     try {
       const { data, error } = await supabase.from('tipo_contrato').select('*').order('nombre', { ascending: true })
       if (!error && data && data.length > 0) return data
-    } catch {}
+    } catch { }
     return [
       { id: 1, nombre: 'Nombrado' },
       { id: 2, nombre: 'Ocasional' },
