@@ -286,7 +286,9 @@ export default function PensumView({
 
   // Courses available to be added
   const availableCourses = useMemo(() => {
-    return asignaturas.filter(a => !assignedCourseCodes.has(a.code_course))
+    // Las asignaturas inactivas siguen visibles en sus mallas actuales, pero no
+    // se pueden agregar a una malla nueva o editada.
+    return asignaturas.filter(a => a.activo !== false && !assignedCourseCodes.has(a.code_course))
   }, [asignaturas, assignedCourseCodes])
 
   const filteredAvailableCourses = useMemo(() => {
@@ -346,7 +348,7 @@ export default function PensumView({
   }, [facultadesList, programFacultyId])
 
   const allElectivasDisponibles = useMemo(() => {
-    return asignaturas.filter(a => Boolean(
+    return asignaturas.filter(a => a.activo !== false && Boolean(
       a.is_elective ||
       a.es_complementaria ||
       a.name_course?.toLowerCase().includes('electiv') ||
@@ -710,41 +712,10 @@ export default function PensumView({
     setSubmitting(true)
     try {
       if (addMode === 'elective') {
-        const nameClean = electiveName.trim() || getConsecutiveElectiveName()
-        let codeClean = electiveCode.trim().toUpperCase()
-
-        if (!codeClean) {
-          const romanPart = nameClean.split(' ').pop().toUpperCase()
-          codeClean = `ELE-PROF-${romanPart}`.replace(/[^A-Z0-9-]/g, '')
-          if (!codeClean || codeClean === 'ELE-PROF-') {
-            codeClean = `ELE-${Date.now().toString().slice(-4)}`
-          }
-        }
-
-        const parsedCredits = parseInt(electiveCredits, 10)
-        const creditsNum = isNaN(parsedCredits) || parsedCredits < 0 ? 0 : Math.min(9, parsedCredits)
-
-        const existingInCatalog = asignaturas.find(a => a.code_course.toUpperCase() === codeClean)
-        if (!existingInCatalog) {
-          await createAsignatura({
-            code_course: codeClean,
-            name_course: nameClean,
-            credits: creditsNum
-          })
-        }
-        const elective = {
-          code_program: currentProgram.code_program,
-          code_course: codeClean,
-          name_course: nameClean,
-          credits: creditsNum,
-          semestre: selectedSemesterForAdd,
-          is_elective: true,
-          activo: true
-        }
-        setDraftPensum(previous => [...previous, elective])
-        setHasUnsavedChanges(true)
-        ensureEditSectionOpen()
-        onShowToast(`Electiva "${nameClean}" agregada al Semestre ${selectedSemesterForAdd}`, 'success')
+        onShowToast('Primero registra la electiva desde el Banco de Asignaturas; luego podrás seleccionarla en la malla.', 'info')
+        setIsAddModalOpen(false)
+        onNavigateToAsignaturas()
+        return
       } else {
         if (!selectedCourseForAdd) {
           onShowToast('Selecciona una asignatura para agregar', 'error')
@@ -2102,14 +2073,7 @@ export default function PensumView({
                     <span>Del Catálogo</span>
                   </button>
 
-                  <button
-                    type="button"
-                    className={`add-mode-tab mode-elective ${addMode === 'elective' ? 'active' : ''}`}
-                    onClick={handleSwitchToElective}
-                  >
-                    <Sparkles size={16} />
-                    <span>Elegir que sea Electiva</span>
-                  </button>
+
                 </div>
 
                 {addMode === 'catalog' ? (
