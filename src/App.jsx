@@ -7,6 +7,7 @@ import PlantillaView from './components/PlantillaView'
 import PeriodosView from './components/PeriodosView'
 import DedicatedInProgressView from './components/DedicatedInProgressView'
 import MiPerfilView from './components/MiPerfilView'
+import DisponibilidadView from './components/DisponibilidadView'
 import SqlSetupModal from './components/SqlSetupModal'
 import Toast from './components/Toast'
 import {
@@ -228,7 +229,7 @@ export default function App({ user, onLogout }) {
           </div>
         ) : (
           <>
-            {/* Vistas Dedicadas en Progreso de Creación para Docentes y Coordinadores */}
+            {/* Portales informativos para Docentes y Coordinadores */}
             {(activeTab === 'docente_portal' || activeTab === 'coordinador_portal') && (
               <DedicatedInProgressView
                 user={user}
@@ -236,6 +237,9 @@ export default function App({ user, onLogout }) {
                 onLogout={onLogout}
               />
             )}
+
+            {/* Disponibilidad docente: visible únicamente para el rol docente */}
+            {isDocente && activeTab === 'disponibilidad' && <DisponibilidadView />}
 
             {/* Períodos Académicos (Resolución de Calendario) */}
             {activeTab === 'periodos' && (
