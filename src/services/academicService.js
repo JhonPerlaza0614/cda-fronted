@@ -132,11 +132,17 @@ export async function updatePrograma(code_program, changes) {
     }
     if (changes.apertura !== undefined) payload.apertura = changes.apertura || null
     if (changes.numero_resolucion !== undefined) payload.numero_resolucion = String(changes.numero_resolucion).trim()
+    if (changes.id_coordinador_nuevo !== undefined) {
+      payload.id_coordinador_nuevo = parseInt(changes.id_coordinador_nuevo, 10)
+    }
     return await requestBackend(`/programas/${encodeURIComponent(code_program)}`, {
       method: 'PUT',
       body: JSON.stringify(payload)
     })
   } catch (err) {
+    // El intercambio solo es seguro si lo procesa el backend en una transacción.
+    // No se debe degradar a una actualización directa de Supabase.
+    if (changes.id_coordinador_nuevo !== undefined) throw err
     console.warn('Fallo backend en updatePrograma, fallback a Supabase:', err.message)
     const updateData = {}
     if (changes.name_program !== undefined) updateData.name_program = changes.name_program.trim()

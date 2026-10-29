@@ -218,6 +218,7 @@ export default function App({ user, onLogout }) {
                 onRefresh={() => loadData(true)}
                 onShowToast={showToast}
                 onSelectProgramForPensum={handleSelectProgramForPensum}
+                canAssignCoordinator={isAdmin}
               />
             )}
 
