@@ -10,6 +10,7 @@ CREATE TABLE public.asignaturas (
   es_complementaria boolean DEFAULT false,
   es_basica boolean DEFAULT false,
   facultad character varying,
+  activo boolean NOT NULL DEFAULT true,
   CONSTRAINT asignaturas_pkey PRIMARY KEY (code_course),
   CONSTRAINT asignaturas_id_facultad_fkey FOREIGN KEY (id_facultad) REFERENCES public.Facultad(id)
 );
@@ -18,18 +19,33 @@ CREATE TABLE public.programas (
   name_program character varying NOT NULL,
   numero_semestre integer,
   id_facultad_programa integer,
+  semestres_nocturna integer,
+  jornada character varying NOT NULL DEFAULT 'DIURNA',
+  ingreso character varying NOT NULL DEFAULT 'SEMESTRAL',
+  estado character varying NOT NULL DEFAULT 'ACTIVO',
+  apertura character varying,
   CONSTRAINT programas_pkey PRIMARY KEY (code_program),
   CONSTRAINT programas_id_facultad_programa_fkey FOREIGN KEY (id_facultad_programa) REFERENCES public.Facultad(id)
 );
 CREATE TABLE public.pensum_academico (
   code_program character varying,
   code_course character varying DEFAULT ''::character varying,
+  version integer NOT NULL DEFAULT 1,
   semestre integer NOT NULL,
   facultad character varying,
   is_elective boolean,
+  activo boolean NOT NULL DEFAULT true,
+  vigente boolean NOT NULL DEFAULT true,
+  fecha_desactivacion timestamp without time zone,
+  fecha_reactivacion timestamp without time zone,
+  CONSTRAINT pensum_academico_pkey PRIMARY KEY (code_program, code_course, version),
   CONSTRAINT pensum_academico_code_course_fkey FOREIGN KEY (code_course) REFERENCES public.asignaturas(code_course),
   CONSTRAINT pensum_academico_code_program_fkey FOREIGN KEY (code_program) REFERENCES public.programas(code_program)
 );
+
+ALTER TABLE public.programas
+  ADD CONSTRAINT programas_apertura_check
+  CHECK (apertura IS NULL OR apertura IN ('SEMESTRAL', 'ANUAL'));
 CREATE TABLE public.Facultad (
   id integer NOT NULL DEFAULT nextval('"Facultad_id_seq"'::regclass),
   nombre character varying NOT NULL,
@@ -108,7 +124,60 @@ CREATE TABLE public.docentes (
   estado boolean NOT NULL DEFAULT true,
   created_at timestamp without time zone NOT NULL DEFAULT now(),
   updated_at timestamp without time zone NOT NULL DEFAULT now(),
+  correo_personal character varying,
   CONSTRAINT docentes_pkey PRIMARY KEY (id),
   CONSTRAINT fk_docentes_programa FOREIGN KEY (code_program) REFERENCES public.programas(code_program)
 );
-
+CREATE TABLE public.disponibilidades_docentes (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  id_docente bigint NOT NULL,
+  dia integer NOT NULL CHECK (dia >= 1 AND dia <= 6),
+  hora_inicio time without time zone NOT NULL,
+  hora_fin time without time zone NOT NULL,
+  periodo_id bigint NOT NULL,
+  CONSTRAINT disponibilidades_docentes_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_disponibilidad_periodo FOREIGN KEY (periodo_id) REFERENCES public.periodos_academicos(id),
+  CONSTRAINT fk_disponibilidad_docente FOREIGN KEY (id_docente) REFERENCES public.docentes(id)
+);
+CREATE TABLE public.periodos_academicos (
+  id bigint NOT NULL DEFAULT nextval('periodos_academicos_id_seq'::regclass),
+  nombre character varying NOT NULL UNIQUE,
+  numero_resolucion character varying NOT NULL UNIQUE,
+  fecha_resolucion date NOT NULL,
+  fecha_inicio_semestre date NOT NULL,
+  fecha_fin_semestre date NOT NULL,
+  fecha_adicion_inicio date NOT NULL,
+  fecha_adicion_fin date NOT NULL,
+  fecha_cancelacion_inicio date NOT NULL,
+  fecha_cancelacion_fin date NOT NULL,
+  plazo_docente_inicio timestamp with time zone NOT NULL,
+  plazo_docente_fin timestamp with time zone NOT NULL,
+  plazo_coordinador_inicio timestamp with time zone,
+  plazo_coordinador_fin timestamp with time zone,
+  enlace_resolucion text,
+  vigente boolean NOT NULL DEFAULT true,
+  version bigint NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  estado character varying NOT NULL DEFAULT 'VIGENTE'::character varying CHECK (estado::text = ANY (ARRAY['VIGENTE'::character varying, 'HISTORIAL'::character varying, 'DESACTIVADO'::character varying]::text[])),
+  CONSTRAINT periodos_academicos_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.docente_fotos (
+  id bigint NOT NULL DEFAULT nextval('docente_fotos_id_seq'::regclass),
+  docente_id bigint NOT NULL UNIQUE,
+  contenido bytea NOT NULL,
+  tipo_mime character varying NOT NULL CHECK (tipo_mime::text = ANY (ARRAY['image/jpeg'::character varying, 'image/png'::character varying]::text[])),
+  tamano_bytes integer NOT NULL CHECK (tamano_bytes > 0 AND tamano_bytes <= 5242880),
+  activa boolean NOT NULL DEFAULT true,
+  created_at timestamp without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp without time zone NOT NULL DEFAULT now(),
+  CONSTRAINT docente_fotos_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_docente_fotos_docente FOREIGN KEY (docente_id) REFERENCES public.docentes(id)
+);
+CREATE TABLE public.resolucion_asignaturas (
+  semestre integer NOT NULL,
+  code_course character varying NOT NULL,
+  resolucion_id bigint NOT NULL,
+  CONSTRAINT resolucion_asignaturas_pkey PRIMARY KEY (code_course, resolucion_id),
+  CONSTRAINT fk48d3jgwldlih42sx1wtg5iouk FOREIGN KEY (code_course) REFERENCES public.asignaturas(code_course)
+);

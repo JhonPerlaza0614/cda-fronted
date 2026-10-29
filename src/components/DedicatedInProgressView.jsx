@@ -7,7 +7,8 @@ import {
   BookOpen, 
   Layers, 
   LogOut,
-  GraduationCap
+  GraduationCap,
+  CalendarDays
 } from 'lucide-react'
 
 export default function DedicatedInProgressView({ user, onNavigate, onLogout }) {
@@ -125,6 +126,19 @@ export default function DedicatedInProgressView({ user, onNavigate, onLogout }) 
 
         {/* Acciones permitidas actualmente */}
         <div className="dedicated-actions-footer">
+          {isDocente && onNavigate && (
+            <div className="coordinador-quick-actions">
+              <span className="quick-actions-hint">Acción disponible:</span>
+              <button
+                type="button"
+                className="btn-primary btn-sm"
+                onClick={() => onNavigate('disponibilidad')}
+              >
+                <CalendarDays size={16} /> Registrar disponibilidad
+              </button>
+            </div>
+          )}
+
           {isCoordinador && onNavigate && (
             <div className="coordinador-quick-actions">
               <span className="quick-actions-hint">Actualmente puedes explorar:</span>

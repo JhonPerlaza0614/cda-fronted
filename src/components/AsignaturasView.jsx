@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, Edit2, Power, CheckCircle2, Library, BookOpen, AlertTriangle, Award, Sparkles, Building2 } from 'lucide-react'
-import { createAsignatura, updateAsignatura, deleteAsignatura, toggleAsignaturaActivo, getFacultades, createFacultad } from '../services/academicService'
+import { Plus, Search, Edit2, Trash2, Library, BookOpen, AlertTriangle, Award, Sparkles, Building2 } from 'lucide-react'
+import { createAsignatura, updateAsignatura, deleteAsignatura, getFacultades, createFacultad } from '../services/academicService'
 
 export default function AsignaturasView({ 
   asignaturas, 
@@ -237,20 +237,16 @@ export default function AsignaturasView({
     }
   }
 
-  const handleToggleEstado = async (asig) => {
-    const nuevoEstado = asig.activo === false ? true : false
-    const actionLabel = nuevoEstado ? 'habilitar' : 'deshabilitar'
-    if (!window.confirm(`¿Deseas ${actionLabel} la asignatura "${asig.name_course}" (${asig.code_course})?`)) {
-      return
-    }
+  const handleDelete = async () => {
+    if (!deletingAsignatura) return
     setSubmitting(true)
     try {
-      await toggleAsignaturaActivo(asig.code_course, nuevoEstado)
-      onShowToast(`Asignatura ${asig.code_course} ${nuevoEstado ? 'habilitada' : 'deshabilitada'} con éxito`, 'success')
+      await deleteAsignatura(deletingAsignatura.code_course)
+      onShowToast(`Asignatura ${deletingAsignatura.code_course} eliminada`, 'success')
       setDeletingAsignatura(null)
       onRefresh()
     } catch (err) {
-      onShowToast(`Error al cambiar estado: ${err.message}`, 'error')
+      onShowToast(`Error al eliminar: ${err.message}`, 'error')
     } finally {
       setSubmitting(false)
     }
@@ -384,12 +380,11 @@ export default function AsignaturasView({
                       <Edit2 size={16} />
                     </button>
                     <button
-                      className="btn-icon"
-                      onClick={() => handleToggleEstado(asig)}
-                      title={asig.activo !== false ? "Deshabilitar asignatura" : "Habilitar asignatura"}
-                      style={{ color: asig.activo !== false ? '#f59e0b' : '#10b981' }}
+                      className="btn-icon text-danger"
+                      onClick={() => setDeletingAsignatura(asig)}
+                      title="Eliminar asignatura"
                     >
-                      <Power size={16} />
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </div>
@@ -657,6 +652,49 @@ export default function AsignaturasView({
         </div>
       )}
 
-      </div>
+      {/* Modal Confirmar Eliminación */}
+      {deletingAsignatura && (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <div className="modal-header">
+              <div className="modal-title-with-icon">
+                <AlertTriangle className="text-danger" size={24} />
+                <h2>Confirmar Eliminación</h2>
+              </div>
+              <button className="modal-close-btn" onClick={() => setDeletingAsignatura(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p>
+                ¿Deseas eliminar la asignatura <strong>{deletingAsignatura.name_course}</strong> ({deletingAsignatura.code_course})?
+              </p>
+              <div className="alert-warning-box">
+                <p>
+                  <strong>Advertencia:</strong> Si esta asignatura está asignada a alguna carrera en la tabla <code>pensum_academico</code>, 
+                  se desvinculará automáticamente por borrado en cascada (<code>ON DELETE CASCADE</code>).
+                </p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setDeletingAsignatura(null)}
+                disabled={submitting}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-danger"
+                onClick={handleDelete}
+                disabled={submitting}
+              >
+                {submitting ? 'Eliminando...' : 'Sí, Eliminar Asignatura'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

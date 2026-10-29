@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import Navbar from './components/Navbar'
 import PensumView from './components/PensumView'
 import ProgramasView from './components/ProgramasView'
 import AsignaturasView from './components/AsignaturasView'
-import CoordinadoresView from './components/CoordinadoresView'
-import ResolucionesView from './components/ResolucionesView'
 import PlantillaView from './components/PlantillaView'
+import PeriodosView from './components/PeriodosView'
 import DedicatedInProgressView from './components/DedicatedInProgressView'
 import MiPerfilView from './components/MiPerfilView'
+import DisponibilidadView from './components/DisponibilidadView'
 import SqlSetupModal from './components/SqlSetupModal'
 import Toast from './components/Toast'
 import {
@@ -16,17 +16,27 @@ import {
   getAllPensum,
   checkDatabaseHealth
 } from './services/academicService'
-import { logout as cerrarSesionLocal } from './services/authService'
 import { AlertCircle, Database, RefreshCw, Sparkles, Clock } from 'lucide-react'
 import './App.css'
 
-// Rol de administrador (coincide con AuthConstants.ROL_ADMIN del backend).
-const ROL_ADMIN = 1
+// Si el backend ya trae nombre y créditos (lo normal) no se vuelve a cruzar nada en el navegador;
+// solo se completa cuando la fila viene del fallback de Supabase sin esos campos.
+const withCourseInfo = (item, asigMap) => {
+  if (item.name_course && item.credits !== undefined && item.credits !== null) return item
+  const asig = asigMap.get(item.code_course)
+  return {
+    ...item,
+    name_course: item.name_course || asig?.name_course || item.code_course,
+    credits: item.credits ?? asig?.credits ?? 0,
+  }
+}
 
 export default function App({ user, onLogout }) {
   const rol = user?.rol ?? 1 // 1: Admin, 2: Coordinador, 3: Docente
-  const isDocente = rol === 3
+  const isAdmin = rol === 1
   const isCoordinador = rol === 2
+  const isDocente = rol === 3
+  const canSeeAcademicData = isAdmin || isCoordinador
 
   // Docentes entran directamente a su portal dedicado
   const [activeTab, setActiveTab] = useState(() => {
@@ -45,131 +55,58 @@ export default function App({ user, onLogout }) {
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false)
   const [toast, setToast] = useState(null)
 
-  // Solo el administrador ve "Resoluciones". El backend es quien protege los datos;
-  // esto solo controla la interfaz.
-  const esAdmin = user?.rol === ROL_ADMIN
-
-  // Si se pierde el rol de admin estando en "Resoluciones", volver a la malla.
-  useEffect(() => {
-    if (!esAdmin && activeTab === 'resoluciones') setActiveTab('pensum')
-  }, [esAdmin, activeTab])
-
-  // 401 en Resoluciones: la sesión expiró. Se limpia la sesión y se vuelve al login.
-  const handleSesionExpirada = useCallback(() => {
-    cerrarSesionLocal()
-    if (onLogout) onLogout()
-  }, [onLogout])
-
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type })
   }, [])
 
+  // Evita que una carga lenta pise a una más reciente
+  const loadSeq = useRef(0)
+
   // Carga global de datos desde Backend / Supabase
   const loadData = useCallback(async (isSilent = false) => {
-    // Si es docente, no consulta los endpoints administrativos protegidos
     if (isDocente) {
       setLoading(false)
       return
     }
 
+    const seq = ++loadSeq.current
     if (!isSilent) setLoading(true)
     setInitialError(null)
 
+    // El health check corre en paralelo: ya no retrasa la carga de datos
+    checkDatabaseHealth()
+      .then(h => { if (seq === loadSeq.current) setIsConnected(h.connected) })
+      .catch(() => { if (seq === loadSeq.current) setIsConnected(false) })
+
     try {
-      const health = await checkDatabaseHealth()
-      setIsConnected(health.connected)
+      const [progs, asigs, pensum] = canSeeAcademicData
+        ? await Promise.all([getProgramas(), getAsignaturas(), getAllPensum()])
+        : [[], [], []]
+      if (seq !== loadSeq.current) return
 
-      // Cargar en paralelo datos académicos
-      const [progs, asigs, pensum] = await Promise.all([
-        getProgramas(),
-        getAsignaturas(),
-        getAllPensum(),
-      ])
-
-      // Asociar nombres y créditos de asignaturas al pensum
       const asigMap = new Map(asigs.map(a => [a.code_course, a]))
-      const enrichedPensum = pensum.map(item => {
-        const asig = asigMap.get(item.code_course)
-        return {
-          ...item,
-          name_course: asig?.name_course || item.code_course,
-          credits: asig?.credits !== undefined && asig?.credits !== null ? asig.credits : 0,
-        }
-      })
-
       setProgramas(progs)
       setAsignaturas(asigs)
-      setPensumList(enrichedPensum)
+      setPensumList(pensum.map(item => withCourseInfo(item, asigMap)))
 
-      // Si no hay programa seleccionado, seleccionar el primero
+      // Si no hay programa seleccionado (o ya no existe), seleccionar el primero
       if (progs.length > 0) {
-        setSelectedProgramCode(prev => {
-          const exists = progs.some(p => p.code_program === prev)
-          return exists ? prev : progs[0].code_program
-        })
+        setSelectedProgramCode(prev =>
+          progs.some(p => p.code_program === prev) ? prev : progs[0].code_program
+        )
       }
     } catch (err) {
+      if (seq !== loadSeq.current) return
       console.error('Error al cargar datos:', err)
-      setInitialError(err.message || 'Error al comunicarse con la base de datos')
-      setIsConnected(false)
+      setInitialError(err.message || 'No fue posible cargar la información académica')
     } finally {
-      if (!isSilent) setLoading(false)
+      if (seq === loadSeq.current && !isSilent) setLoading(false)
     }
-  }, [isDocente])
+  }, [canSeeAcademicData, isDocente])
 
   useEffect(() => {
-    let isMounted = true
-
-    if (isDocente) {
-      setLoading(false)
-      return
-    }
-
-    const init = async () => {
-      try {
-        const health = await checkDatabaseHealth()
-        if (!isMounted) return
-        setIsConnected(health.connected)
-
-        const [progs, asigs, pensum] = await Promise.all([
-          getProgramas(),
-          getAsignaturas(),
-          getAllPensum(),
-        ])
-        if (!isMounted) return
-
-        const asigMap = new Map(asigs.map(a => [a.code_course, a]))
-        const enrichedPensum = pensum.map(item => {
-          const asig = asigMap.get(item.code_course)
-          return {
-            ...item,
-            name_course: asig?.name_course || item.code_course,
-            credits: asig?.credits !== undefined && asig?.credits !== null ? asig.credits : 0,
-          }
-        })
-
-        setProgramas(progs)
-        setAsignaturas(asigs)
-        setPensumList(enrichedPensum)
-
-        if (progs.length > 0) {
-          setSelectedProgramCode(progs[0].code_program)
-        }
-      } catch (err) {
-        if (!isMounted) return
-        console.error('Error al inicializar datos:', err)
-        setInitialError(err.message || 'Error al comunicarse con la base de datos')
-        setIsConnected(false)
-      } finally {
-        if (isMounted) setLoading(false)
-      }
-    }
-
-    init()
-    return () => {
-      isMounted = false
-    }
-  }, [isDocente])
+    loadData()
+  }, [loadData])
 
   const handleSelectProgramForPensum = (code) => {
     setSelectedProgramCode(code)
@@ -186,7 +123,6 @@ export default function App({ user, onLogout }) {
         isConnected={isConnected}
         user={user}
         onLogout={onLogout}
-        esAdmin={esAdmin}
       />
 
       {/* Banner de aviso para Coordinador cuando navega en asignaturas o pensum */}
@@ -215,9 +151,9 @@ export default function App({ user, onLogout }) {
           <div className="alert-content">
             <AlertCircle size={20} className="text-warning" />
             <div>
-              <strong>Aviso de Base de Datos:</strong> {initialError}
+              <strong>Aviso de carga académica:</strong> {initialError}
               <p className="alert-hint">
-                Si las tablas son nuevas o tienen RLS activado sin políticas, debes ejecutar el script SQL en Supabase para otorgar permisos.
+                El inicio de sesión puede funcionar aunque falle una consulta académica. Revisa el backend y las migraciones si el problema persiste.
               </p>
             </div>
           </div>
@@ -241,13 +177,21 @@ export default function App({ user, onLogout }) {
           </div>
         ) : (
           <>
-            {/* Vistas Dedicadas en Progreso de Creación para Docentes y Coordinadores */}
+            {/* Portales informativos para Docentes y Coordinadores */}
             {(activeTab === 'docente_portal' || activeTab === 'coordinador_portal') && (
               <DedicatedInProgressView
                 user={user}
                 onNavigate={setActiveTab}
                 onLogout={onLogout}
               />
+            )}
+
+            {/* Disponibilidad docente: visible únicamente para el rol docente */}
+            {isDocente && activeTab === 'disponibilidad' && <DisponibilidadView />}
+
+            {/* Períodos Académicos (Resolución de Calendario) */}
+            {activeTab === 'periodos' && (
+              <PeriodosView user={user} onShowToast={showToast} />
             )}
 
             {/* Malla Curricular */}
@@ -262,6 +206,7 @@ export default function App({ user, onLogout }) {
                 onShowToast={showToast}
                 onNavigateToAsignaturas={() => setActiveTab('asignaturas')}
                 onNavigateToProgramas={() => setActiveTab('programas')}
+                canEdit
               />
             )}
 
@@ -295,10 +240,7 @@ export default function App({ user, onLogout }) {
               />
             )}
 
-            {activeTab === 'resoluciones' && esAdmin && (
-              <ResolucionesView esAdmin={esAdmin} onSesionExpirada={handleSesionExpirada} />
-            )}
-
+            {/* Mi Perfil */}
             {activeTab === 'mi-perfil' && (
               <MiPerfilView
                 user={user}

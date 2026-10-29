@@ -1,16 +1,17 @@
 import React from 'react'
-import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Clock, FileText } from 'lucide-react'
+import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Clock, UserCircle, CalendarDays } from 'lucide-react'
 
-export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout, esAdmin }) {
+export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout }) {
   const rol = user?.rol ?? 1 // 1: Admin, 2: Coordinador, 3: Docente
-
-  const canSeePensum = rol === 1 || rol === 2
-  const canSeeProgramas = rol === 1
-  const canSeeAsignaturas = rol === 1 || rol === 2
-  const canSeePlantilla = rol === 1
-  const canSeeResoluciones = esAdmin ?? rol === 1 // solo administrador
+  const isAdmin = rol === 1
   const isCoordinador = rol === 2
   const isDocente = rol === 3
+
+  const canSeePensum = isAdmin || isCoordinador
+  const canSeeProgramas = isAdmin
+  const canSeeAsignaturas = isAdmin || isCoordinador
+  const canSeePlantilla = isAdmin
+  const canSeePeriodos = isAdmin
 
   const rolLabel = rol === 1
     ? 'Administrador'
@@ -22,7 +23,7 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
     } else if (canSeePensum) {
       setActiveTab('pensum')
     } else {
-      setActiveTab('plantilla')
+      setActiveTab('periodos')
     }
   }
 
@@ -80,13 +81,13 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
             </button>
           )}
 
-          {canSeeResoluciones && (
+          {canSeePeriodos && (
             <button
-              className={`nav-tab-btn ${activeTab === 'resoluciones' ? 'active' : ''}`}
-              onClick={() => setActiveTab('resoluciones')}
+              className={`nav-tab-btn ${activeTab === 'periodos' ? 'active' : ''}`}
+              onClick={() => setActiveTab('periodos')}
             >
-              <FileText size={18} />
-              <span>Resoluciones</span>
+              <CalendarDays size={18} />
+              <span>Períodos académicos</span>
             </button>
           )}
 
@@ -107,6 +108,16 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
             >
               <Clock size={18} />
               <span>Portal Docente</span>
+            </button>
+          )}
+
+          {isDocente && (
+            <button
+              className={`nav-tab-btn ${activeTab === 'disponibilidad' ? 'active' : ''}`}
+              onClick={() => setActiveTab('disponibilidad')}
+            >
+              <CalendarDays size={18} />
+              <span>Disponibilidad</span>
             </button>
           )}
 
@@ -136,7 +147,7 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
           {onLogout && (
             <button type="button" className="navbar-logout-btn" onClick={onLogout} title="Cerrar sesión">
               <LogOut size={16} />
-              <span>Salir</span>
+              <span>Cerrar sesión</span>
             </button>
           )}
         </div>
