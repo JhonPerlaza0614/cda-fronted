@@ -437,10 +437,11 @@ export default function PensumView({
 
   const ensureEditSectionOpen = () => {
     if (!editorMode) {
+      const mode = isActiveMalla ? 'edit' : 'create'
       const initForm = buildInitialResolutionForm()
       setResolutionForm(initForm)
       setInitialEditSnapshot(buildSnapshotString(initForm, savedPensum))
-      setEditorMode(isActiveMalla ? 'edit' : 'create')
+      setEditorMode(mode)
     }
     setIsResolutionFormOpen(true)
   }
@@ -448,6 +449,7 @@ export default function PensumView({
   // Abrir formulario en modo "Editar" (HU-032 / HU-017)
   const handleOpenEditMalla = () => {
     if (!currentProgram || isViewingInactive) return
+    const mode = isActiveMalla ? 'edit' : 'create'
     const initialForm = buildInitialResolutionForm()
     setResolutionForm(initialForm)
     setDraftPensum(savedPensum)
@@ -455,7 +457,7 @@ export default function PensumView({
     setInitialEditSnapshot(buildSnapshotString(initialForm, savedPensum))
     setFormErrors({})
     setBannerMessage(null)
-    setEditorMode(isActiveMalla ? 'edit' : 'create')
+    setEditorMode(mode)
     setIsResolutionFormOpen(true)
   }
 
@@ -588,7 +590,7 @@ export default function PensumView({
     setBannerMessage(null)
 
     const numSem = parseInt(resolutionForm.numero_semestre, 10) || totalSemesters
-    const numRes = (resolutionForm.numero_resolucion || activeNumeroResolucion || '').trim()
+    const numRes = (resolutionForm.numero_resolucion || '').trim()
 
     const flatItems = currentPensum.map(c => ({
       code_course: (c.code_course || '').trim().toUpperCase(),
