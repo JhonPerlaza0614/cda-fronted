@@ -47,9 +47,24 @@ export function consultarMiDisponibilidad() {
   return request('/disponibilidades/me')
 }
 
+export async function consultarPeriodoVigente() {
+  try {
+    return await request('/periodos/vigente')
+  } catch {
+    return null
+  }
+}
+
 export function registrarDisponibilidad({ dia, horaInicio, horaFin }) {
   return request('/disponibilidades/me', {
     method: 'POST',
     body: JSON.stringify({ dia, horaInicio, horaFin }),
+  })
+}
+
+export function actualizarDisponibilidad(intervalos) {
+  return request('/disponibilidades/me', {
+    method: 'PUT',
+    body: JSON.stringify(intervalos),
   })
 }
