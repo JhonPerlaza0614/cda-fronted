@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Search, Edit2, Trash2, BookOpen, Layers, AlertTriangle, Award, Building2 } from 'lucide-react'
-import { createPrograma, updatePrograma, deletePrograma, getFacultades, createFacultad } from '../services/academicService'
+import { createPrograma, updatePrograma, deletePrograma, getFacultades, createFacultad, getCoordinadores } from '../services/academicService'
 
 export default function ProgramasView({ 
   programas, 
   pensumList, 
   onRefresh, 
   onShowToast, 
-  onSelectProgramForPensum 
+  onSelectProgramForPensum,
+  canAssignCoordinator = false
 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -15,6 +16,9 @@ export default function ProgramasView({
   const [deletingProgram, setDeletingProgram] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [facultadesList, setFacultadesList] = useState([])
+  const [coordinadoresList, setCoordinadoresList] = useState([])
+  const [loadingCoordinadores, setLoadingCoordinadores] = useState(false)
+  const [currentCoordinatorId, setCurrentCoordinatorId] = useState(null)
 
   // Estado para creación rápida de facultad
   const [isAddingNewFacultad, setIsAddingNewFacultad] = useState(false)
@@ -39,6 +43,7 @@ export default function ProgramasView({
     numero_semestre: 10,
     id_facultad_programa: '',
     apertura: '',
+    id_coordinador_nuevo: '',
   })
 
   // Filtered programs
@@ -100,15 +105,21 @@ export default function ProgramasView({
       numero_semestre: 10,
       id_facultad_programa: '',
       apertura: '',
+      id_coordinador_nuevo: '',
     })
+    setCurrentCoordinatorId(null)
+    setLoadingCoordinadores(false)
     setIsModalOpen(true)
   }
 
-  const handleOpenEditModal = (prog) => {
+  const handleOpenEditModal = async (prog) => {
     setEditingProgram(prog)
     setIsAddingNewFacultad(false)
     setNewFacultadName('')
     setNewFacultadDesc('')
+    setCurrentCoordinatorId(null)
+    setCoordinadoresList([])
+    setLoadingCoordinadores(Boolean(canAssignCoordinator))
     setFormData({
       code_program: prog.code_program,
       name_program: prog.name_program,
@@ -116,8 +127,28 @@ export default function ProgramasView({
       numero_semestre: prog.numero_semestre !== undefined && prog.numero_semestre !== null ? prog.numero_semestre : 10,
       id_facultad_programa: prog.id_facultad_programa ? String(prog.id_facultad_programa) : '',
       apertura: prog.apertura || '',
+      id_coordinador_nuevo: '',
     })
     setIsModalOpen(true)
+
+    if (!canAssignCoordinator) return
+
+    try {
+      const data = await getCoordinadores()
+      const lista = Array.isArray(data) ? data : []
+      setCoordinadoresList(lista)
+      const asignado = lista.find(c => String(c.code_program || '') === String(prog.code_program))
+      const idAsignado = asignado?.id != null ? String(asignado.id) : ''
+      setCurrentCoordinatorId(idAsignado || null)
+      setFormData(prev => prev.code_program === prog.code_program
+        ? { ...prev, id_coordinador_nuevo: idAsignado }
+        : prev)
+    } catch (err) {
+      console.error('Error al cargar coordinadores para el programa:', err)
+      onShowToast(`No fue posible cargar la lista de coordinadores: ${err.message || 'Error desconocido'}`, 'error')
+    } finally {
+      setLoadingCoordinadores(false)
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -147,12 +178,18 @@ export default function ProgramasView({
     setSubmitting(true)
     try {
       if (editingProgram) {
+        const coordinadorSeleccionado = formData.id_coordinador_nuevo
+        const cambioCoordinador = canAssignCoordinator
+          && coordinadorSeleccionado
+          && coordinadorSeleccionado !== String(currentCoordinatorId ?? '')
+
         await updatePrograma(editingProgram.code_program, {
           name_program: formData.name_program,
           numero_semestre: numSemestres,
           numero_resolucion: numeroResolucion,
           id_facultad_programa: formData.id_facultad_programa ? parseInt(formData.id_facultad_programa, 10) : null,
           apertura: formData.apertura || null,
+          ...(cambioCoordinador ? { id_coordinador_nuevo: parseInt(coordinadorSeleccionado, 10) } : {}),
         })
         onShowToast('Programa actualizado correctamente', 'success')
       } else {
@@ -467,6 +504,37 @@ export default function ProgramasView({
                     Define la duración exacta y el total de semestres que se mostrarán en la malla curricular (ej. 10 para carreras profesionales, 6 para tecnologías).
                   </small>
                 </div>
+
+                {canAssignCoordinator && editingProgram && (
+                  <div className="form-group">
+                    <label htmlFor="id_coordinador_nuevo">Coordinador asignado</label>
+                    <select
+                      id="id_coordinador_nuevo"
+                      value={formData.id_coordinador_nuevo}
+                      onChange={(e) => setFormData({ ...formData, id_coordinador_nuevo: e.target.value })}
+                      className="select-input"
+                      disabled={loadingCoordinadores || coordinadoresList.length === 0}
+                    >
+                      <option value="">
+                        {loadingCoordinadores ? 'Cargando coordinadores...' : '-- Sin cambios en la asignación --'}
+                      </option>
+                      {coordinadoresList.map(c => (
+                        <option key={c.id} value={String(c.id)}>
+                          {c.nombre_completo || `Coordinador #${c.id}`} — {c.code_program || 'Sin programa'}{c.activo === false ? ' (Inactivo)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <small className="form-hint">
+                      {loadingCoordinadores
+                        ? 'Consultando los coordinadores registrados.'
+                        : coordinadoresList.length === 0
+                          ? 'No hay coordinadores disponibles para seleccionar.'
+                          : currentCoordinatorId
+                            ? 'Se seleccionó automáticamente al coordinador que dirige este programa. Al cambiarlo, las asignaciones se intercambiarán en una sola transacción.'
+                            : 'Este programa no tiene una asignación detectada. El cambio solo se aplicará si seleccionas un coordinador compatible con un intercambio seguro.'}
+                    </small>
+                  </div>
+                )}
               </div>
 
               <div className="modal-footer">
