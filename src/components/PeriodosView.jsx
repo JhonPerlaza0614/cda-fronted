@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, ChevronDown, Edit3, ExternalLink, Plus, Save, Trash2, X } from 'lucide-react'
+import { ChevronDown, Edit3, ExternalLink, Plus, Save, Trash2, X } from 'lucide-react'
 import { createPeriodo, updatePeriodo } from '../services/academicService'
 import {
   getPeriodos,
@@ -55,8 +55,8 @@ const dateFields = [
   ['fechaResolucion', 'Fecha de resolución'],
   ['fechaInicioSemestre', 'Inicio del semestre'],
   ['fechaFinSemestre', 'Fin del semestre'],
-  ['fechaAdicionInicio', 'Inicio de adiciones'],
-  ['fechaAdicionFin', 'Fin de adiciones'],
+  ['fechaAdicionInicio', 'Inicio de adiciones y cancelaciones'],
+  ['fechaAdicionFin', 'Fin de adiciones y cancelaciones'],
   ['fechaCancelacionInicio', 'Inicio de cancelaciones'],
   ['fechaCancelacionFin', 'Fin de cancelaciones'],
 ]
@@ -141,7 +141,7 @@ function DetallePeriodo({ id, periodo, puedeGestionar, onEditar, onEliminar }) {
         <Dato etiqueta="Número de resolución">{periodo.numeroResolucion}</Dato>
         <Dato etiqueta="Fecha de resolución">{formatearFecha(periodo.fechaResolucion)}</Dato>
         <Dato etiqueta="Semestre">{formatearFecha(periodo.fechaInicioSemestre)} a {formatearFecha(periodo.fechaFinSemestre)}</Dato>
-        <Dato etiqueta="Adiciones">{formatearFecha(periodo.fechaAdicionInicio)} a {formatearFecha(periodo.fechaAdicionFin)}</Dato>
+        <Dato etiqueta="Adiciones y cancelaciones">{formatearFecha(periodo.fechaAdicionInicio)} a {formatearFecha(periodo.fechaAdicionFin)}</Dato>
         <Dato etiqueta="Cancelaciones">{formatearFecha(periodo.fechaCancelacionInicio)} a {formatearFecha(periodo.fechaCancelacionFin)}</Dato>
         <Dato etiqueta="Plazo docentes (hora de Bogotá)">
           {formatearFechaHora(periodo.plazoDocenteInicio)} a {formatearFechaHora(periodo.plazoDocenteFin)}
@@ -308,11 +308,22 @@ export default function PeriodosView({ user, onShowToast }) {
   }
 
   return (
-    <section className="periodos-container">
-      <div className="periodos-heading">
-        <div><p className="section-eyebrow">PROGRAMACIÓN ACADÉMICA</p><h1><CalendarDays size={28} /> Períodos académicos</h1></div>
-        {isAdmin && <button className="btn-primary" onClick={() => setEditing(emptyForm)}><Plus size={16} /> Crear período académico</button>}
-      </div>
+  <div className="section-container">
+    {/* Header Bar */}
+    <div className="section-header">
+      <div>
+        <h1 className="section-title">Períodos Académicos</h1>
+        <p className="section-description">
+          Consulta la resolución académica actual y las históricas.
+          </p>
+          </div>
+          {isAdmin && (
+            <button className="btn-primary" onClick={() => setEditing(emptyForm)}>
+              <Plus size={18} />
+              <span>Nuevo período académico</span>
+              </button>
+            )}
+            </div>
 
       {loading ? <p>Cargando períodos...</p> : (
         <>
@@ -344,6 +355,6 @@ export default function PeriodosView({ user, onShowToast }) {
         onAceptar={confirmarEliminacion}
         onCancelar={cancelarEliminacion}
       />
-    </section>
+    </div>
   )
 }
