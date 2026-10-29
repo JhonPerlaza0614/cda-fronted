@@ -21,17 +21,30 @@ import {
   History,
   Archive,
   RotateCcw,
-  AlertTriangle
+  AlertTriangle,
+  Edit3,
+  FilePlus2,
+  Eye,
+  FileText
 } from 'lucide-react'
 import {
   createAsignatura,
   getFacultades,
   savePensumVersion,
+  updatePensumVersion,
   getPensumHistory,
   getPensumVersion,
   deactivatePensum,
   reactivatePensum
 } from '../services/academicService'
+
+function inferTipoAsignatura(item) {
+  if (item?.tipo_asignatura) return item.tipo_asignatura
+  if (item?.es_complementaria) return 'Electiva complementaria'
+  if (item?.is_elective) return 'Act. extracurricular'
+  if (item?.es_basica) return 'Asignatura básica'
+  return 'Profesional'
+}
 
 export default function PensumView({
   programas,
@@ -50,7 +63,7 @@ export default function PensumView({
   const [selectedCourseForAdd, setSelectedCourseForAdd] = useState('')
   const [courseSearchModal, setCourseSearchModal] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [movingCourse, setMovingCourse] = useState(null) // for changing semester modal
+  const [movingCourse, setMovingCourse] = useState(null)
   const [targetSemester, setTargetSemester] = useState(1)
   const [draftPensum, setDraftPensum] = useState([])
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -60,8 +73,32 @@ export default function PensumView({
   const [historyDetail, setHistoryDetail] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
+  // Vista en modo consulta de una malla inactiva desde el historial (HU-032 Criterio 1)
+  const [viewingInactiveVersion, setViewingInactiveVersion] = useState(null)
+  const [inactiveVersionCourses, setInactiveVersionCourses] = useState([])
+
+  // =========================================================================
+  // ESTADO DE METADATOS DE RESOLUCIÓN / EDICIÓN DE MALLA (HU-017 & HU-032)
+  // Semestres y asignaturas se gestionan directamente en las columnas.
+  // =========================================================================
+  // editorMode: null | 'edit' (HU-032 Editar malla activa) | 'create' (HU-017 Registrar resolución)
+  const [editorMode, setEditorMode] = useState(null)
+  const [isResolutionFormOpen, setIsResolutionFormOpen] = useState(false)
+  const [resolutionForm, setResolutionForm] = useState({
+    numero_resolucion: '',
+    numero_semestre: '10',
+    name_program: '',
+    descripcion: '',
+    jornada: 'DIURNA',
+    periodo_oferta: 'SEMESTRAL'
+  })
+  const [initialEditSnapshot, setInitialEditSnapshot] = useState(null)
+  const [formErrors, setFormErrors] = useState({})
+  const [bannerMessage, setBannerMessage] = useState(null)
+  const [confirmDialog, setConfirmDialog] = useState(null)
+
   // Elective form mode & state in modal
-  const [addMode, setAddMode] = useState('catalog') // 'catalog' | 'elective'
+  const [addMode, setAddMode] = useState('catalog')
   const [electiveCode, setElectiveCode] = useState('')
   const [electiveName, setElectiveName] = useState('')
   const [electiveCredits, setElectiveCredits] = useState('')
@@ -71,7 +108,7 @@ export default function PensumView({
   const [programFacultyId, setProgramFacultyId] = useState('')
   const [electivesSearch, setElectivesSearch] = useState('')
   const [isElectivesDockExpanded, setIsElectivesDockExpanded] = useState(true)
-  const [electivesTabFilter, setElectivesTabFilter] = useState('all') // 'all' | 'especializadas' | 'comunes'
+  const [electivesTabFilter, setElectivesTabFilter] = useState('all')
 
   // Program search combobox
   const [programSearch, setProgramSearch] = useState('')
@@ -94,12 +131,9 @@ export default function PensumView({
     )
   }, [programas, programSearch])
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (
-        comboboxRef.current && !comboboxRef.current.contains(e.target)
-      ) {
+      if (comboboxRef.current && !comboboxRef.current.contains(e.target)) {
         setProgramDropdownOpen(false)
         setProgramSearch('')
       }
@@ -112,19 +146,43 @@ export default function PensumView({
     setSelectedProgramCode(code)
     setProgramDropdownOpen(false)
     setProgramSearch('')
+    setViewingInactiveVersion(null)
+    setInactiveVersionCourses([])
+    setEditorMode(null)
+    setIsResolutionFormOpen(false)
   }
 
-  // Current program's pensum entries
+  // Current program's active pensum entries
   const savedPensum = useMemo(() => {
     if (!currentProgram) return []
-    return pensumList.filter(item => item.code_program === currentProgram.code_program)
+    return pensumList.filter(item => item.code_program === currentProgram.code_program && item.vigente !== false)
   }, [pensumList, currentProgram])
 
-  const currentPensum = hasUnsavedChanges ? draftPensum : savedPensum
+  // Malla activa vs inactiva (HU-032 Criterio 1)
+  const isViewingInactive = viewingInactiveVersion !== null
+  const isActiveMalla = !isViewingInactive && savedPensum.length > 0
+  const effectiveCanEdit = canEdit && !isViewingInactive && (isActiveMalla || editorMode === 'create')
+
+  const currentPensum = isViewingInactive
+    ? inactiveVersionCourses
+    : (hasUnsavedChanges ? draftPensum : savedPensum)
+
+  // Datos actuales de la resolución activa o en consulta
+  const activeMetaItem = currentPensum[0] || savedPensum[0] || null
+  const activeNumeroResolucion = (editorMode && resolutionForm.numero_resolucion)
+    ? resolutionForm.numero_resolucion
+    : (activeMetaItem?.numero_resolucion || currentProgram?.numero_resolucion || '')
+  const isMallaEditada = Boolean(activeMetaItem?.editada)
+  const fechaUltimaEdicion = activeMetaItem?.fecha_edicion || null
 
   useEffect(() => {
     setDraftPensum(savedPensum)
     setHasUnsavedChanges(false)
+    setViewingInactiveVersion(null)
+    setInactiveVersionCourses([])
+    setEditorMode(null)
+    setIsResolutionFormOpen(false)
+    setBannerMessage(null)
   }, [selectedProgramCode, pensumList])
 
   // Total credits in program
@@ -132,15 +190,20 @@ export default function PensumView({
     return currentPensum.reduce((acc, curr) => acc + (curr.credits || 0), 0)
   }, [currentPensum])
 
-  // Total semesters defined for this program
+  // Total semesters defined for this program or resolution form
   const totalSemesters = useMemo(() => {
-    const definedSemesters = parseInt(currentProgram?.numero_semestre, 10) || 10
+    const formSem = editorMode ? parseInt(resolutionForm.numero_semestre, 10) : NaN
+    const metaSem = parseInt(activeMetaItem?.numero_semestres, 10)
+    const progSem = parseInt(currentProgram?.numero_semestre, 10) || 10
+    const definedSemesters = !isNaN(formSem) && formSem >= 1
+      ? formSem
+      : (!isNaN(metaSem) && metaSem >= 1 ? metaSem : progSem)
     if (currentPensum.length === 0) return definedSemesters
-    const highestInPensum = Math.max(...currentPensum.map(p => p.semestre))
+    const highestInPensum = Math.max(...currentPensum.map(p => p.semestre || 1))
     return Math.max(definedSemesters, highestInPensum)
-  }, [currentProgram, currentPensum])
+  }, [currentProgram, currentPensum, editorMode, resolutionForm.numero_semestre, activeMetaItem])
 
-  // Group courses by semester up to totalSemesters
+  // Group courses by semester up to totalSemesters (las columnas de la malla)
   const semesterMap = useMemo(() => {
     const map = {}
     for (let s = 1; s <= totalSemesters; s++) {
@@ -160,12 +223,11 @@ export default function PensumView({
     return new Set(currentPensum.map(item => item.code_course))
   }, [currentPensum])
 
-  // Courses available to be added (not yet in this program's pensum)
+  // Courses available to be added
   const availableCourses = useMemo(() => {
     return asignaturas.filter(a => !assignedCourseCodes.has(a.code_course))
   }, [asignaturas, assignedCourseCodes])
 
-  // Filtered available courses in modal search
   const filteredAvailableCourses = useMemo(() => {
     return availableCourses.filter(a =>
       a.code_course.toLowerCase().includes(courseSearchModal.toLowerCase()) ||
@@ -188,36 +250,26 @@ export default function PensumView({
       setProgramFacultyId(null)
       return
     }
-
-    // 1. Si el programa tiene id_facultad_programa o id_facultad asignado explícitamente en la BD:
     if (currentProgram.id_facultad_programa || currentProgram.id_facultad) {
       setProgramFacultyId(String(currentProgram.id_facultad_programa || currentProgram.id_facultad))
       return
     }
-
-    // 2. Si no tiene facultad asignada, deducir ÚNICAMENTE si el nombre coincide con carreras conocidas:
     const pName = (currentProgram.name_program || '').toLowerCase()
     if (pName.includes('software') || pName.includes('sistemas') || pName.includes('electromec') || pName.includes('ingenier')) {
       const ingFac = facultadesList.find(f => f.id === 1 || (f.nombre || '').toLowerCase().includes('ingenier'))
       setProgramFacultyId(ingFac ? String(ingFac.id) : '1')
       return
     }
-
-    // Si coincide con alguna otra facultad registrada (ej. Ciencias Humanas, Psicología)
-    const matchingFac = facultadesList.find(f => 
+    const matchingFac = facultadesList.find(f =>
       f.id !== 2 && f.id !== 3 && pName.includes((f.nombre || '').toLowerCase())
     )
     if (matchingFac) {
       setProgramFacultyId(String(matchingFac.id))
       return
     }
-
-    // Para cualquier otra carrera (ej. Psicología) que no sea de ingeniería, NO asociar a Facultad 1
-    // De esta manera no se mezclan las electivas especializadas de otras facultades
     setProgramFacultyId(null)
   }, [currentProgram, facultadesList])
 
-  // Mapa de cursos en el pensum de esta carrera
   const pensumCourseMap = useMemo(() => {
     const map = new Map()
     for (const item of currentPensum) {
@@ -226,34 +278,28 @@ export default function PensumView({
     return map
   }, [currentPensum])
 
-  // Objeto de la facultad actual de la carrera
   const currentFacultyObj = useMemo(() => {
     if (!programFacultyId) return null
     return facultadesList.find(f => String(f.id) === String(programFacultyId)) || null
   }, [facultadesList, programFacultyId])
 
-  // Todas las electivas disponibles en el banco de asignaturas
   const allElectivasDisponibles = useMemo(() => {
-    return asignaturas.filter(a => {
-      return Boolean(
-        a.is_elective || 
-        a.es_complementaria || 
-        a.name_course?.toLowerCase().includes('electiv') ||
-        a.code_course?.toLowerCase().startsWith('ele')
-      )
-    })
+    return asignaturas.filter(a => Boolean(
+      a.is_elective ||
+      a.es_complementaria ||
+      a.name_course?.toLowerCase().includes('electiv') ||
+      a.code_course?.toLowerCase().startsWith('ele')
+    ))
   }, [asignaturas])
 
-  // Electivas Comunes / Complementarias (disponibles para todas las carreras)
   const electivasComunes = useMemo(() => {
     return allElectivasDisponibles.filter(a => {
       const isComun = Boolean(
-        a.es_complementaria || 
-        String(a.id_facultad) === '2' || 
+        a.es_complementaria ||
+        String(a.id_facultad) === '2' ||
         a.name_course?.toLowerCase().includes('complementar')
       )
       if (!isComun) return false
-
       if (electivesSearch.trim()) {
         const q = electivesSearch.toLowerCase()
         return a.code_course.toLowerCase().includes(q) || a.name_course.toLowerCase().includes(q)
@@ -262,24 +308,16 @@ export default function PensumView({
     })
   }, [allElectivasDisponibles, electivesSearch])
 
-  // Electivas Especializadas (únicamente de la propia facultad de la carrera)
   const electivasEspecializadas = useMemo(() => {
-    // Si la carrera no tiene una facultad especializada definida, no puede ver electivas de otras facultades
     if (!programFacultyId) return []
-
     return allElectivasDisponibles.filter(a => {
       const isComun = Boolean(
-        a.es_complementaria || 
-        String(a.id_facultad) === '2' || 
+        a.es_complementaria ||
+        String(a.id_facultad) === '2' ||
         a.name_course?.toLowerCase().includes('complementar')
       )
       if (isComun) return false
-
-      // Solo electivas que pertenezcan a la misma facultad de la carrera
-      if (String(a.id_facultad) !== String(programFacultyId)) {
-        return false
-      }
-
+      if (String(a.id_facultad) !== String(programFacultyId)) return false
       if (electivesSearch.trim()) {
         const q = electivesSearch.toLowerCase()
         return a.code_course.toLowerCase().includes(q) || a.name_course.toLowerCase().includes(q)
@@ -288,11 +326,286 @@ export default function PensumView({
     })
   }, [allElectivasDisponibles, programFacultyId, electivesSearch])
 
-  // Generador de nombre consecutivo para electivas (Electiva Profesional I, II, III...)
+  // =========================================================================
+  // LÓGICA DE RESOLUCIÓN (HU-017) Y EDICIÓN DE MALLA (HU-032) CON COLUMNAS
+  // =========================================================================
+
+  const buildSnapshotString = (formState, coursesList) => {
+    const normalized = {
+      numero_resolucion: (formState.numero_resolucion || '').trim().toUpperCase(),
+      numero_semestre: String(formState.numero_semestre ?? '').trim(),
+      name_program: (formState.name_program || '').trim(),
+      descripcion: (formState.descripcion || '').trim(),
+      jornada: (formState.jornada || 'DIURNA').trim().toUpperCase(),
+      periodo_oferta: (formState.periodo_oferta || 'SEMESTRAL').trim().toUpperCase(),
+      courses: (coursesList || [])
+        .map(c => `${String(c.code_course || '').trim().toUpperCase()}:${parseInt(c.semestre, 10) || 1}`)
+        .sort()
+    }
+    return JSON.stringify(normalized)
+  }
+
+  // Abrir formulario en modo "Editar" (HU-032)
+  const handleOpenEditMalla = () => {
+    if (!currentProgram || !isActiveMalla) return
+    const firstItem = savedPensum[0] || {}
+    const resInitial = firstItem.numero_resolucion || currentProgram.numero_resolucion || ''
+    const semInitial = String(firstItem.numero_semestres || currentProgram.numero_semestre || 10)
+    const descInitial = firstItem.descripcion || `Resolución curricular vigente de ${currentProgram.name_program}`
+    const jornadaInitial = (firstItem.jornada || currentProgram.jornada || 'DIURNA').toUpperCase()
+    const periodoInitial = (firstItem.periodo_oferta || currentProgram.ingreso || 'SEMESTRAL').toUpperCase()
+
+    const initialForm = {
+      numero_resolucion: resInitial,
+      numero_semestre: semInitial,
+      name_program: currentProgram.name_program || '',
+      descripcion: descInitial,
+      jornada: jornadaInitial === 'NOCTURNA' ? 'NOCTURNA' : 'DIURNA',
+      periodo_oferta: periodoInitial === 'ANUAL' ? 'ANUAL' : 'SEMESTRAL'
+    }
+
+    setResolutionForm(initialForm)
+    setDraftPensum(savedPensum)
+    setHasUnsavedChanges(false)
+    setInitialEditSnapshot(buildSnapshotString(initialForm, savedPensum))
+    setFormErrors({})
+    setBannerMessage(null)
+    setEditorMode('edit')
+    setIsResolutionFormOpen(true)
+  }
+
+  // Abrir formulario en modo "Registrar resolución de programa" (HU-017)
+  const handleOpenCreateResolution = () => {
+    if (!currentProgram) return
+    const initialForm = {
+      numero_resolucion: '',
+      numero_semestre: String(currentProgram.numero_semestre || 10),
+      name_program: currentProgram.name_program || '',
+      descripcion: '',
+      jornada: (currentProgram.jornada || 'DIURNA').toUpperCase() === 'NOCTURNA' ? 'NOCTURNA' : 'DIURNA',
+      periodo_oferta: (currentProgram.ingreso || 'SEMESTRAL').toUpperCase() === 'ANUAL' ? 'ANUAL' : 'SEMESTRAL'
+    }
+    setResolutionForm(initialForm)
+    setDraftPensum(savedPensum)
+    setInitialEditSnapshot(buildSnapshotString(initialForm, savedPensum))
+    setFormErrors({})
+    setBannerMessage(null)
+    setEditorMode('create')
+    setIsResolutionFormOpen(true)
+  }
+
+  // Validar los datos del encabezado de resolución (sin semestres ni asignaturas adentro)
+  const validateResolutionHeader = () => {
+    const errors = {}
+    const numRes = (resolutionForm.numero_resolucion || '').trim()
+    const numSemStr = String(resolutionForm.numero_semestre ?? '').trim()
+    const progName = (resolutionForm.name_program || '').trim()
+    const desc = (resolutionForm.descripcion || '').trim()
+
+    if (!numRes) {
+      errors.numero_resolucion = 'El número de resolución es obligatorio'
+    } else if (numRes.length > 50 || !/^[A-Za-z0-9\s./-]+$/.test(numRes)) {
+      errors.numero_resolucion = 'Formato alfanumérico (máx. 50 caracteres)'
+    }
+
+    const numSem = parseInt(numSemStr, 10)
+    if (!numSemStr || !/^\d+$/.test(numSemStr) || isNaN(numSem) || numSem < 1 || numSem > 20) {
+      errors.numero_semestre = 'El número de semestres debe ser numérico entre 1 y 20'
+    }
+
+    if (!progName) {
+      errors.name_program = 'El nombre del programa académico es obligatorio'
+    } else if (progName.length > 100 || !/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9\s.,()-]+$/.test(progName)) {
+      errors.name_program = 'Alfanumérico (máx. 100 caracteres)'
+    }
+
+    if (!desc) {
+      errors.descripcion = 'La descripción es obligatoria'
+    } else if (desc.length > 100 || !/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9\s.,()-]+$/.test(desc)) {
+      errors.descripcion = 'Máximo 100 caracteres'
+    }
+
+    if (!resolutionForm.jornada) {
+      errors.jornada = 'La jornada es obligatoria'
+    }
+    if (!resolutionForm.periodo_oferta) {
+      errors.periodo_oferta = 'El período de oferta es obligatorio'
+    }
+
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  // Detectar asignaturas quitadas en las columnas (HU-032 Criterio 4)
+  const getRemovedCoursesInColumns = () => {
+    if (editorMode !== 'edit') return []
+    const currentCodes = new Set(currentPensum.map(c => (c.code_course || '').toUpperCase()))
+    const removed = []
+    savedPensum.forEach(orig => {
+      const origCode = (orig.code_course || '').toUpperCase()
+      if (!currentCodes.has(origCode)) {
+        removed.push(`${orig.name_course || origCode} (${origCode})`)
+      }
+    })
+    return removed
+  }
+
+  // Presionar Guardar (en el formulario o en la barra superior)
+  const handleAttemptSaveResolution = (e) => {
+    if (e) e.preventDefault()
+    setBannerMessage(null)
+
+    const mode = editorMode || (isActiveMalla ? 'edit' : 'create')
+
+    // Validar encabezado si el formulario de resolución está abierto o activo
+    if (editorMode && !validateResolutionHeader()) {
+      setBannerMessage({
+        type: 'error',
+        text: 'Por favor completa correctamente los datos de la resolución marcados en rojo.'
+      })
+      onShowToast('Revisa los campos marcados en el formulario', 'error')
+      return
+    }
+
+    // Si está creando una resolución y aún no hay asignaturas en las columnas,
+    // cerramos el modal dejando configurados los N semestres en las columnas para que agregue asignaturas
+    if (mode === 'create' && currentPensum.length === 0) {
+      setIsResolutionFormOpen(false)
+      onShowToast(
+        `Resolución N.° ${resolutionForm.numero_resolucion} configurada con ${resolutionForm.numero_semestre} semestres. Agrega asignaturas en las columnas y presiona "Guardar malla".`,
+        'success'
+      )
+      return
+    }
+
+    if (currentPensum.length === 0) {
+      setBannerMessage({
+        type: 'error',
+        text: 'Se necesita al menos un semestre con una asignatura en las columnas antes de guardar.'
+      })
+      onShowToast('Agrega al menos una asignatura en las columnas', 'error')
+      return
+    }
+
+    // Criterio 5 (HU-032): Si no modificó nada en modo Editar, muestra "No hay cambios para guardar"
+    if (mode === 'edit') {
+      const currentSnap = buildSnapshotString(resolutionForm, currentPensum)
+      if (!hasUnsavedChanges && currentSnap === initialEditSnapshot) {
+        setBannerMessage({ type: 'info', text: 'No hay cambios para guardar' })
+        onShowToast('No hay cambios para guardar', 'error')
+        return
+      }
+    }
+
+    let warningText = null
+    if (mode === 'edit') {
+      const removedCourses = getRemovedCoursesInColumns()
+      if (removedCourses.length > 0) {
+        warningText = `Atención: Se quitó ${removedCourses.length === 1 ? 'la asignatura' : 'las asignaturas'} ${removedCourses.join(', ')} de las columnas. Si tiene asignaciones en la programación académica vigente, al aceptar esas asignaciones se eliminarán.`
+      }
+    } else if (mode === 'create' && savedPensum.length > 0) {
+      warningText = `Ya existe una malla activa para el programa ${currentProgram.code_program}. Al confirmar, la malla anterior pasará a estado inactiva.`
+    }
+
+    setConfirmDialog({
+      title: mode === 'edit' ? 'Confirmar edición de malla' : 'Confirmar registro de resolución',
+      message: '¿La información ingresada es correcta?',
+      warningText,
+      confirmLabel: 'Aceptar',
+      cancelLabel: 'Cancelar',
+      onConfirm: () => executeSaveResolution(mode)
+    })
+  }
+
+  const executeSaveResolution = async (mode) => {
+    setConfirmDialog(null)
+    setSubmitting(true)
+    setBannerMessage(null)
+
+    const numSem = parseInt(resolutionForm.numero_semestre, 10) || totalSemesters
+    const numRes = (resolutionForm.numero_resolucion || activeNumeroResolucion || '').trim()
+
+    const flatItems = currentPensum.map(c => ({
+      code_course: (c.code_course || '').trim().toUpperCase(),
+      name_course: (c.name_course || '').trim(),
+      credits: parseInt(c.credits, 10) || 0,
+      semestre: Math.min(numSem, Math.max(1, parseInt(c.semestre, 10) || 1)),
+      horas_clase: c.horas_clase !== undefined ? parseInt(c.horas_clase, 10) : 4,
+      horas_independiente: c.horas_independiente !== undefined ? parseInt(c.horas_independiente, 10) : 8,
+      tipo_asignatura: inferTipoAsignatura(c)
+    }))
+
+    const payload = {
+      code_program: currentProgram.code_program,
+      numero_resolucion: numRes || undefined,
+      numero_semestre: numSem,
+      name_program: (resolutionForm.name_program || currentProgram.name_program || '').trim(),
+      descripcion: (resolutionForm.descripcion || activeMetaItem?.descripcion || '').trim(),
+      jornada: resolutionForm.jornada || currentProgram.jornada || 'DIURNA',
+      periodo_oferta: resolutionForm.periodo_oferta || currentProgram.ingreso || 'SEMESTRAL',
+      items: flatItems
+    }
+
+    try {
+      if (mode === 'edit') {
+        await updatePensumVersion(currentProgram.code_program, payload)
+        onShowToast('Resolución actualizada', 'success')
+      } else {
+        await savePensumVersion(currentProgram.code_program, payload)
+        onShowToast('Resolución registrada exitosamente', 'success')
+      }
+      setHasUnsavedChanges(false)
+      setEditorMode(null)
+      setIsResolutionFormOpen(false)
+      await onRefresh()
+    } catch (err) {
+      if (mode === 'create') {
+        const msg = 'No se pudo registrar la resolución'
+        setBannerMessage({ type: 'error', text: `${msg}: ${err.message || ''}`.trim() })
+        onShowToast(msg, 'error')
+      } else {
+        const msg = err.message || 'Error al actualizar la resolución'
+        setBannerMessage({ type: 'error', text: msg })
+        onShowToast(msg, 'error')
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Cancelar edición / creación (HU-032 Criterio 7 y HU-017 Criterio 4)
+  const handleCancelResolutionForm = () => {
+    const currentSnap = buildSnapshotString(resolutionForm, currentPensum)
+    const hasModifiedData = hasUnsavedChanges || (initialEditSnapshot && currentSnap !== initialEditSnapshot)
+    if (hasModifiedData) {
+      setConfirmDialog({
+        title: 'Confirmar cancelación',
+        message: '¿Está seguro de que desea cancelar? Los cambios no guardados se descartarán y la malla conservará su información original.',
+        warningText: null,
+        confirmLabel: 'Sí, descartar cambios',
+        cancelLabel: 'Seguir editando',
+        onConfirm: () => {
+          setConfirmDialog(null)
+          setDraftPensum(savedPensum)
+          setHasUnsavedChanges(false)
+          setEditorMode(null)
+          setIsResolutionFormOpen(false)
+          setFormErrors({})
+          setBannerMessage(null)
+        }
+      })
+    } else {
+      setEditorMode(null)
+      setIsResolutionFormOpen(false)
+      setFormErrors({})
+      setBannerMessage(null)
+    }
+  }
+
+  // Generador de nombre consecutivo para electivas
   const getConsecutiveElectiveName = useCallback(() => {
     if (!currentProgram) return 'Electiva Profesional I'
-    const programPensum = pensumList.filter(item => item.code_program === currentProgram.code_program)
-    const existingElectives = programPensum.filter(item => {
+    const existingElectives = currentPensum.filter(item => {
       const name = item.name_course?.toLowerCase() || ''
       const code = item.code_course?.toLowerCase() || ''
       return name.includes('electiv') || code.startsWith('ele')
@@ -302,7 +615,7 @@ export default function PensumView({
     const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV']
     const roman = romanNumerals[count - 1] || `${count}`
     return `Electiva Profesional ${roman}`
-  }, [currentProgram, pensumList])
+  }, [currentProgram, currentPensum])
 
   const handleSwitchToElective = () => {
     setAddMode('elective')
@@ -311,8 +624,8 @@ export default function PensumView({
     setElectiveCredits('')
   }
 
-  // Handle open add course modal
   const handleOpenAddModal = (semesterNum = 1) => {
+    if (!effectiveCanEdit) return
     setSelectedSemesterForAdd(semesterNum)
     setSelectedCourseForAdd(availableCourses[0]?.code_course || '')
     setCourseSearchModal('')
@@ -323,7 +636,6 @@ export default function PensumView({
     setIsAddModalOpen(true)
   }
 
-  // Handle adding course to pensum
   const handleAddCourse = async (e) => {
     e.preventDefault()
     if (!currentProgram) return
@@ -334,7 +646,6 @@ export default function PensumView({
         const nameClean = electiveName.trim() || getConsecutiveElectiveName()
         let codeClean = electiveCode.trim().toUpperCase()
 
-        // Si el código está vacío, generar un código derivado automáticamente
         if (!codeClean) {
           const romanPart = nameClean.split(' ').pop().toUpperCase()
           codeClean = `ELE-PROF-${romanPart}`.replace(/[^A-Z0-9-]/g, '')
@@ -344,9 +655,8 @@ export default function PensumView({
         }
 
         const parsedCredits = parseInt(electiveCredits, 10)
-        const creditsNum = isNaN(parsedCredits) || parsedCredits < 0 ? 0 : parsedCredits
+        const creditsNum = isNaN(parsedCredits) || parsedCredits < 0 ? 0 : Math.min(9, parsedCredits)
 
-        // Check if course already exists in asignaturas catalog
         const existingInCatalog = asignaturas.find(a => a.code_course.toUpperCase() === codeClean)
         if (!existingInCatalog) {
           await createAsignatura({
@@ -366,6 +676,9 @@ export default function PensumView({
         }
         setDraftPensum(previous => [...previous, elective])
         setHasUnsavedChanges(true)
+        if (!editorMode && isActiveMalla) {
+          setEditorMode('edit')
+        }
         onShowToast(`Electiva "${nameClean}" agregada al Semestre ${selectedSemesterForAdd}`, 'success')
       } else {
         if (!selectedCourseForAdd) {
@@ -382,6 +695,9 @@ export default function PensumView({
           activo: true
         }])
         setHasUnsavedChanges(true)
+        if (!editorMode && isActiveMalla) {
+          setEditorMode('edit')
+        }
         onShowToast(`Asignatura agregada al Semestre ${selectedSemesterForAdd}`, 'success')
       }
 
@@ -393,29 +709,25 @@ export default function PensumView({
     }
   }
 
-  // Handle quick move semester
   const handleShiftSemester = async (item, delta) => {
+    if (!effectiveCanEdit) return
     const newSem = item.semestre + delta
     if (newSem < 1 || newSem > totalSemesters) {
       onShowToast(`El semestre debe estar entre 1 y ${totalSemesters}`, 'error')
       return
     }
 
-    try {
-      setDraftPensum(previous => previous.map(course =>
-        course.code_course === item.code_course ? { ...course, semestre: newSem } : course
-      ))
-      setHasUnsavedChanges(true)
-      onShowToast(`Movida a Semestre ${newSem}`, 'success')
-    } catch (err) {
-      onShowToast(`Error: ${err.message}`, 'error')
-    }
+    setDraftPensum(previous => previous.map(course =>
+      course.code_course === item.code_course ? { ...course, semestre: newSem } : course
+    ))
+    setHasUnsavedChanges(true)
+    if (!editorMode && isActiveMalla) setEditorMode('edit')
+    onShowToast(`Movida a Semestre ${newSem}`, 'success')
   }
 
-  // Handle change semester from modal
   const handleConfirmMoveSemester = async (e) => {
     e.preventDefault()
-    if (!movingCourse) return
+    if (!movingCourse || !effectiveCanEdit) return
 
     setSubmitting(true)
     try {
@@ -425,6 +737,7 @@ export default function PensumView({
           : course
       ))
       setHasUnsavedChanges(true)
+      if (!editorMode && isActiveMalla) setEditorMode('edit')
       onShowToast(`Asignatura transferida al Semestre ${targetSemester}`, 'success')
       setMovingCourse(null)
     } catch (err) {
@@ -434,104 +747,92 @@ export default function PensumView({
     }
   }
 
-  // Handle remove from pensum
   const handleRemoveCourse = async (item) => {
+    if (!effectiveCanEdit) return
     if (!window.confirm(`¿Quitar "${item.name_course}" del pensum de ${currentProgram.name_program}?`)) {
       return
     }
 
-    try {
-      setDraftPensum(previous => previous.filter(course => course.code_course !== item.code_course))
-      setHasUnsavedChanges(true)
-      onShowToast(`Asignatura retirada del pensum`, 'success')
-    } catch (err) {
-      onShowToast(`Error al retirar: ${err.message}`, 'error')
-    }
-
+    setDraftPensum(previous => previous.filter(course => course.code_course !== item.code_course))
+    setHasUnsavedChanges(true)
+    if (!editorMode && isActiveMalla) setEditorMode('edit')
+    onShowToast('Asignatura retirada de la columna', 'success')
   }
-
-  const handleSavePensum = async () => {
-      if (!currentProgram || !hasUnsavedChanges) return
-      if (!window.confirm(`¿Desea guardar esta malla curricular? Pasará a ser la malla vigente de ${currentProgram.name_program}.`)) return
-      setSubmitting(true)
-      try {
-        await savePensumVersion(currentProgram.code_program, draftPensum)
-        setHasUnsavedChanges(false)
-        onShowToast('Malla curricular guardada y marcada como vigente', 'success')
-        await onRefresh()
-      } catch (err) {
-        onShowToast(`Error al guardar la malla: ${err.message}`, 'error')
-      } finally {
-        setSubmitting(false)
-      }
-    }
 
   const handleDeactivatePensum = async () => {
-      if (hasUnsavedChanges) {
-        onShowToast('Guarda o descarta los cambios antes de desactivar la malla', 'error')
-        return
-      }
-      if (!window.confirm(`¿Desactivar la malla vigente de ${currentProgram.name_program}? Podrás reactivarla desde el historial.`)) return
-      setSubmitting(true)
-      try {
-        await deactivatePensum(currentProgram.code_program)
-        onShowToast('Malla desactivada correctamente', 'success')
-        await onRefresh()
-      } catch (err) {
-        onShowToast(`Error al desactivar la malla: ${err.message}`, 'error')
-      } finally {
-        setSubmitting(false)
-      }
+    if (hasUnsavedChanges) {
+      onShowToast('Guarda o descarta los cambios antes de desactivar la malla', 'error')
+      return
     }
-
-  const handleOpenHistory = async () => {
-      setHistoryOpen(true)
-      setHistoryLoading(true)
-      try {
-        const history = await getPensumHistory(currentProgram.code_program)
-        setHistoryItems(history || [])
-        setSelectedHistoryVersion(null)
-        setHistoryDetail([])
-      } catch (err) {
-        onShowToast(`Error al cargar el historial: ${err.message}`, 'error')
-      } finally {
-        setHistoryLoading(false)
-      }
-    }
-
-  const handleSelectHistory = async (version) => {
-      setSelectedHistoryVersion(version)
-      setHistoryLoading(true)
-      try {
-        setHistoryDetail(await getPensumVersion(currentProgram.code_program, version))
-      } catch (err) {
-        onShowToast(`Error al cargar el detalle: ${err.message}`, 'error')
-      } finally {
-        setHistoryLoading(false)
-      }
-    }
-
-  const handleReactivatePensum = async () => {
-      if (selectedHistoryVersion === null) return
-      const hasCurrent = savedPensum.length > 0
-      const message = hasCurrent
-        ? 'La malla vigente actual será desactivada. ¿Desea reactivar la versión seleccionada?'
-        : '¿Desea reactivar la versión seleccionada como malla vigente?'
-      if (!window.confirm(message)) return
-      setSubmitting(true)
-      try {
-        await reactivatePensum(currentProgram.code_program, selectedHistoryVersion)
-        setHistoryOpen(false)
-        onShowToast('Malla reactivada correctamente', 'success')
-        await onRefresh()
-      } catch (err) {
-        onShowToast(`Error al reactivar la malla: ${err.message}`, 'error')
-      } finally {
-        setSubmitting(false)
+    if (!window.confirm(`¿Desactivar la malla vigente de ${currentProgram.name_program}? Podrás consultarla o reactivarla desde el historial.`)) return
+    setSubmitting(true)
+    try {
+      await deactivatePensum(currentProgram.code_program)
+      onShowToast('Malla desactivada correctamente', 'success')
+      await onRefresh()
+    } catch (err) {
+      onShowToast(`Error al desactivar la malla: ${err.message}`, 'error')
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  // Handle Print
+  const handleOpenHistory = async () => {
+    setHistoryOpen(true)
+    setHistoryLoading(true)
+    try {
+      const history = await getPensumHistory(currentProgram.code_program)
+      setHistoryItems(history || [])
+      setSelectedHistoryVersion(null)
+      setHistoryDetail([])
+    } catch (err) {
+      onShowToast(`Error al cargar el historial: ${err.message}`, 'error')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  const handleSelectHistory = async (version) => {
+    setSelectedHistoryVersion(version)
+    setHistoryLoading(true)
+    try {
+      setHistoryDetail(await getPensumVersion(currentProgram.code_program, version))
+    } catch (err) {
+      onShowToast(`Error al cargar el detalle: ${err.message}`, 'error')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  const handleInspectInactiveInGrid = () => {
+    if (selectedHistoryVersion === null) return
+    setViewingInactiveVersion(selectedHistoryVersion)
+    setInactiveVersionCourses(historyDetail)
+    setHistoryOpen(false)
+  }
+
+  const handleReactivatePensum = async (versionToReactivate = selectedHistoryVersion) => {
+    if (versionToReactivate === null) return
+    const hasCurrent = savedPensum.length > 0
+    const message = hasCurrent
+      ? 'La malla vigente actual será desactivada. ¿Desea reactivar la versión seleccionada?'
+      : '¿Desea reactivar la versión seleccionada como malla vigente?'
+    if (!window.confirm(message)) return
+    setSubmitting(true)
+    try {
+      await reactivatePensum(currentProgram.code_program, versionToReactivate)
+      setHistoryOpen(false)
+      setViewingInactiveVersion(null)
+      setInactiveVersionCourses([])
+      onShowToast('Malla reactivada correctamente', 'success')
+      await onRefresh()
+    } catch (err) {
+      onShowToast(`Error al reactivar la malla: ${err.message}`, 'error')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handlePrint = () => {
     window.print()
   }
@@ -557,7 +858,6 @@ export default function PensumView({
     <div className="pensum-container">
       {/* Program Selector & Actions Topbar */}
       <div className="pensum-header-card print-hide">
-        {/* Program Search Combobox */}
         <div className="program-search-wrapper">
           <label className="selector-label">
             <BookOpen size={18} className="text-primary" />
@@ -605,7 +905,6 @@ export default function PensumView({
                     >
                       <span className="prog-item-code">{prog.code_program}</span>
                       <span className="prog-item-name">{prog.name_program}</span>
-                      
                     </button>
                   ))
                 )}
@@ -619,31 +918,61 @@ export default function PensumView({
             className="btn-secondary"
             onClick={handleOpenHistory}
             disabled={submitting}
+            title="Consultar mallas inactivas en el historial"
           >
             <History size={16} />
             <span>Historial</span>
           </button>
-          {canEdit && (
-            <>
-              <button
-                className="btn-secondary"
-                onClick={handleDeactivatePensum}
-                disabled={submitting || savedPensum.length === 0 || hasUnsavedChanges}
-                title={hasUnsavedChanges ? 'Guarda primero los cambios pendientes' : 'Desactivar malla vigente'}
-              >
-                <Archive size={16} />
-                <span>Desactivar malla</span>
-              </button>
-              <button
-                className="btn-primary"
-                onClick={handleSavePensum}
-                disabled={submitting || !hasUnsavedChanges}
-              >
-                <Save size={16} />
-                <span>{submitting ? 'Guardando...' : 'Guardar malla'}</span>
-              </button>
-            </>
+
+          {/* HU-032 Criterio 1: Solo las mallas activas muestran "Editar". Las inactivas son de solo consulta. */}
+          {canEdit && isActiveMalla && (
+            <button
+              className="btn-primary"
+              onClick={handleOpenEditMalla}
+              disabled={submitting}
+              title="Editar datos de resolución y malla activa (HU-032)"
+            >
+              <Edit3 size={16} />
+              <span>Editar</span>
+            </button>
           )}
+
+          {/* HU-017: Botón "Registrar resolución de programa" */}
+          {canEdit && (
+            <button
+              className="btn-primary"
+              onClick={handleOpenCreateResolution}
+              disabled={submitting}
+              title="Registrar nueva resolución con número de resolución y número de semestres (HU-017)"
+            >
+              <FilePlus2 size={16} />
+              <span>Registrar resolución de programa</span>
+            </button>
+          )}
+
+          {canEdit && isActiveMalla && (
+            <button
+              className="btn-secondary"
+              onClick={handleDeactivatePensum}
+              disabled={submitting || savedPensum.length === 0 || hasUnsavedChanges}
+              title={hasUnsavedChanges ? 'Guarda primero los cambios pendientes' : 'Desactivar malla vigente'}
+            >
+              <Archive size={16} />
+              <span>Desactivar malla</span>
+            </button>
+          )}
+
+          {canEdit && (hasUnsavedChanges || editorMode) && !isViewingInactive && (
+            <button
+              className="btn-primary"
+              onClick={handleAttemptSaveResolution}
+              disabled={submitting}
+            >
+              <Save size={16} />
+              <span>{submitting ? 'Guardando...' : (editorMode === 'edit' ? 'Guardar edición' : 'Guardar malla')}</span>
+            </button>
+          )}
+
           <button
             className="btn-secondary"
             onClick={handlePrint}
@@ -653,7 +982,7 @@ export default function PensumView({
             <span>Imprimir / Exportar Malla</span>
           </button>
 
-          {canEdit && (
+          {effectiveCanEdit && (
             <button
               className="btn-primary"
               onClick={() => handleOpenAddModal(1)}
@@ -667,10 +996,290 @@ export default function PensumView({
         </div>
       </div>
 
+      {/* Banner de Malla Inactiva — Solo Consulta (HU-032 Criterio 1) */}
+      {isViewingInactive && (
+        <div className="warning-banner print-hide" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Eye size={18} />
+            <span>
+              <strong>Malla Inactiva (Versión {viewingInactiveVersion}) — Modo Solo Consulta:</strong> Las mallas inactivas son únicamente de consulta y no pueden ser editadas.
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {canEdit && (
+              <button
+                type="button"
+                className="btn-primary btn-sm"
+                onClick={() => handleReactivatePensum(viewingInactiveVersion)}
+                disabled={submitting}
+              >
+                <RotateCcw size={14} /> Reactivar esta versión
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => {
+                setViewingInactiveVersion(null)
+                setInactiveVersionCourses([])
+              }}
+            >
+              Volver a malla activa
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          FORMULARIO DE DATOS DE RESOLUCIÓN / EDICIÓN (SIN SEMESTRES ADENTRO)
+          Los semestres y asignaturas se gestionan directamente en las columnas
+          ===================================================================== */}
+      {isResolutionFormOpen && editorMode && (
+        <div className="section-container print-hide" style={{ marginBottom: '1.5rem' }}>
+          <div
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '14px',
+              padding: '1.5rem',
+              boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.08)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.85rem' }}>
+              <div>
+                <span className="banner-tag" style={{ marginBottom: '0.35rem', display: 'inline-block' }}>
+                  {editorMode === 'edit' ? 'HU-032 · Editar Malla Activa' : 'HU-017 · Registrar Resolución de Programa'}
+                </span>
+                <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#0f172a' }}>
+                  {editorMode === 'edit'
+                    ? `Editar resolución y malla — ${currentProgram?.code_program}`
+                    : `Nueva resolución de programa — ${currentProgram?.code_program}`}
+                </h2>
+                <small style={{ color: '#64748b' }}>
+                  Define el número de resolución y el número de semestres; las asignaturas se agregan y organizan directamente en las columnas de abajo.
+                </small>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleCancelResolutionForm}
+                disabled={submitting}
+              >
+                <X size={16} /> Cancelar
+              </button>
+            </div>
+
+            {bannerMessage && (
+              <div
+                className={bannerMessage.type === 'error' ? 'warning-banner' : 'info-banner'}
+                style={{
+                  marginBottom: '1rem',
+                  background: bannerMessage.type === 'error' ? '#fef2f2' : '#eff6ff',
+                  borderColor: bannerMessage.type === 'error' ? '#fecaca' : '#bfdbfe',
+                  color: bannerMessage.type === 'error' ? '#b91c1c' : '#1e40af'
+                }}
+              >
+                <AlertTriangle size={18} />
+                <span><strong>{bannerMessage.text}</strong></span>
+              </div>
+            )}
+
+            <form onSubmit={handleAttemptSaveResolution} noValidate>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+                  gap: '1rem',
+                  background: '#f8fafc',
+                  padding: '1rem',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0'
+                }}
+              >
+                {/* Número de resolución */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label htmlFor="res_numero_resolucion">Número de resolución *</label>
+                  <input
+                    id="res_numero_resolucion"
+                    type="text"
+                    maxLength={50}
+                    value={resolutionForm.numero_resolucion}
+                    onChange={(e) => setResolutionForm(prev => ({ ...prev, numero_resolucion: e.target.value }))}
+                    placeholder="Ej. RES-045-2026"
+                    style={formErrors.numero_resolucion ? { borderColor: '#dc2626', background: '#fff5f5' } : {}}
+                  />
+                  {formErrors.numero_resolucion && (
+                    <small style={{ color: '#dc2626', fontWeight: 500 }}>{formErrors.numero_resolucion}</small>
+                  )}
+                </div>
+
+                {/* Número de semestres (define las columnas de la malla) */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label htmlFor="res_numero_semestre">Número de semestres (columnas) *</label>
+                  <input
+                    id="res_numero_semestre"
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={resolutionForm.numero_semestre}
+                    onChange={(e) => setResolutionForm(prev => ({ ...prev, numero_semestre: e.target.value }))}
+                    placeholder="Ej. 10"
+                    style={formErrors.numero_semestre ? { borderColor: '#dc2626', background: '#fff5f5' } : {}}
+                  />
+                  {formErrors.numero_semestre && (
+                    <small style={{ color: '#dc2626', fontWeight: 500 }}>{formErrors.numero_semestre}</small>
+                  )}
+                </div>
+
+                {/* Nombre del programa */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label htmlFor="res_name_program">Nombre del programa académico *</label>
+                  <input
+                    id="res_name_program"
+                    type="text"
+                    maxLength={100}
+                    value={resolutionForm.name_program}
+                    onChange={(e) => setResolutionForm(prev => ({ ...prev, name_program: e.target.value }))}
+                    placeholder="Ej. Tecnología en Desarrollo de Software"
+                    style={formErrors.name_program ? { borderColor: '#dc2626', background: '#fff5f5' } : {}}
+                  />
+                  {formErrors.name_program && (
+                    <small style={{ color: '#dc2626', fontWeight: 500 }}>{formErrors.name_program}</small>
+                  )}
+                </div>
+
+                {/* Descripción */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label htmlFor="res_descripcion">Descripción *</label>
+                  <input
+                    id="res_descripcion"
+                    type="text"
+                    maxLength={100}
+                    value={resolutionForm.descripcion}
+                    onChange={(e) => setResolutionForm(prev => ({ ...prev, descripcion: e.target.value }))}
+                    placeholder="Ej. Resolución curricular actualizada"
+                    style={formErrors.descripcion ? { borderColor: '#dc2626', background: '#fff5f5' } : {}}
+                  />
+                  {formErrors.descripcion && (
+                    <small style={{ color: '#dc2626', fontWeight: 500 }}>{formErrors.descripcion}</small>
+                  )}
+                </div>
+
+                {/* Jornada */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label htmlFor="res_jornada">Jornada *</label>
+                  <select
+                    id="res_jornada"
+                    className="select-input"
+                    value={resolutionForm.jornada}
+                    onChange={(e) => setResolutionForm(prev => ({ ...prev, jornada: e.target.value }))}
+                    style={formErrors.jornada ? { borderColor: '#dc2626', background: '#fff5f5' } : {}}
+                  >
+                    <option value="DIURNA">Diurna</option>
+                    <option value="NOCTURNA">Nocturna</option>
+                  </select>
+                </div>
+
+                {/* Período de oferta */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label htmlFor="res_periodo">Período de oferta *</label>
+                  <select
+                    id="res_periodo"
+                    className="select-input"
+                    value={resolutionForm.periodo_oferta}
+                    onChange={(e) => setResolutionForm(prev => ({ ...prev, periodo_oferta: e.target.value }))}
+                    style={formErrors.periodo_oferta ? { borderColor: '#dc2626', background: '#fff5f5' } : {}}
+                  >
+                    <option value="SEMESTRAL">Semestral</option>
+                    <option value="ANUAL">Anual</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleCancelResolutionForm}
+                  disabled={submitting}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={submitting}
+                >
+                  <Save size={16} />
+                  <span>
+                    {submitting
+                      ? 'Guardando...'
+                      : editorMode === 'edit'
+                      ? 'Guardar cambios de resolución'
+                      : 'Guardar resolución'}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cuadro de diálogo de confirmación */}
+      {confirmDialog && (
+        <div className="modal-backdrop">
+          <div className="modal-card" style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h2>{confirmDialog.title}</h2>
+              <button className="modal-close-btn" onClick={() => setConfirmDialog(null)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.75rem' }}>
+                {confirmDialog.message}
+              </p>
+              {confirmDialog.warningText && (
+                <div
+                  className="warning-banner"
+                  style={{
+                    marginTop: '0.5rem',
+                    background: '#fffbeb',
+                    borderColor: '#fde68a',
+                    color: '#92400e'
+                  }}
+                >
+                  <AlertTriangle size={18} />
+                  <span>{confirmDialog.warningText}</span>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setConfirmDialog(null)}
+                disabled={submitting}
+              >
+                {confirmDialog.cancelLabel || 'Cancelar'}
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={confirmDialog.onConfirm}
+                disabled={submitting}
+              >
+                {confirmDialog.confirmLabel || 'Aceptar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {hasUnsavedChanges && (
         <div className="warning-banner print-hide">
           <AlertTriangle size={18} />
-          <span>Hay cambios sin guardar en esta malla curricular.</span>
+          <span>Hay cambios sin guardar en las columnas de esta malla curricular.</span>
         </div>
       )}
 
@@ -685,11 +1294,40 @@ export default function PensumView({
       {currentProgram && (
         <div className="program-overview-banner">
           <div className="program-main-info">
-            <div className="banner-tag">Malla Curricular Oficial</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div className="banner-tag">
+                {isViewingInactive
+                  ? `Malla Curricular Inactiva · Versión ${viewingInactiveVersion} (Solo Consulta)`
+                  : isActiveMalla
+                  ? 'Malla Curricular Oficial (Activa)'
+                  : 'Sin Malla Activa (Solo Consulta)'}
+              </div>
+              {isMallaEditada && (
+                <span
+                  className="code-chip"
+                  style={{
+                    background: '#fef3c7',
+                    color: '#92400e',
+                    border: '1px solid #fcd34d',
+                    fontSize: '0.75rem'
+                  }}
+                  title={fechaUltimaEdicion ? `Última edición: ${new Date(fechaUltimaEdicion).toLocaleString()}` : 'Esta malla ha sido editada'}
+                >
+                  Editada {fechaUltimaEdicion ? `(${new Date(fechaUltimaEdicion).toLocaleDateString()})` : ''}
+                </span>
+              )}
+            </div>
             <h1 className="program-banner-title">{currentProgram.name_program}</h1>
             <div className="program-tags-row">
               <span className="code-chip">Código: <strong>{currentProgram.code_program}</strong></span>
-              
+              {activeNumeroResolucion && (
+                <span className="code-chip">
+                  <FileText size={13} style={{ marginRight: '4px', verticalAlign: 'text-bottom' }} />
+                  Resolución: <strong>{activeNumeroResolucion}</strong>
+                </span>
+              )}
+              <span className="group-chip">Jornada: <strong>{currentProgram.jornada || 'DIURNA'}</strong></span>
+              <span className="group-chip">Oferta: <strong>{currentProgram.ingreso || 'SEMESTRAL'}</strong></span>
               <span className="group-chip">Duración: <strong>{totalSemesters} Semestres</strong></span>
             </div>
           </div>
@@ -712,24 +1350,22 @@ export default function PensumView({
       )}
 
       {/* Notice if no available courses */}
-      {availableCourses.length === 0 && asignaturas.length > 0 && (
+      {availableCourses.length === 0 && asignaturas.length > 0 && effectiveCanEdit && (
         <div className="info-banner print-hide">
           <Sparkles size={18} className="text-amber" />
           <span>
             Todas las asignaturas registradas ({asignaturas.length}) ya están asignadas en este pensum.
           </span>
-          {canEdit && (
-            <button className="btn-link" onClick={onNavigateToAsignaturas}>
-              Crear nuevas asignaturas en el Banco
-            </button>
-          )}
+          <button className="btn-link" onClick={onNavigateToAsignaturas}>
+            Crear nuevas asignaturas en el Banco
+          </button>
         </div>
       )}
 
       {asignaturas.length === 0 && (
         <div className="warning-banner print-hide">
           <HelpCircle size={18} />
-          <span>El banco de asignaturas está vacío. Agrega materias al catálogo para incluirlas en el pensum.</span>
+          <span>El banco de asignaturas está vacío. Agrega materias al catálogo para incluirlas en las columnas del pensum.</span>
           {canEdit && (
             <button className="btn-secondary btn-sm" onClick={onNavigateToAsignaturas}>
               Ir a Asignaturas
@@ -738,10 +1374,12 @@ export default function PensumView({
         </div>
       )}
 
-      {currentPensum.length === 0 && (
+      {currentPensum.length === 0 && !isViewingInactive && (
         <div className="info-banner print-hide">
           <Archive size={18} />
-          <span>Este programa no tiene una malla vigente. Puedes crear una con las asignaturas disponibles o revisar el historial.</span>
+          <span>
+            Este programa no tiene una malla activa. Usa "Registrar resolución de programa" y agrega las asignaturas en las columnas de cada semestre.
+          </span>
           <button className="btn-link" onClick={handleOpenHistory}>Ver historial</button>
         </div>
       )}
@@ -766,7 +1404,7 @@ export default function PensumView({
                       </span>
                     </div>
                   </div>
-                  {canEdit && (
+                  {effectiveCanEdit && (
                     <button
                       className="btn-quick-add print-hide"
                       onClick={() => handleOpenAddModal(semNum)}
@@ -781,7 +1419,7 @@ export default function PensumView({
                   {coursesInSem.length === 0 ? (
                     <div className="semester-empty-placeholder">
                       <span>Semestre sin materias</span>
-                      {canEdit && (
+                      {effectiveCanEdit && (
                         <button
                           className="btn-add-ghost print-hide"
                           onClick={() => handleOpenAddModal(semNum)}
@@ -792,7 +1430,9 @@ export default function PensumView({
                     </div>
                   ) : (
                     coursesInSem.map((item) => {
-                      const isElective = item.name_course?.toLowerCase().includes('electiv') || item.code_course?.toLowerCase().startsWith('ele')
+                      const isElective =
+                        item.name_course?.toLowerCase().includes('electiv') ||
+                        item.code_course?.toLowerCase().startsWith('ele')
                       return (
                         <div key={item.code_course} className="pensum-course-card">
                           <div className="pensum-course-card-top">
@@ -807,7 +1447,7 @@ export default function PensumView({
                                 {item.credits ?? 0} {item.credits === 1 ? 'créd' : 'créds'}
                               </span>
                             </div>
-                            {canEdit && (
+                            {effectiveCanEdit && (
                               <div className="pensum-card-tools print-hide">
                                 <button
                                   className="btn-card-tool"
@@ -832,7 +1472,7 @@ export default function PensumView({
 
                           <h4 className="pensum-course-name">{item.name_course}</h4>
 
-                          {canEdit && (
+                          {effectiveCanEdit && (
                             <div className="pensum-card-navigation print-hide">
                               <button
                                 className="btn-nav-shift"
@@ -883,7 +1523,7 @@ export default function PensumView({
                 </span>
               </div>
               <p className="electives-dock-desc">
-                {currentFacultyObj 
+                {currentFacultyObj
                   ? <>Electivas especializadas de la facultad <strong>{currentFacultyObj.nombre || currentFacultyObj.Nombre}</strong> y electivas comunes / complementarias institucionales.</>
                   : <>Electivas especializadas de la propia carrera y electivas comunes / complementarias institucionales.</>
                 }
@@ -892,7 +1532,6 @@ export default function PensumView({
           </div>
 
           <div className="electives-dock-controls">
-            {/* Indicador de Facultad de la Carrera (Fijo e informativo, sin opción de cambiarla) */}
             {currentFacultyObj && (
               <div className="dock-faculty-tag" title="Facultad a la que pertenece esta carrera">
                 <Building2 size={14} />
@@ -900,7 +1539,6 @@ export default function PensumView({
               </div>
             )}
 
-            {/* Buscador de Electivas */}
             <div className="dock-search-box">
               <Search size={14} className="dock-search-icon" />
               <input
@@ -914,7 +1552,6 @@ export default function PensumView({
               )}
             </div>
 
-            {/* Pestañas de Filtro */}
             <div className="dock-tabs-group">
               <button
                 type="button"
@@ -939,23 +1576,20 @@ export default function PensumView({
               </button>
             </div>
 
-            {/* Botón Minimizar / Expandir */}
             <button
               type="button"
               className="btn-dock-toggle"
               onClick={() => setIsElectivesDockExpanded(!isElectivesDockExpanded)}
-              title={isElectivesDockExpanded ? "Minimizar barra" : "Expandir barra"}
+              title={isElectivesDockExpanded ? 'Minimizar barra' : 'Expandir barra'}
             >
               {isElectivesDockExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
             </button>
           </div>
         </div>
 
-        {/* Contenido Expandible */}
         {isElectivesDockExpanded && (
           <div className="electives-dock-body">
             <div className="electives-split-grid">
-              {/* COLUMNA 1: ELECTIVAS ESPECIALIZADAS */}
               {(electivesTabFilter === 'all' || electivesTabFilter === 'especializadas') && (
                 <div className="electives-dock-column column-especializadas">
                   <div className="dock-column-header">
@@ -988,16 +1622,13 @@ export default function PensumView({
                               </span>
                             </div>
                             <h5 className="dock-course-name">{el.name_course}</h5>
-                            
                             <div className="dock-card-actions">
                               {inPensum ? (
                                 <span className="dock-assigned-badge">
                                   <CheckCircle2 size={13} /> En Semestre {inPensum.semestre}
                                 </span>
                               ) : (
-                                <span className="dock-available-badge">
-                                  Disponible
-                                </span>
+                                <span className="dock-available-badge">Disponible</span>
                               )}
                             </div>
                           </div>
@@ -1008,7 +1639,6 @@ export default function PensumView({
                 </div>
               )}
 
-              {/* COLUMNA 2: ELECTIVAS COMUNES / COMPLEMENTARIAS */}
               {(electivesTabFilter === 'all' || electivesTabFilter === 'comunes') && (
                 <div className="electives-dock-column column-comunes">
                   <div className="dock-column-header">
@@ -1016,7 +1646,7 @@ export default function PensumView({
                       <span className="dock-pill-tag tag-comun">
                         <Sparkles size={13} /> Comunes / Complementarias
                       </span>
-                      <h4>Transversales Institucionales </h4>
+                      <h4>Transversales Institucionales</h4>
                     </div>
                     <span className="dock-count-badge">{electivasComunes.length} materias</span>
                   </div>
@@ -1041,16 +1671,13 @@ export default function PensumView({
                               </span>
                             </div>
                             <h5 className="dock-course-name">{el.name_course}</h5>
-                            
                             <div className="dock-card-actions">
                               {inPensum ? (
                                 <span className="dock-assigned-badge">
                                   <CheckCircle2 size={13} /> En Semestre {inPensum.semestre}
                                 </span>
                               ) : (
-                                <span className="dock-available-badge">
-                                  Disponible
-                                </span>
+                                <span className="dock-available-badge">Disponible</span>
                               )}
                             </div>
                           </div>
@@ -1065,12 +1692,12 @@ export default function PensumView({
         )}
       </div>
 
-      {/* Modal: Asignar Asignatura al Pensum */}
+      {/* Modal: Historial de mallas inactivas (Solo consulta + Reactivar + Registro de edición) */}
       {historyOpen && (
         <div className="modal-backdrop">
           <div className="modal-card" style={{ maxWidth: '760px' }}>
             <div className="modal-header">
-              <h2>Historial de mallas</h2>
+              <h2>Historial de mallas (Inactivas — Solo consulta)</h2>
               <button className="modal-close-btn" onClick={() => setHistoryOpen(false)}>
                 <X size={20} />
               </button>
@@ -1083,7 +1710,7 @@ export default function PensumView({
                   <p>No hay mallas históricas para este programa.</p>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(190px, 0.8fr) 1.5fr', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(210px, 0.9fr) 1.5fr', gap: '1rem' }}>
                   <div className="course-picker-list">
                     {historyItems.map(item => (
                       <button
@@ -1094,13 +1721,20 @@ export default function PensumView({
                         style={{ textAlign: 'left', border: 0 }}
                       >
                         <div className="picker-item-details">
-                          <strong>Versión {item.version}</strong>
+                          <strong>
+                            Versión {item.version} {item.numero_resolucion ? `· Res. ${item.numero_resolucion}` : ''}
+                          </strong>
                           <small>
                             Desactivada: {item.fechaDesactivacion
                               ? new Date(item.fechaDesactivacion).toLocaleString()
                               : 'Sin fecha'}
                           </small>
-                          <small>{item.totalAsignaturas} asignaturas</small>
+                          <small>
+                            {item.totalAsignaturas} asignaturas
+                            {item.editada
+                              ? ` · Editada (${item.fecha_edicion ? new Date(item.fecha_edicion).toLocaleDateString() : 'Sí'})`
+                              : ' · Sin ediciones'}
+                          </small>
                         </div>
                       </button>
                     ))}
@@ -1112,29 +1746,46 @@ export default function PensumView({
                       </div>
                     ) : (
                       <>
-                        <h3>Detalle de la versión {selectedHistoryVersion}</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                          <h3 style={{ margin: 0 }}>
+                            Detalle de la versión {selectedHistoryVersion}
+                            {historyDetail[0]?.numero_resolucion ? ` (Resolución ${historyDetail[0].numero_resolucion})` : ''}
+                          </h3>
+                          <span className="code-chip">Solo consulta</span>
+                        </div>
                         <div className="course-picker-list">
                           {historyDetail.map(item => (
                             <div key={item.code_course} className="course-picker-item">
                               <div className="picker-item-details">
                                 <strong>{item.name_course}</strong>
-                                <small>{item.code_course} · Semestre {item.semestre}</small>
+                                <small>
+                                  {item.code_course} · Semestre {item.semestre} · {item.credits ?? 0} créditos
+                                </small>
                               </div>
                             </div>
                           ))}
                         </div>
-                        {canEdit && (
+                        <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1rem' }}>
                           <button
                             type="button"
-                            className="btn-primary"
-                            onClick={handleReactivatePensum}
-                            disabled={submitting}
-                            style={{ marginTop: '1rem' }}
+                            className="btn-secondary"
+                            onClick={handleInspectInactiveInGrid}
                           >
-                            <RotateCcw size={16} />
-                            {submitting ? 'Reactivando...' : 'Reactivar malla'}
+                            <Eye size={16} />
+                            Ver en columnas (Solo consulta)
                           </button>
-                        )}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="btn-primary"
+                              onClick={() => handleReactivatePensum(selectedHistoryVersion)}
+                              disabled={submitting}
+                            >
+                              <RotateCcw size={16} />
+                              {submitting ? 'Reactivando...' : 'Reactivar malla'}
+                            </button>
+                          )}
+                        </div>
                       </>
                     )}
                   </div>
@@ -1145,6 +1796,7 @@ export default function PensumView({
         </div>
       )}
 
+      {/* Modal: Agregar Asignatura a la columna del Semestre */}
       {isAddModalOpen && (
         <div className="modal-backdrop">
           <div className="modal-card">
@@ -1170,7 +1822,6 @@ export default function PensumView({
                   </select>
                 </div>
 
-                {/* Seleccionador de Modo: Catálogo vs Electiva (Campos Vacíos) */}
                 <div className="add-mode-tabs">
                   <button
                     type="button"
@@ -1233,10 +1884,10 @@ export default function PensumView({
                               onChange={() => setSelectedCourseForAdd(c.code_course)}
                             />
                             <div className="picker-item-details">
-                                <div className="picker-item-info">
-                                  <span className="picker-code">{c.code_course}</span>
-                                  <span className="picker-name">{c.name_course}</span>
-                                </div>
+                              <div className="picker-item-info">
+                                <span className="picker-code">{c.code_course}</span>
+                                <span className="picker-name">{c.name_course}</span>
+                              </div>
                               <span className="picker-credits-tag">
                                 {c.credits && c.credits > 0 ? `${c.credits} ${c.credits === 1 ? 'crédito' : 'créditos'}` : '? créditos'}
                               </span>
@@ -1245,26 +1896,14 @@ export default function PensumView({
                         ))
                       )}
                     </div>
-
-                    <div className="catalog-elective-shortcut">
-                      <span>¿Quieres agregar una electiva personalizada?</span>
-                      <button
-                        type="button"
-                        className="btn-shortcut-elective"
-                        onClick={handleSwitchToElective}
-                      >
-                        <Sparkles size={14} /> Elegir que sea Electiva (Campos con ?)
-                      </button>
-                    </div>
                   </>
                 ) : (
-                  /* Formulario de Asignatura Electiva */
                   <div className="elective-form-card">
                     <div className="elective-info-banner">
                       <Sparkles size={18} className="text-purple" />
                       <div>
                         <strong>Campos para Asignatura Electiva</strong>
-                        <p>Nombre consecutivo ("Electiva Profesional I, II..."), código vacío y créditos con '?'.</p>
+                        <p>Nombre consecutivo ("Electiva Profesional I, II..."), código especial "ELE-PROF-I, II..." y créditos de 1 dígito.</p>
                       </div>
                     </div>
 
@@ -1273,11 +1912,10 @@ export default function PensumView({
                       <input
                         id="modal_elective_code"
                         type="text"
-                        placeholder="Vacío (se asignará código automático si lo dejas en blanco)"
+                        placeholder="Vacío (se asignará ELE-PROF-I, II... automáticamente)"
                         value={electiveCode}
                         onChange={(e) => setElectiveCode(e.target.value)}
                       />
-                      <small className="form-hint">Puedes dejarlo vacío o escribir un código personalizado.</small>
                     </div>
 
                     <div className="form-group">
@@ -1291,7 +1929,6 @@ export default function PensumView({
                         required
                         autoFocus
                       />
-                      <small className="form-hint">Nombre consecutivo asignado (editable).</small>
                     </div>
 
                     <div className="form-group">
@@ -1299,11 +1936,11 @@ export default function PensumView({
                       <input
                         id="modal_elective_credits"
                         type="text"
-                        placeholder="?"
+                        maxLength={1}
+                        placeholder="3"
                         value={electiveCredits}
                         onChange={(e) => setElectiveCredits(e.target.value)}
                       />
-                      <small className="form-hint">Muestra '?' por defecto si está vacío o sin definir.</small>
                     </div>
                   </div>
                 )}
