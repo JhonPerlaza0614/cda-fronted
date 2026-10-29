@@ -339,48 +339,48 @@ export async function getAllPensum() {
 }
 
 export async function savePensumVersion(code_program, items) {
-    try {
-      return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/guardar`, {
-        method: 'POST',
-        body: JSON.stringify({
-          code_program,
-          items: items.map(item => ({
-            code_course: item.code_course,
-            semestre: parseInt(item.semestre, 10)
-          }))
-        })
-      })
-    } catch (err) {
-      if (!isBackendUnavailable(err)) throw err
-      console.warn('Fallo backend en savePensumVersion, fallback a Supabase:', err.message)
-      const { data: current, error: currentError } = await supabase
-        .from('pensum_academico')
-        .select('version')
-        .eq('code_program', code_program)
-        .order('version', { ascending: false })
-        .limit(1)
-      if (currentError) throw currentError
-      const nextVersion = (current?.[0]?.version || 0) + 1
-      const now = new Date().toISOString()
-      const { error: deactivateError } = await supabase
-        .from('pensum_academico')
-        .update({ vigente: false, fecha_desactivacion: now })
-        .eq('code_program', code_program)
-        .eq('vigente', true)
-      if (deactivateError) throw deactivateError
-      const payload = items.map(item => ({
+  try {
+    return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/guardar`, {
+      method: 'POST',
+      body: JSON.stringify({
         code_program,
-        code_course: item.code_course,
-        version: nextVersion,
-        semestre: parseInt(item.semestre, 10),
-        vigente: true,
-        activo: true
-      }))
-      if (payload.length === 0) return []
-      const { data, error } = await supabase.from('pensum_academico').insert(payload).select()
-      if (error) throw error
-      return data || []
-    }
+        items: items.map(item => ({
+          code_course: item.code_course,
+          semestre: parseInt(item.semestre, 10)
+        }))
+      })
+    })
+  } catch (err) {
+    if (!isBackendUnavailable(err)) throw err
+    console.warn('Fallo backend en savePensumVersion, fallback a Supabase:', err.message)
+    const { data: current, error: currentError } = await supabase
+      .from('pensum_academico')
+      .select('version')
+      .eq('code_program', code_program)
+      .order('version', { ascending: false })
+      .limit(1)
+    if (currentError) throw currentError
+    const nextVersion = (current?.[0]?.version || 0) + 1
+    const now = new Date().toISOString()
+    const { error: deactivateError } = await supabase
+      .from('pensum_academico')
+      .update({ vigente: false, fecha_desactivacion: now })
+      .eq('code_program', code_program)
+      .eq('vigente', true)
+    if (deactivateError) throw deactivateError
+    const payload = items.map(item => ({
+      code_program,
+      code_course: item.code_course,
+      version: nextVersion,
+      semestre: parseInt(item.semestre, 10),
+      vigente: true,
+      activo: true
+    }))
+    if (payload.length === 0) return []
+    const { data, error } = await supabase.from('pensum_academico').insert(payload).select()
+    if (error) throw error
+    return data || []
+  }
 }
 
 export async function getPensumHistory(code_program) {
@@ -397,15 +397,15 @@ export async function getPensumHistory(code_program) {
       .order('fecha_desactivacion', { ascending: false })
     if (error) throw error
     const grouped = new Map()
-    ;(data || []).forEach(item => {
-      const current = grouped.get(item.version) || {
-        version: item.version,
-        fechaDesactivacion: item.fecha_desactivacion,
-        totalAsignaturas: 0
-      }
-      current.totalAsignaturas += 1
-      grouped.set(item.version, current)
-    })
+      ; (data || []).forEach(item => {
+        const current = grouped.get(item.version) || {
+          version: item.version,
+          fechaDesactivacion: item.fecha_desactivacion,
+          totalAsignaturas: 0
+        }
+        current.totalAsignaturas += 1
+        grouped.set(item.version, current)
+      })
     return [...grouped.values()]
   }
 }
@@ -589,16 +589,8 @@ export async function checkDatabaseHealth() {
   }
 
   try {
-<<<<<<< HEAD
     // /actuator/health es público: no requiere token y no descarga datos
     const res = await fetch(`${API_ROOT}/actuator/health`, { method: 'GET' })
-=======
-    const token = getAuthToken()
-    const res = await fetch(`${BACKEND_URL}/programas`, {
-      method: 'GET',
-      headers: token ? { Authorization: `Bearer ${token}` } : {}
-    })
->>>>>>> origin/develop
     if (res.ok) {
       results.connected = true
       results.backendConnected = true

@@ -40,9 +40,7 @@ export default function PensumView({
   selectedProgramCode,
   setSelectedProgramCode,
   pensumList,
-  onRefreshProgram,
-  onPatchItem,
-  onRemoveItem,
+  onRefresh,
   onShowToast,
   onNavigateToAsignaturas,
   onNavigateToProgramas,
@@ -82,7 +80,7 @@ export default function PensumView({
   const programInputRef = useRef(null)
   const comboboxRef = useRef(null)
 
-  // Estado del arrastre de tarjetas entre semestres (drag & drop)
+  // Arrastre de tarjetas entre semestres (solo con permiso de edición)
   const dragItemRef = useRef(null)
   const [draggingCode, setDraggingCode] = useState(null)
   const [dragOverSem, setDragOverSem] = useState(null)
@@ -99,9 +97,9 @@ export default function PensumView({
     return () => window.removeEventListener('resize', measure)
   }, [])
 
-  // Navegación de la malla: scroll horizontal, arrastre con el mouse y saltos por semestre
+  // Navegación de la malla: scroll horizontal, arrastre del fondo con el mouse y saltos por semestre
   const mallaRef = useRef(null)
-  const dragRef = useRef({ active: false, startX: 0, startLeft: 0 })
+  const panRef = useRef({ active: false, startX: 0, startLeft: 0 })
 
   const scrollMalla = (direction) => {
     mallaRef.current?.scrollBy({ left: direction * 300, behavior: 'smooth' })
@@ -116,22 +114,25 @@ export default function PensumView({
   }
 
   const handleMallaMouseDown = (e) => {
-    if (e.button !== 0 || e.target.closest('button, input, select, a, label, .pensum-course-card')) return
-    dragRef.current = { active: true, startX: e.clientX, startLeft: mallaRef.current.scrollLeft }
+    const skip = canEdit
+      ? 'button, input, select, a, label, .pensum-course-card'
+      : 'button, input, select, a, label'
+    if (e.button !== 0 || e.target.closest(skip)) return
+    panRef.current = { active: true, startX: e.clientX, startLeft: mallaRef.current.scrollLeft }
   }
 
   const handleMallaMouseMove = (e) => {
-    const drag = dragRef.current
-    if (!drag.active) return
-    const dx = e.clientX - drag.startX
+    const pan = panRef.current
+    if (!pan.active) return
+    const dx = e.clientX - pan.startX
     if (Math.abs(dx) > 4) {
       mallaRef.current.classList.add('is-dragging')
-      mallaRef.current.scrollLeft = drag.startLeft - dx
+      mallaRef.current.scrollLeft = pan.startLeft - dx
     }
   }
 
-  const endMallaDrag = () => {
-    dragRef.current.active = false
+  const endMallaPan = () => {
+    panRef.current.active = false
     mallaRef.current?.classList.remove('is-dragging')
   }
 
@@ -442,7 +443,6 @@ export default function PensumView({
       }
 
       setIsAddModalOpen(false)
-      onRefreshProgram(currentProgram.code_program, { withAsignaturas: addMode === 'elective' })
     } catch (err) {
       onShowToast(`Error: ${err.message || 'No se pudo agregar la asignatura'}`, 'error')
     } finally {
@@ -450,21 +450,14 @@ export default function PensumView({
     }
   }
 
-  // Mueve una materia a otro semestre: se ve al instante y se revierte si el servidor falla
-  const moveCourseTo = async (item, newSem) => {
-    if (newSem === item.semestre) return
-    const prevSem = item.semestre
-    onPatchItem(item.code_program, item.code_course, { semestre: newSem })
-    try {
-      setDraftPensum(previous => previous.map(course =>
-        course.code_course === item.code_course ? { ...course, semestre: newSem } : course
-      ))
-      setHasUnsavedChanges(true)
-      onShowToast(`Movida a Semestre ${newSem}`, 'success')
-    } catch (err) {
-      onPatchItem(item.code_program, item.code_course, { semestre: prevSem })
-      onShowToast(`Error: ${err.message}`, 'error')
-    }
+  // Mueve una materia de semestre dentro del borrador (se guarda con "Guardar malla")
+  const moveCourseTo = (item, newSem) => {
+    if (!canEdit || newSem === item.semestre) return
+    setDraftPensum(previous => previous.map(course =>
+      course.code_course === item.code_course ? { ...course, semestre: newSem } : course
+    ))
+    setHasUnsavedChanges(true)
+    onShowToast(`Movida a Semestre ${newSem}`, 'success')
   }
 
   // Handle quick move semester (flechas de la tarjeta)
@@ -475,6 +468,15 @@ export default function PensumView({
       return
     }
     moveCourseTo(item, newSem)
+  }
+
+  // Descartar los cambios pendientes y volver a la malla guardada
+  const handleDiscardChanges = () => {
+    if (!hasUnsavedChanges) return
+    if (!window.confirm('¿Descartar los cambios sin guardar de esta malla?')) return
+    setDraftPensum(savedPensum)
+    setHasUnsavedChanges(false)
+    onShowToast('Cambios descartados', 'info')
   }
 
   // Drag & drop de tarjetas entre columnas
@@ -522,12 +524,12 @@ export default function PensumView({
 
     setSubmitting(true)
     try {
-      await updateCourseSemester({
-        code_program: movingCourse.code_program,
-        code_course: movingCourse.code_course,
-        semestre: targetSemester
-      })
-      onPatchItem(movingCourse.code_program, movingCourse.code_course, { semestre: targetSemester })
+      setDraftPensum(previous => previous.map(course =>
+        course.code_course === movingCourse.code_course
+          ? { ...course, semestre: targetSemester }
+          : course
+      ))
+      setHasUnsavedChanges(true)
       onShowToast(`Asignatura transferida al Semestre ${targetSemester}`, 'success')
       setMovingCourse(null)
     } catch (err) {
@@ -544,11 +546,8 @@ export default function PensumView({
     }
 
     try {
-      await removeCourseFromPensum({
-        code_program: item.code_program,
-        code_course: item.code_course
-      })
-      onRemoveItem(item.code_program, item.code_course)
+      setDraftPensum(previous => previous.filter(course => course.code_course !== item.code_course))
+      setHasUnsavedChanges(true)
       onShowToast(`Asignatura retirada del pensum`, 'success')
     } catch (err) {
       onShowToast(`Error al retirar: ${err.message}`, 'error')
@@ -867,6 +866,17 @@ export default function PensumView({
         <button type="button" className="malla-nav-btn" onClick={() => scrollMalla(1)} title="Desplazar a la derecha">
           <ChevronRight size={16} />
         </button>
+        {canEdit && hasUnsavedChanges && (
+          <div className="malla-nav-actions">
+            <span className="malla-nav-pending">Cambios sin guardar</span>
+            <button type="button" className="btn-secondary btn-sm" onClick={handleDiscardChanges} disabled={submitting}>
+              Descartar
+            </button>
+            <button type="button" className="btn-primary btn-sm" onClick={handleSavePensum} disabled={submitting}>
+              <Save size={14} /> {submitting ? 'Guardando...' : 'Guardar malla'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div
@@ -874,8 +884,8 @@ export default function PensumView({
         ref={mallaRef}
         onMouseDown={handleMallaMouseDown}
         onMouseMove={handleMallaMouseMove}
-        onMouseUp={endMallaDrag}
-        onMouseLeave={endMallaDrag}
+        onMouseUp={endMallaPan}
+        onMouseLeave={endMallaPan}
         onDragOver={handleMallaDragOver}
       >
         <div className="malla-grid">
@@ -887,8 +897,8 @@ export default function PensumView({
                 key={semNum}
                 className={`semester-column ${dragOverSem === semNum ? 'drop-target' : ''}`}
                 data-sem={semNum}
-                onDragOver={(e) => handleColumnDragOver(e, semNum)}
-                onDrop={(e) => handleColumnDrop(e, semNum)}
+                onDragOver={canEdit ? (e) => handleColumnDragOver(e, semNum) : undefined}
+                onDrop={canEdit ? (e) => handleColumnDrop(e, semNum) : undefined}
               >
                 <div className="semester-column-header">
                   <div className="semester-title">
@@ -933,9 +943,9 @@ export default function PensumView({
                         <div
                           key={item.code_course}
                           className={`pensum-course-card ${draggingCode === item.code_course ? 'is-dragging-card' : ''}`}
-                          draggable
-                          onDragStart={(e) => handleCardDragStart(e, item)}
-                          onDragEnd={handleCardDragEnd}
+                          draggable={canEdit}
+                          onDragStart={canEdit ? (e) => handleCardDragStart(e, item) : undefined}
+                          onDragEnd={canEdit ? handleCardDragEnd : undefined}
                         >
                           <div className="pensum-course-card-top">
                             <div className="pensum-card-badge-row">
@@ -949,41 +959,43 @@ export default function PensumView({
                                 {item.credits ?? 0} {item.credits === 1 ? 'créd' : 'créds'}
                               </span>
                             </div>
-                            <div className="pensum-card-tools print-hide">
-                              <button
-                                className="btn-card-tool"
-                                disabled={semNum <= 1}
-                                onClick={() => handleShiftSemester(item, -1)}
-                                title="Mover a semestre anterior"
-                              >
-                                <ChevronLeft size={14} />
-                              </button>
-                              <button
-                                className="btn-card-tool"
-                                disabled={semNum >= totalSemesters}
-                                onClick={() => handleShiftSemester(item, 1)}
-                                title="Mover a semestre siguiente"
-                              >
-                                <ChevronRight size={14} />
-                              </button>
-                              <button
-                                className="btn-card-tool"
-                                onClick={() => {
-                                  setMovingCourse(item)
-                                  setTargetSemester(item.semestre)
-                                }}
-                                title="Cambiar de semestre"
-                              >
-                                <ArrowRightLeft size={13} />
-                              </button>
-                              <button
-                                className="btn-card-tool tool-danger"
-                                onClick={() => handleRemoveCourse(item)}
-                                title="Quitar del pensum"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
+                            {canEdit && (
+                              <div className="pensum-card-tools print-hide">
+                                <button
+                                  className="btn-card-tool"
+                                  disabled={semNum <= 1}
+                                  onClick={() => handleShiftSemester(item, -1)}
+                                  title="Mover a semestre anterior"
+                                >
+                                  <ChevronLeft size={14} />
+                                </button>
+                                <button
+                                  className="btn-card-tool"
+                                  disabled={semNum >= totalSemesters}
+                                  onClick={() => handleShiftSemester(item, 1)}
+                                  title="Mover a semestre siguiente"
+                                >
+                                  <ChevronRight size={14} />
+                                </button>
+                                <button
+                                  className="btn-card-tool"
+                                  onClick={() => {
+                                    setMovingCourse(item)
+                                    setTargetSemester(item.semestre)
+                                  }}
+                                  title="Cambiar de semestre"
+                                >
+                                  <ArrowRightLeft size={13} />
+                                </button>
+                                <button
+                                  className="btn-card-tool tool-danger"
+                                  onClick={() => handleRemoveCourse(item)}
+                                  title="Quitar del pensum"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                           <h4 className="pensum-course-name">{item.name_course}</h4>

@@ -14,7 +14,6 @@ import {
   getProgramas,
   getAsignaturas,
   getAllPensum,
-  getPensumByProgram,
   checkDatabaseHealth
 } from './services/academicService'
 import { AlertCircle, Database, RefreshCw, Sparkles, Clock } from 'lucide-react'
@@ -103,48 +102,11 @@ export default function App({ user, onLogout }) {
     } finally {
       if (seq === loadSeq.current && !isSilent) setLoading(false)
     }
-  }, [canSeeAcademicData, isDocente, applyAcademicResources, loadAcademicResources])
+  }, [canSeeAcademicData, isDocente])
 
   useEffect(() => {
     loadData()
   }, [loadData])
-
-  // --- Actualizaciones parciales de la malla (sin recargar todo) ---
-
-  // Cambió algo en un programa: se vuelve a pedir SOLO el pensum de ese programa
-  const refreshProgram = useCallback(async (codeProgram, { withAsignaturas = false } = {}) => {
-    try {
-      const [rows, asigs] = await Promise.all([
-        getPensumByProgram(codeProgram),
-        withAsignaturas ? getAsignaturas() : Promise.resolve(null),
-      ])
-      const asigMap = new Map((asigs || []).map(a => [a.code_course, a]))
-      setPensumList(prev => [
-        ...prev.filter(item => item.code_program !== codeProgram),
-        ...rows.map(item => withCourseInfo(item, asigMap)),
-      ])
-      if (asigs) setAsignaturas(asigs)
-    } catch (err) {
-      console.error('Error al refrescar el programa, recarga completa:', err)
-      loadData(true)
-    }
-  }, [loadData])
-
-  // Una materia cambió de semestre: se actualiza en memoria, sin pedir nada
-  const patchPensumItem = useCallback((codeProgram, codeCourse, patch) => {
-    setPensumList(prev => prev.map(item =>
-      item.code_program === codeProgram && item.code_course === codeCourse
-        ? { ...item, ...patch }
-        : item
-    ))
-  }, [])
-
-  // Una materia salió del pensum
-  const removePensumItem = useCallback((codeProgram, codeCourse) => {
-    setPensumList(prev => prev.filter(item =>
-      !(item.code_program === codeProgram && item.code_course === codeCourse)
-    ))
-  }, [])
 
   const handleSelectProgramForPensum = (code) => {
     setSelectedProgramCode(code)
@@ -241,9 +203,6 @@ export default function App({ user, onLogout }) {
                 setSelectedProgramCode={setSelectedProgramCode}
                 pensumList={pensumList}
                 onRefresh={() => loadData(true)}
-                onRefreshProgram={refreshProgram}
-                onPatchItem={patchPensumItem}
-                onRemoveItem={removePensumItem}
                 onShowToast={showToast}
                 onNavigateToAsignaturas={() => setActiveTab('asignaturas')}
                 onNavigateToProgramas={() => setActiveTab('programas')}

@@ -54,6 +54,23 @@
     white-space: nowrap;
 }
 
+.malla-nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+    padding-left: 0.5rem;
+    border-left: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.malla-nav-pending {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #b45309;
+    white-space: nowrap;
+}
+
 .malla-nav-btn:hover,
 .malla-nav-chip:hover {
     background-color: var(--primary-light);
@@ -113,6 +130,9 @@
     position: relative;
     padding: 0.55rem 0.65rem;
     gap: 0.35rem;
+}
+
+.pensum-container .pensum-course-card[draggable="true"] {
     cursor: grab;
 }
 
@@ -168,7 +188,7 @@
         padding: 0;
     }
 
-    .pensum-container .pensum-course-card {
+    .pensum-container .pensum-course-card[draggable="true"] {
         cursor: default;
     }
 }
