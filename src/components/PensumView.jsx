@@ -23,7 +23,6 @@ import {
   RotateCcw,
   AlertTriangle,
   Edit3,
-  FilePlus2,
   Eye,
   FileText
 } from 'lucide-react'
@@ -111,11 +110,13 @@ export default function PensumView({
   const [isElectivesDockExpanded, setIsElectivesDockExpanded] = useState(true)
   const [electivesTabFilter, setElectivesTabFilter] = useState('all')
 
-  // Program search combobox
+  // Program search combobox & Actions dropdown
   const [programSearch, setProgramSearch] = useState('')
   const [programDropdownOpen, setProgramDropdownOpen] = useState(false)
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
   const programInputRef = useRef(null)
   const comboboxRef = useRef(null)
+  const actionsMenuRef = useRef(null)
 
   // Arrastre de tarjetas entre semestres (solo con permiso de edición)
   const dragItemRef = useRef(null)
@@ -193,6 +194,9 @@ export default function PensumView({
       if (comboboxRef.current && !comboboxRef.current.contains(e.target)) {
         setProgramDropdownOpen(false)
         setProgramSearch('')
+      }
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target)) {
+        setActionsMenuOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -403,9 +407,17 @@ export default function PensumView({
     return JSON.stringify(normalized)
   }
 
-  // Abrir formulario en modo "Editar" (HU-032)
-  const handleOpenEditMalla = () => {
-    if (!currentProgram || !isActiveMalla) return
+  const buildInitialResolutionForm = useCallback(() => {
+    if (!currentProgram) {
+      return {
+        numero_resolucion: '',
+        numero_semestre: '10',
+        name_program: '',
+        descripcion: '',
+        jornada: 'DIURNA',
+        periodo_oferta: 'SEMESTRAL'
+      }
+    }
     const firstItem = savedPensum[0] || {}
     const resInitial = firstItem.numero_resolucion || currentProgram.numero_resolucion || ''
     const semInitial = String(firstItem.numero_semestres || currentProgram.numero_semestre || 10)
@@ -413,7 +425,7 @@ export default function PensumView({
     const jornadaInitial = (firstItem.jornada || currentProgram.jornada || 'DIURNA').toUpperCase()
     const periodoInitial = (firstItem.periodo_oferta || currentProgram.ingreso || 'SEMESTRAL').toUpperCase()
 
-    const initialForm = {
+    return {
       numero_resolucion: resInitial,
       numero_semestre: semInitial,
       name_program: currentProgram.name_program || '',
@@ -421,34 +433,29 @@ export default function PensumView({
       jornada: jornadaInitial === 'NOCTURNA' ? 'NOCTURNA' : 'DIURNA',
       periodo_oferta: periodoInitial === 'ANUAL' ? 'ANUAL' : 'SEMESTRAL'
     }
+  }, [currentProgram, savedPensum])
 
+  const ensureEditSectionOpen = () => {
+    if (!editorMode) {
+      const initForm = buildInitialResolutionForm()
+      setResolutionForm(initForm)
+      setInitialEditSnapshot(buildSnapshotString(initForm, savedPensum))
+      setEditorMode(isActiveMalla ? 'edit' : 'create')
+    }
+    setIsResolutionFormOpen(true)
+  }
+
+  // Abrir formulario en modo "Editar" (HU-032 / HU-017)
+  const handleOpenEditMalla = () => {
+    if (!currentProgram || isViewingInactive) return
+    const initialForm = buildInitialResolutionForm()
     setResolutionForm(initialForm)
     setDraftPensum(savedPensum)
     setHasUnsavedChanges(false)
     setInitialEditSnapshot(buildSnapshotString(initialForm, savedPensum))
     setFormErrors({})
     setBannerMessage(null)
-    setEditorMode('edit')
-    setIsResolutionFormOpen(true)
-  }
-
-  // Abrir formulario en modo "Registrar resolución de programa" (HU-017)
-  const handleOpenCreateResolution = () => {
-    if (!currentProgram) return
-    const initialForm = {
-      numero_resolucion: '',
-      numero_semestre: String(currentProgram.numero_semestre || 10),
-      name_program: currentProgram.name_program || '',
-      descripcion: '',
-      jornada: (currentProgram.jornada || 'DIURNA').toUpperCase() === 'NOCTURNA' ? 'NOCTURNA' : 'DIURNA',
-      periodo_oferta: (currentProgram.ingreso || 'SEMESTRAL').toUpperCase() === 'ANUAL' ? 'ANUAL' : 'SEMESTRAL'
-    }
-    setResolutionForm(initialForm)
-    setDraftPensum(savedPensum)
-    setInitialEditSnapshot(buildSnapshotString(initialForm, savedPensum))
-    setFormErrors({})
-    setBannerMessage(null)
-    setEditorMode('create')
+    setEditorMode(isActiveMalla ? 'edit' : 'create')
     setIsResolutionFormOpen(true)
   }
 
@@ -734,9 +741,7 @@ export default function PensumView({
         }
         setDraftPensum(previous => [...previous, elective])
         setHasUnsavedChanges(true)
-        if (!editorMode && isActiveMalla) {
-          setEditorMode('edit')
-        }
+        ensureEditSectionOpen()
         onShowToast(`Electiva "${nameClean}" agregada al Semestre ${selectedSemesterForAdd}`, 'success')
       } else {
         if (!selectedCourseForAdd) {
@@ -753,9 +758,7 @@ export default function PensumView({
           activo: true
         }])
         setHasUnsavedChanges(true)
-        if (!editorMode && isActiveMalla) {
-          setEditorMode('edit')
-        }
+        ensureEditSectionOpen()
         onShowToast(`Asignatura agregada al Semestre ${selectedSemesterForAdd}`, 'success')
       }
 
@@ -767,14 +770,14 @@ export default function PensumView({
     }
   }
 
-  // Mueve una materia de semestre dentro del borrador (se guarda con "Guardar malla" / "Guardar edición")
+  // Mueve una materia de semestre dentro del borrador (se guarda en el apartado de edición)
   const moveCourseTo = (item, newSem) => {
     if (!effectiveCanEdit || newSem === item.semestre) return
     setDraftPensum(previous => previous.map(course =>
       course.code_course === item.code_course ? { ...course, semestre: newSem } : course
     ))
     setHasUnsavedChanges(true)
-    if (!editorMode && isActiveMalla) setEditorMode('edit')
+    ensureEditSectionOpen()
     onShowToast(`Movida a Semestre ${newSem}`, 'success')
   }
 
@@ -851,7 +854,7 @@ export default function PensumView({
           : course
       ))
       setHasUnsavedChanges(true)
-      if (!editorMode && isActiveMalla) setEditorMode('edit')
+      ensureEditSectionOpen()
       onShowToast(`Asignatura transferida al Semestre ${targetSemester}`, 'success')
       setMovingCourse(null)
     } catch (err) {
@@ -869,7 +872,7 @@ export default function PensumView({
 
     setDraftPensum(previous => previous.filter(course => course.code_course !== item.code_course))
     setHasUnsavedChanges(true)
-    if (!editorMode && isActiveMalla) setEditorMode('edit')
+    ensureEditSectionOpen()
     onShowToast('Asignatura retirada de la columna', 'success')
   }
 
@@ -1030,85 +1033,192 @@ export default function PensumView({
           </div>
         </div>
 
-        <div className="pensum-header-actions">
+        <div className="pensum-header-actions" ref={actionsMenuRef} style={{ position: 'relative' }}>
           <button
-            className="btn-secondary"
-            onClick={handleOpenHistory}
+            type="button"
+            className="btn-primary"
+            onClick={() => setActionsMenuOpen(prev => !prev)}
             disabled={submitting}
-            title="Consultar mallas inactivas en el historial"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
           >
-            <History size={16} />
-            <span>Historial</span>
+            <span>Opciones de Malla</span>
+            {actionsMenuOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
 
-          {/* HU-032 Criterio 1: Solo las mallas activas muestran "Editar". Las inactivas son de solo consulta. */}
-          {canEdit && isActiveMalla && (
-            <button
-              className="btn-primary"
-              onClick={handleOpenEditMalla}
-              disabled={submitting}
-              title="Editar datos de resolución y malla activa (HU-032)"
+          {actionsMenuOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 8px)',
+                right: 0,
+                minWidth: '240px',
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.14)',
+                padding: '0.4rem',
+                zIndex: 60,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.2rem'
+              }}
             >
-              <Edit3 size={16} />
-              <span>Editar</span>
-            </button>
-          )}
+              {/* HU-032 Criterio 1: Solo las mallas activas muestran "Editar". Las inactivas son de solo consulta. */}
+              {canEdit && !isViewingInactive && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionsMenuOpen(false)
+                    handleOpenEditMalla()
+                  }}
+                  disabled={submitting}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.65rem',
+                    width: '100%',
+                    padding: '0.6rem 0.75rem',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '0.88rem',
+                    fontWeight: 600,
+                    color: '#0f172a',
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <Edit3 size={16} className="text-primary" />
+                  <span>Editar</span>
+                </button>
+              )}
 
-          {/* HU-017: Botón "Registrar resolución de programa" */}
-          {canEdit && (
-            <button
-              className="btn-primary"
-              onClick={handleOpenCreateResolution}
-              disabled={submitting}
-              title="Registrar nueva resolución con número de resolución y número de semestres (HU-017)"
-            >
-              <FilePlus2 size={16} />
-              <span>Registrar resolución de programa</span>
-            </button>
-          )}
+              {effectiveCanEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionsMenuOpen(false)
+                    handleOpenAddModal(1)
+                  }}
+                  disabled={availableCourses.length === 0}
+                  title={availableCourses.length === 0 ? 'No hay más asignaturas disponibles para agregar' : 'Agregar materia a este programa'}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.65rem',
+                    width: '100%',
+                    padding: '0.6rem 0.75rem',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '0.88rem',
+                    fontWeight: 600,
+                    color: availableCourses.length === 0 ? '#94a3b8' : '#0f172a',
+                    cursor: availableCourses.length === 0 ? 'not-allowed' : 'pointer',
+                    textAlign: 'left'
+                  }}
+                  onMouseEnter={(e) => { if (availableCourses.length > 0) e.currentTarget.style.background = '#f1f5f9' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <Plus size={16} className="text-primary" />
+                  <span>Agregar Materia al Pensum</span>
+                </button>
+              )}
 
-          {canEdit && isActiveMalla && (
-            <button
-              className="btn-secondary"
-              onClick={handleDeactivatePensum}
-              disabled={submitting || savedPensum.length === 0 || hasUnsavedChanges}
-              title={hasUnsavedChanges ? 'Guarda primero los cambios pendientes' : 'Desactivar malla vigente'}
-            >
-              <Archive size={16} />
-              <span>Desactivar malla</span>
-            </button>
-          )}
+              <button
+                type="button"
+                onClick={() => {
+                  setActionsMenuOpen(false)
+                  handleOpenHistory()
+                }}
+                disabled={submitting}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.65rem',
+                  width: '100%',
+                  padding: '0.6rem 0.75rem',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.88rem',
+                  fontWeight: 600,
+                  color: '#0f172a',
+                  cursor: 'pointer',
+                  textAlign: 'left'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+              >
+                <History size={16} />
+                <span>Historial</span>
+              </button>
 
-          {canEdit && (hasUnsavedChanges || editorMode) && !isViewingInactive && (
-            <button
-              className="btn-primary"
-              onClick={handleAttemptSaveResolution}
-              disabled={submitting}
-            >
-              <Save size={16} />
-              <span>{submitting ? 'Guardando...' : (editorMode === 'edit' ? 'Guardar edición' : 'Guardar malla')}</span>
-            </button>
-          )}
+              <button
+                type="button"
+                onClick={() => {
+                  setActionsMenuOpen(false)
+                  handlePrint()
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.65rem',
+                  width: '100%',
+                  padding: '0.6rem 0.75rem',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.88rem',
+                  fontWeight: 600,
+                  color: '#0f172a',
+                  cursor: 'pointer',
+                  textAlign: 'left'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+              >
+                <Printer size={16} />
+                <span>Imprimir / Exportar Malla</span>
+              </button>
 
-          <button
-            className="btn-secondary"
-            onClick={handlePrint}
-            title="Imprimir o exportar en PDF la malla curricular"
-          >
-            <Printer size={16} />
-            <span>Imprimir / Exportar Malla</span>
-          </button>
-
-          {effectiveCanEdit && (
-            <button
-              className="btn-primary"
-              onClick={() => handleOpenAddModal(1)}
-              disabled={availableCourses.length === 0}
-              title={availableCourses.length === 0 ? 'No hay más asignaturas disponibles para agregar' : 'Agregar materia a este programa'}
-            >
-              <Plus size={16} />
-              <span>Agregar Materia al Pensum</span>
-            </button>
+              {canEdit && isActiveMalla && (
+                <>
+                  <div style={{ height: '1px', background: '#e2e8f0', margin: '0.2rem 0' }} />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionsMenuOpen(false)
+                      handleDeactivatePensum()
+                    }}
+                    disabled={submitting || savedPensum.length === 0 || hasUnsavedChanges}
+                    title={hasUnsavedChanges ? 'Guarda primero los cambios pendientes' : 'Desactivar malla vigente'}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.65rem',
+                      width: '100%',
+                      padding: '0.6rem 0.75rem',
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '0.88rem',
+                      fontWeight: 600,
+                      color: hasUnsavedChanges ? '#94a3b8' : '#dc2626',
+                      cursor: hasUnsavedChanges ? 'not-allowed' : 'pointer',
+                      textAlign: 'left'
+                    }}
+                    onMouseEnter={(e) => { if (!hasUnsavedChanges) e.currentTarget.style.background = '#fef2f2' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <Archive size={16} />
+                    <span>Desactivar malla</span>
+                  </button>
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -1495,7 +1605,7 @@ export default function PensumView({
         <div className="info-banner print-hide">
           <Archive size={18} />
           <span>
-            Este programa no tiene una malla activa. Usa "Registrar resolución de programa" y agrega las asignaturas en las columnas de cada semestre.
+            Este programa no tiene una malla activa. Usa la opción "Editar" en el menú desplegable y agrega las asignaturas en las columnas de cada semestre.
           </span>
           <button className="btn-link" onClick={handleOpenHistory}>Ver historial</button>
         </div>
