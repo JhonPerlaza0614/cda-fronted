@@ -35,6 +35,7 @@ export default function ProgramasView({
   const [formData, setFormData] = useState({
     code_program: '',
     name_program: '',
+    numero_resolucion: '',
     numero_semestre: 10,
     id_facultad_programa: '',
     apertura: '',
@@ -95,6 +96,7 @@ export default function ProgramasView({
     setFormData({
       code_program: '',
       name_program: '',
+      numero_resolucion: '',
       numero_semestre: 10,
       id_facultad_programa: '',
       apertura: '',
@@ -110,6 +112,7 @@ export default function ProgramasView({
     setFormData({
       code_program: prog.code_program,
       name_program: prog.name_program,
+      numero_resolucion: prog.numero_resolucion || '',
       numero_semestre: prog.numero_semestre !== undefined && prog.numero_semestre !== null ? prog.numero_semestre : 10,
       id_facultad_programa: prog.id_facultad_programa ? String(prog.id_facultad_programa) : '',
       apertura: prog.apertura || '',
@@ -121,6 +124,17 @@ export default function ProgramasView({
     e.preventDefault()
     if (!formData.name_program.trim()) {
       onShowToast('El nombre del programa es obligatorio', 'error')
+      return
+    }
+
+    const numeroResolucion = formData.numero_resolucion.trim()
+    if (!numeroResolucion) {
+      onShowToast('El número de resolución es obligatorio', 'error')
+      return
+    }
+
+     if (numeroResolucion.length > 15) {
+      onShowToast('El número de resolución no puede superar 15 caracteres', 'error')
       return
     }
 
@@ -136,6 +150,7 @@ export default function ProgramasView({
         await updatePrograma(editingProgram.code_program, {
           name_program: formData.name_program,
           numero_semestre: numSemestres,
+          numero_resolucion: numeroResolucion,
           id_facultad_programa: formData.id_facultad_programa ? parseInt(formData.id_facultad_programa, 10) : null,
           apertura: formData.apertura || null,
         })
@@ -148,6 +163,7 @@ export default function ProgramasView({
         }
         await createPrograma({
           ...formData,
+          numero_resolucion: numeroResolucion,
           numero_semestre: numSemestres,
           id_facultad_programa: formData.id_facultad_programa ? parseInt(formData.id_facultad_programa, 10) : null,
           apertura: formData.apertura || null,
@@ -168,7 +184,7 @@ export default function ProgramasView({
     setSubmitting(true)
     try {
       await deletePrograma(deletingProgram.code_program)
-      onShowToast(`Programa ${deletingProgram.code_program} eliminado`, 'success')
+      onShowToast(`Programa ${deletingProgram.code_program} desactivado`, 'success')
       setDeletingProgram(null)
       onRefresh()
     } catch (err) {
@@ -232,14 +248,19 @@ export default function ProgramasView({
             const count = getCoursesCount(prog.code_program)
             const credits = getProgramCredits(prog.code_program)
             return (
-              <div key={prog.code_program} className="item-card">
+              <div key={prog.code_program} className={`item-card${prog.estado === 'INACTIVO' ? ' item-card-inactive' : ''}`}>
                 <div className="item-card-header">
-                  <div className="badge-code">{prog.code_program}</div>
-                  {prog.id_facultad_programa && (
-                    <span className="badge-group" title="Facultad">
-                      <Building2 size={12} /> {facultadesList.find(f => f.id === prog.id_facultad_programa)?.nombre || 'Facultad'}
-                    </span>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <div className="badge-code">{prog.code_program}</div>
+                    {prog.estado === 'INACTIVO' && (
+                      <span className="badge-inactive" title="Programa desactivado">Desactivado</span>
+                    )}
+                    {prog.id_facultad_programa && (
+                      <span className="badge-group" title="Facultad">
+                        <Building2 size={12} /> {facultadesList.find(f => f.id === prog.id_facultad_programa)?.nombre || 'Facultad'}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <h3 className="item-card-title">{prog.name_program}</h3>
@@ -281,7 +302,7 @@ export default function ProgramasView({
                     <button
                       className="btn-icon text-danger"
                       onClick={() => setDeletingProgram(prog)}
-                      title="Eliminar programa"
+                      title="Desactivar programa"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -346,7 +367,18 @@ export default function ProgramasView({
                   />
                 </div>
 
-              
+                <div className="form-group">
+                  <label htmlFor="numero_resolucion">Número de resolución *</label>
+                  <input
+                    id="numero_resolucion"
+                    type="text"
+                    maxLength={15}
+                    placeholder="Ej. RES-123-2026"
+                    value={formData.numero_resolucion}
+                    onChange={(e) => setFormData({ ...formData, numero_resolucion: e.target.value })}
+                    required
+                  />
+                </div>
 
                 <div className="form-group">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -455,25 +487,25 @@ export default function ProgramasView({
         </div>
       )}
 
-      {/* Modal Confirmar Eliminación */}
+      {/* Modal Confirmar Desactivación */}
       {deletingProgram && (
         <div className="modal-backdrop">
           <div className="modal-card">
             <div className="modal-header">
               <div className="modal-title-with-icon">
                 <AlertTriangle className="text-danger" size={24} />
-                <h2>Confirmar Eliminación</h2>
+                <h2>Confirmar Desactivación</h2>
               </div>
               <button className="modal-close-btn" onClick={() => setDeletingProgram(null)}>×</button>
             </div>
             <div className="modal-body">
               <p>
-                ¿Estás seguro de que deseas eliminar el programa <strong>{deletingProgram.name_program}</strong> ({deletingProgram.code_program})?
+                ¿Estás seguro de que deseas desactivar el programa <strong>{deletingProgram.name_program}</strong> ({deletingProgram.code_program})?
               </p>
               <div className="alert-warning-box">
                 <p>
-                  <strong>Atención:</strong> Debido a la restricción <code>ON DELETE CASCADE</code> en la base de datos, 
-                  todas las materias asignadas a este programa en el pensum también se desvincularán automáticamente.
+                  El programa quedará marcado como <strong>Desactivado</strong> y se conservarán sus materias y su malla curricular.
+                  No se borra información de la base de datos.
                 </p>
               </div>
             </div>
@@ -492,7 +524,7 @@ export default function ProgramasView({
                 onClick={handleDelete}
                 disabled={submitting}
               >
-                {submitting ? 'Eliminando...' : 'Sí, Eliminar Programa'}
+                {submitting ? 'Desactivando...' : 'Sí, Desactivar Programa'}
               </button>
             </div>
           </div>

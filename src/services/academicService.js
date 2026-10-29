@@ -93,6 +93,7 @@ export async function createPrograma(programa) {
       numero_semestre: parseInt(programa.numero_semestre, 10) || 10,
       id_facultad_programa: programa.id_facultad_programa ? parseInt(programa.id_facultad_programa, 10) : null,
       apertura: programa.apertura || null,
+      numero_resolucion: String(programa.numero_resolucion || '').trim(),
       jornada: programa.jornada || 'DIURNA',
       ingreso: programa.ingreso || 'SEMESTRAL'
     }
@@ -107,6 +108,7 @@ export async function createPrograma(programa) {
       name_program: programa.name_program.trim(),
       numero_semestre: parseInt(programa.numero_semestre, 10) || 10,
       apertura: programa.apertura || null,
+      numero_resolucion: String(programa.numero_resolucion || '').trim(),
     }
     if (programa.id_facultad_programa) {
       insertPayload.id_facultad_programa = parseInt(programa.id_facultad_programa, 10)
@@ -129,6 +131,7 @@ export async function updatePrograma(code_program, changes) {
       payload.id_facultad_programa = changes.id_facultad_programa ? parseInt(changes.id_facultad_programa, 10) : null
     }
     if (changes.apertura !== undefined) payload.apertura = changes.apertura || null
+    if (changes.numero_resolucion !== undefined) payload.numero_resolucion = String(changes.numero_resolucion).trim()
     return await requestBackend(`/programas/${encodeURIComponent(code_program)}`, {
       method: 'PUT',
       body: JSON.stringify(payload)
@@ -144,6 +147,7 @@ export async function updatePrograma(code_program, changes) {
       updateData.id_facultad_programa = changes.id_facultad_programa ? parseInt(changes.id_facultad_programa, 10) : null
     }
     if (changes.apertura !== undefined) updateData.apertura = changes.apertura || null
+    if (changes.numero_resolucion !== undefined) updateData.numero_resolucion = String(changes.numero_resolucion).trim()
     const { data, error } = await supabase
       .from('programas')
       .update(updateData)

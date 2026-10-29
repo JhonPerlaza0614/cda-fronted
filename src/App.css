@@ -580,6 +580,23 @@
   border-radius: var(--radius-sm);
 }
 
+.badge-inactive {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #b91c1c;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.item-card-inactive {
+  border-style: dashed;
+  background-color: #fcfcfd;
+}
+
 .badge-count {
   font-size: 0.75rem;
   font-weight: 600;
