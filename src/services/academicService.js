@@ -8,6 +8,7 @@ import { getAuthToken } from './authService'
  */
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api'
+const API_ROOT = BACKEND_URL.replace(/\/api\/?$/, '')
 
 export async function requestBackend(endpoint, options = {}) {
   const url = `${BACKEND_URL}${endpoint}`
@@ -420,66 +421,66 @@ export async function getAllPensum() {
 }
 
 export async function savePensumVersion(code_program, itemsOrPayload) {
-    const bodyPayload = buildPensumRequestPayload(code_program, itemsOrPayload)
-    try {
-      return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/guardar`, {
-        method: 'POST',
-        body: JSON.stringify(bodyPayload)
-      })
-    } catch (err) {
-      if (!isBackendUnavailable(err)) throw err
-      console.warn('Fallo backend en savePensumVersion, fallback a Supabase:', err.message)
-      const items = bodyPayload.items || []
-      const { data: current, error: currentError } = await supabase
-        .from('pensum_academico')
-        .select('version')
-        .eq('code_program', code_program)
-        .order('version', { ascending: false })
-        .limit(1)
-      if (currentError) throw currentError
-      const nextVersion = (current?.[0]?.version || 0) + 1
-      const now = new Date().toISOString()
-      const { error: deactivateError } = await supabase
-        .from('pensum_academico')
-        .update({ vigente: false, fecha_desactivacion: now })
-        .eq('code_program', code_program)
-        .eq('vigente', true)
-      if (deactivateError) throw deactivateError
-      for (const item of items) {
-        if (item.name_course) {
-          await supabase.from('asignaturas').upsert([{
-            code_course: item.code_course,
-            name_course: item.name_course,
-            credits: item.credits ?? 3,
-            is_elective: (item.tipo_asignatura || '').toLowerCase().includes('electiv') || (item.tipo_asignatura || '').toLowerCase().includes('extracurricular'),
-            es_complementaria: (item.tipo_asignatura || '').toLowerCase().includes('complementar'),
-            es_basica: (item.tipo_asignatura || '').toLowerCase().includes('básic') || (item.tipo_asignatura || '').toLowerCase().includes('basic')
-          }], { onConflict: 'code_course' })
-        }
+  const bodyPayload = buildPensumRequestPayload(code_program, itemsOrPayload)
+  try {
+    return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/guardar`, {
+      method: 'POST',
+      body: JSON.stringify(bodyPayload)
+    })
+  } catch (err) {
+    if (!isBackendUnavailable(err)) throw err
+    console.warn('Fallo backend en savePensumVersion, fallback a Supabase:', err.message)
+    const items = bodyPayload.items || []
+    const { data: current, error: currentError } = await supabase
+      .from('pensum_academico')
+      .select('version')
+      .eq('code_program', code_program)
+      .order('version', { ascending: false })
+      .limit(1)
+    if (currentError) throw currentError
+    const nextVersion = (current?.[0]?.version || 0) + 1
+    const now = new Date().toISOString()
+    const { error: deactivateError } = await supabase
+      .from('pensum_academico')
+      .update({ vigente: false, fecha_desactivacion: now })
+      .eq('code_program', code_program)
+      .eq('vigente', true)
+    if (deactivateError) throw deactivateError
+    for (const item of items) {
+      if (item.name_course) {
+        await supabase.from('asignaturas').upsert([{
+          code_course: item.code_course,
+          name_course: item.name_course,
+          credits: item.credits ?? 3,
+          is_elective: (item.tipo_asignatura || '').toLowerCase().includes('electiv') || (item.tipo_asignatura || '').toLowerCase().includes('extracurricular'),
+          es_complementaria: (item.tipo_asignatura || '').toLowerCase().includes('complementar'),
+          es_basica: (item.tipo_asignatura || '').toLowerCase().includes('básic') || (item.tipo_asignatura || '').toLowerCase().includes('basic')
+        }], { onConflict: 'code_course' })
       }
-      const payload = items.map(item => ({
-        code_program,
-        code_course: item.code_course,
-        version: nextVersion,
-        semestre: parseInt(item.semestre, 10),
-        vigente: true,
-        activo: true,
-        numero_resolucion: bodyPayload.numero_resolucion || null,
-        numero_semestres: bodyPayload.numero_semestre || null,
-        editada: false,
-        fecha_edicion: null,
-        facultad: encodePensumMeta({
-          horas_clase: item.horas_clase,
-          horas_independiente: item.horas_independiente,
-          tipo_asignatura: item.tipo_asignatura,
-          descripcion: bodyPayload.descripcion
-        })
-      }))
-      if (payload.length === 0) return []
-      const { data, error } = await supabase.from('pensum_academico').insert(payload).select()
-      if (error) throw error
-      return data || []
     }
+    const payload = items.map(item => ({
+      code_program,
+      code_course: item.code_course,
+      version: nextVersion,
+      semestre: parseInt(item.semestre, 10),
+      vigente: true,
+      activo: true,
+      numero_resolucion: bodyPayload.numero_resolucion || null,
+      numero_semestres: bodyPayload.numero_semestre || null,
+      editada: false,
+      fecha_edicion: null,
+      facultad: encodePensumMeta({
+        horas_clase: item.horas_clase,
+        horas_independiente: item.horas_independiente,
+        tipo_asignatura: item.tipo_asignatura,
+        descripcion: bodyPayload.descripcion
+      })
+    }))
+    if (payload.length === 0) return []
+    const { data, error } = await supabase.from('pensum_academico').insert(payload).select()
+    if (error) throw error
+    return data || []
+  }
 }
 
 export async function updatePensumVersion(code_program, itemsOrPayload) {
@@ -760,11 +761,8 @@ export async function checkDatabaseHealth() {
   }
 
   try {
-    const token = getAuthToken()
-    const res = await fetch(`${BACKEND_URL}/programas`, {
-      method: 'GET',
-      headers: token ? { Authorization: `Bearer ${token}` } : {}
-    })
+    // /actuator/health es público: no requiere token y no descarga datos
+    const res = await fetch(`${API_ROOT}/actuator/health`, { method: 'GET' })
     if (res.ok) {
       results.connected = true
       results.backendConnected = true
@@ -885,7 +883,7 @@ export async function getCategorias() {
     try {
       const { data, error } = await supabase.from('categoria').select('*').order('nombre', { ascending: true })
       if (!error && data && data.length > 0) return data
-    } catch {}
+    } catch { }
     return [
       { id: 1, nombre: 'Auxiliar' },
       { id: 2, nombre: 'Asistente' },
@@ -902,7 +900,7 @@ export async function getTiposContrato() {
     try {
       const { data, error } = await supabase.from('tipo_contrato').select('*').order('nombre', { ascending: true })
       if (!error && data && data.length > 0) return data
-    } catch {}
+    } catch { }
     return [
       { id: 1, nombre: 'Nombrado' },
       { id: 2, nombre: 'Ocasional' },

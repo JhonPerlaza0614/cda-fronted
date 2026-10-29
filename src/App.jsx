@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import Navbar from './components/Navbar'
 import PensumView from './components/PensumView'
 import ProgramasView from './components/ProgramasView'
@@ -18,6 +18,18 @@ import {
 } from './services/academicService'
 import { AlertCircle, Database, RefreshCw, Sparkles, Clock } from 'lucide-react'
 import './App.css'
+
+// Si el backend ya trae nombre y créditos (lo normal) no se vuelve a cruzar nada en el navegador;
+// solo se completa cuando la fila viene del fallback de Supabase sin esos campos.
+const withCourseInfo = (item, asigMap) => {
+  if (item.name_course && item.credits !== undefined && item.credits !== null) return item
+  const asig = asigMap.get(item.code_course)
+  return {
+    ...item,
+    name_course: item.name_course || asig?.name_course || item.code_course,
+    credits: item.credits ?? asig?.credits ?? 0,
+  }
+}
 
 export default function App({ user, onLogout }) {
   const rol = user?.rol ?? 1 // 1: Admin, 2: Coordinador, 3: Docente
@@ -47,57 +59,8 @@ export default function App({ user, onLogout }) {
     setToast({ message, type })
   }, [])
 
-  const loadAcademicResources = useCallback(async () => {
-    if (!canSeeAcademicData) {
-      return { programas: [], asignaturas: [], pensum: [], errors: [] }
-    }
-
-    const results = await Promise.allSettled([
-      getProgramas(),
-      getAsignaturas(),
-      getAllPensum()
-    ])
-    const labels = ['programas', 'asignaturas', 'malla curricular']
-    const errors = []
-    const values = results.map((result, index) => {
-      if (result.status === 'fulfilled') return result.value || []
-      errors.push(`${labels[index]}: ${result.reason?.message || 'consulta fallida'}`)
-      console.error(`Error al cargar ${labels[index]}:`, result.reason)
-      return []
-    })
-
-    return {
-      programas: values[0],
-      asignaturas: values[1],
-      pensum: values[2],
-      errors
-    }
-  }, [canSeeAcademicData])
-
-  const applyAcademicResources = useCallback(({ programas: progs, asignaturas: asigs, pensum, errors }) => {
-    const asigMap = new Map(asigs.map(a => [a.code_course, a]))
-    const enrichedPensum = pensum.map(item => {
-      const asig = asigMap.get(item.code_course)
-      return {
-        ...item,
-        name_course: asig?.name_course || item.code_course,
-        credits: asig?.credits !== undefined && asig?.credits !== null ? asig.credits : 0,
-      }
-    })
-
-    setProgramas(progs)
-    setAsignaturas(asigs)
-    setPensumList(enrichedPensum)
-
-    if (progs.length > 0) {
-      setSelectedProgramCode(prev => {
-        const exists = progs.some(p => p.code_program === prev)
-        return exists ? prev : progs[0].code_program
-      })
-    }
-
-    return errors
-  }, [])
+  // Evita que una carga lenta pise a una más reciente
+  const loadSeq = useRef(0)
 
   // Carga global de datos desde Backend / Supabase
   const loadData = useCallback(async (isSilent = false) => {
@@ -106,59 +69,44 @@ export default function App({ user, onLogout }) {
       return
     }
 
+    const seq = ++loadSeq.current
     if (!isSilent) setLoading(true)
     setInitialError(null)
 
-    try {
-      const health = await checkDatabaseHealth()
-      setIsConnected(health.connected)
+    // El health check corre en paralelo: ya no retrasa la carga de datos
+    checkDatabaseHealth()
+      .then(h => { if (seq === loadSeq.current) setIsConnected(h.connected) })
+      .catch(() => { if (seq === loadSeq.current) setIsConnected(false) })
 
-      const errors = applyAcademicResources(await loadAcademicResources())
-      if (errors.length > 0) {
-        setInitialError(`No se pudo cargar completamente la información académica: ${errors.join('; ')}`)
+    try {
+      const [progs, asigs, pensum] = canSeeAcademicData
+        ? await Promise.all([getProgramas(), getAsignaturas(), getAllPensum()])
+        : [[], [], []]
+      if (seq !== loadSeq.current) return
+
+      const asigMap = new Map(asigs.map(a => [a.code_course, a]))
+      setProgramas(progs)
+      setAsignaturas(asigs)
+      setPensumList(pensum.map(item => withCourseInfo(item, asigMap)))
+
+      // Si no hay programa seleccionado (o ya no existe), seleccionar el primero
+      if (progs.length > 0) {
+        setSelectedProgramCode(prev =>
+          progs.some(p => p.code_program === prev) ? prev : progs[0].code_program
+        )
       }
     } catch (err) {
+      if (seq !== loadSeq.current) return
       console.error('Error al cargar datos:', err)
       setInitialError(err.message || 'No fue posible cargar la información académica')
     } finally {
-      if (!isSilent) setLoading(false)
+      if (seq === loadSeq.current && !isSilent) setLoading(false)
     }
-  }, [canSeeAcademicData, isDocente, applyAcademicResources, loadAcademicResources])
+  }, [canSeeAcademicData, isDocente])
 
   useEffect(() => {
-    let isMounted = true
-
-    if (isDocente) {
-      setLoading(false)
-      return
-    }
-
-    const init = async () => {
-      try {
-        const health = await checkDatabaseHealth()
-        if (!isMounted) return
-        setIsConnected(health.connected)
-
-        if (!isMounted) return
-
-        const errors = applyAcademicResources(await loadAcademicResources())
-        if (errors.length > 0) {
-          setInitialError(`No se pudo cargar completamente la información académica: ${errors.join('; ')}`)
-        }
-      } catch (err) {
-        if (!isMounted) return
-        console.error('Error al inicializar datos:', err)
-        setInitialError(err.message || 'Error al comunicarse con la base de datos')
-      } finally {
-        if (isMounted) setLoading(false)
-      }
-    }
-
-    init()
-    return () => {
-      isMounted = false
-    }
-  }, [canSeeAcademicData, isDocente, applyAcademicResources, loadAcademicResources])
+    loadData()
+  }, [loadData])
 
   const handleSelectProgramForPensum = (code) => {
     setSelectedProgramCode(code)

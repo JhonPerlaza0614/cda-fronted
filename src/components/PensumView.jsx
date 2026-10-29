@@ -37,6 +37,7 @@ import {
   deactivatePensum,
   reactivatePensum
 } from '../services/academicService'
+import './MallaScroll.css'
 
 function inferTipoAsignatura(item) {
   if (item?.tipo_asignatura) return item.tipo_asignatura
@@ -115,6 +116,62 @@ export default function PensumView({
   const [programDropdownOpen, setProgramDropdownOpen] = useState(false)
   const programInputRef = useRef(null)
   const comboboxRef = useRef(null)
+
+  // Arrastre de tarjetas entre semestres (solo con permiso de edición)
+  const dragItemRef = useRef(null)
+  const [draggingCode, setDraggingCode] = useState(null)
+  const [dragOverSem, setDragOverSem] = useState(null)
+
+  // La barra de semestres se pega justo debajo del navbar, mida lo que mida (zoom, móvil)
+  const [stickyTop, setStickyTop] = useState(76)
+  useEffect(() => {
+    const measure = () => {
+      const nav = document.querySelector('.navbar')
+      if (nav) setStickyTop(nav.offsetHeight + 8)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
+
+  // Navegación de la malla: scroll horizontal, arrastre del fondo con el mouse y saltos por semestre
+  const mallaRef = useRef(null)
+  const panRef = useRef({ active: false, startX: 0, startLeft: 0 })
+
+  const scrollMalla = (direction) => {
+    mallaRef.current?.scrollBy({ left: direction * 300, behavior: 'smooth' })
+  }
+
+  const scrollToSemester = (num) => {
+    const wrapper = mallaRef.current
+    const column = wrapper?.querySelector(`[data-sem="${num}"]`)
+    if (wrapper && column) {
+      wrapper.scrollTo({ left: Math.max(0, column.offsetLeft - 16), behavior: 'smooth' })
+    }
+  }
+
+  const handleMallaMouseDown = (e) => {
+    const skip = canEdit
+      ? 'button, input, select, a, label, .pensum-course-card'
+      : 'button, input, select, a, label'
+    if (e.button !== 0 || e.target.closest(skip)) return
+    panRef.current = { active: true, startX: e.clientX, startLeft: mallaRef.current.scrollLeft }
+  }
+
+  const handleMallaMouseMove = (e) => {
+    const pan = panRef.current
+    if (!pan.active) return
+    const dx = e.clientX - pan.startX
+    if (Math.abs(dx) > 4) {
+      mallaRef.current.classList.add('is-dragging')
+      mallaRef.current.scrollLeft = pan.startLeft - dx
+    }
+  }
+
+  const endMallaPan = () => {
+    panRef.current.active = false
+    mallaRef.current?.classList.remove('is-dragging')
+  }
 
   // Current active program
   const currentProgram = useMemo(() => {
@@ -260,6 +317,7 @@ export default function PensumView({
       setProgramFacultyId(ingFac ? String(ingFac.id) : '1')
       return
     }
+    // Si coincide con alguna otra facultad registrada (ej. Ciencias Humanas, Psicología)
     const matchingFac = facultadesList.find(f =>
       f.id !== 2 && f.id !== 3 && pName.includes((f.nombre || '').toLowerCase())
     )
@@ -709,20 +767,76 @@ export default function PensumView({
     }
   }
 
-  const handleShiftSemester = async (item, delta) => {
-    if (!effectiveCanEdit) return
-    const newSem = item.semestre + delta
-    if (newSem < 1 || newSem > totalSemesters) {
-      onShowToast(`El semestre debe estar entre 1 y ${totalSemesters}`, 'error')
-      return
-    }
-
+  // Mueve una materia de semestre dentro del borrador (se guarda con "Guardar malla" / "Guardar edición")
+  const moveCourseTo = (item, newSem) => {
+    if (!effectiveCanEdit || newSem === item.semestre) return
     setDraftPensum(previous => previous.map(course =>
       course.code_course === item.code_course ? { ...course, semestre: newSem } : course
     ))
     setHasUnsavedChanges(true)
     if (!editorMode && isActiveMalla) setEditorMode('edit')
     onShowToast(`Movida a Semestre ${newSem}`, 'success')
+  }
+
+  // Handle quick move semester (flechas de la tarjeta)
+  const handleShiftSemester = (item, delta) => {
+    if (!effectiveCanEdit) return
+    const newSem = item.semestre + delta
+    if (newSem < 1 || newSem > totalSemesters) {
+      onShowToast(`El semestre debe estar entre 1 y ${totalSemesters}`, 'error')
+      return
+    }
+    moveCourseTo(item, newSem)
+  }
+
+  // Descartar los cambios pendientes y volver a la malla guardada
+  const handleDiscardChanges = () => {
+    if (!hasUnsavedChanges) return
+    if (!window.confirm('¿Descartar los cambios sin guardar de esta malla?')) return
+    setDraftPensum(savedPensum)
+    setHasUnsavedChanges(false)
+    setEditorMode(null)
+    setIsResolutionFormOpen(false)
+    onShowToast('Cambios descartados', 'info')
+  }
+
+  // Drag & drop de tarjetas entre columnas
+  const handleCardDragStart = (e, item) => {
+    if (!effectiveCanEdit) return
+    dragItemRef.current = item
+    setDraggingCode(item.code_course)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', item.code_course)
+  }
+
+  const handleCardDragEnd = () => {
+    dragItemRef.current = null
+    setDraggingCode(null)
+    setDragOverSem(null)
+  }
+
+  const handleColumnDragOver = (e, semNum) => {
+    if (!dragItemRef.current || !effectiveCanEdit) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverSem !== semNum) setDragOverSem(semNum)
+  }
+
+  const handleColumnDrop = (e, semNum) => {
+    e.preventDefault()
+    const item = dragItemRef.current
+    handleCardDragEnd()
+    if (item) moveCourseTo(item, semNum)
+  }
+
+  // Al arrastrar cerca de los bordes, la malla se desplaza sola
+  const handleMallaDragOver = (e) => {
+    const wrapper = mallaRef.current
+    if (!wrapper || !dragItemRef.current) return
+    const rect = wrapper.getBoundingClientRect()
+    const edge = 90
+    if (e.clientX < rect.left + edge) wrapper.scrollLeft -= 18
+    else if (e.clientX > rect.right - edge) wrapper.scrollLeft += 18
   }
 
   const handleConfirmMoveSemester = async (e) => {
@@ -757,6 +871,10 @@ export default function PensumView({
     setHasUnsavedChanges(true)
     if (!editorMode && isActiveMalla) setEditorMode('edit')
     onShowToast('Asignatura retirada de la columna', 'success')
+  }
+
+  const handleSavePensum = () => {
+    handleAttemptSaveResolution()
   }
 
   const handleDeactivatePensum = async () => {
@@ -803,7 +921,6 @@ export default function PensumView({
       setHistoryLoading(false)
     }
   }
-
   const handleInspectInactiveInGrid = () => {
     if (selectedHistoryVersion === null) return
     setViewingInactiveVersion(selectedHistoryVersion)
@@ -1385,13 +1502,54 @@ export default function PensumView({
       )}
 
       {/* Malla Curricular Grid (Semesters Columns) */}
-      <div className="malla-grid-wrapper">
+      <div className="malla-nav print-hide" style={{ top: stickyTop }}>
+        <button type="button" className="malla-nav-btn" onClick={() => scrollMalla(-1)} title="Desplazar a la izquierda">
+          <ChevronLeft size={16} />
+        </button>
+        <div className="malla-nav-chips">
+          {sortedSemesters.map((num) => (
+            <button key={num} type="button" className="malla-nav-chip" onClick={() => scrollToSemester(num)}>
+              S{num}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="malla-nav-btn" onClick={() => scrollMalla(1)} title="Desplazar a la derecha">
+          <ChevronRight size={16} />
+        </button>
+        {canEdit && hasUnsavedChanges && (
+          <div className="malla-nav-actions">
+            <span className="malla-nav-pending">Cambios sin guardar</span>
+            <button type="button" className="btn-secondary btn-sm" onClick={handleDiscardChanges} disabled={submitting}>
+              Descartar
+            </button>
+            <button type="button" className="btn-primary btn-sm" onClick={handleSavePensum} disabled={submitting}>
+              <Save size={14} /> {submitting ? 'Guardando...' : 'Guardar malla'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div
+        className="malla-grid-wrapper"
+        ref={mallaRef}
+        onMouseDown={handleMallaMouseDown}
+        onMouseMove={handleMallaMouseMove}
+        onMouseUp={endMallaPan}
+        onMouseLeave={endMallaPan}
+        onDragOver={handleMallaDragOver}
+      >
         <div className="malla-grid">
           {sortedSemesters.map((semNum) => {
             const coursesInSem = semesterMap[semNum] || []
             const semCredits = coursesInSem.reduce((sum, c) => sum + (c.credits || 0), 0)
             return (
-              <div key={semNum} className="semester-column">
+              <div
+                key={semNum}
+                className={`semester-column ${dragOverSem === semNum ? 'drop-target' : ''}`}
+                data-sem={semNum}
+                onDragOver={effectiveCanEdit ? (e) => handleColumnDragOver(e, semNum) : undefined}
+                onDrop={effectiveCanEdit ? (e) => handleColumnDrop(e, semNum) : undefined}
+              >
                 <div className="semester-column-header">
                   <div className="semester-title">
                     <span className="semester-badge">Semestre {semNum}</span>
@@ -1434,7 +1592,13 @@ export default function PensumView({
                         item.name_course?.toLowerCase().includes('electiv') ||
                         item.code_course?.toLowerCase().startsWith('ele')
                       return (
-                        <div key={item.code_course} className="pensum-course-card">
+                        <div
+                          key={item.code_course}
+                          className={`pensum-course-card ${draggingCode === item.code_course ? 'is-dragging-card' : ''}`}
+                          draggable={effectiveCanEdit}
+                          onDragStart={effectiveCanEdit ? (e) => handleCardDragStart(e, item) : undefined}
+                          onDragEnd={effectiveCanEdit ? handleCardDragEnd : undefined}
+                        >
                           <div className="pensum-course-card-top">
                             <div className="pensum-card-badge-row">
                               <span className="course-code-pill">{item.code_course}</span>
@@ -1449,6 +1613,22 @@ export default function PensumView({
                             </div>
                             {effectiveCanEdit && (
                               <div className="pensum-card-tools print-hide">
+                                <button
+                                  className="btn-card-tool"
+                                  disabled={semNum <= 1}
+                                  onClick={() => handleShiftSemester(item, -1)}
+                                  title="Mover a semestre anterior"
+                                >
+                                  <ChevronLeft size={14} />
+                                </button>
+                                <button
+                                  className="btn-card-tool"
+                                  disabled={semNum >= totalSemesters}
+                                  onClick={() => handleShiftSemester(item, 1)}
+                                  title="Mover a semestre siguiente"
+                                >
+                                  <ChevronRight size={14} />
+                                </button>
                                 <button
                                   className="btn-card-tool"
                                   onClick={() => {
@@ -1471,28 +1651,6 @@ export default function PensumView({
                           </div>
 
                           <h4 className="pensum-course-name">{item.name_course}</h4>
-
-                          {effectiveCanEdit && (
-                            <div className="pensum-card-navigation print-hide">
-                              <button
-                                className="btn-nav-shift"
-                                disabled={semNum <= 1}
-                                onClick={() => handleShiftSemester(item, -1)}
-                                title="Mover a semestre anterior"
-                              >
-                                <ChevronLeft size={14} />
-                              </button>
-                              <span className="sem-indicator">S{semNum}</span>
-                              <button
-                                className="btn-nav-shift"
-                                disabled={semNum >= totalSemesters}
-                                onClick={() => handleShiftSemester(item, 1)}
-                                title="Mover a semestre siguiente"
-                              >
-                                <ChevronRight size={14} />
-                              </button>
-                            </div>
-                          )}
                         </div>
                       )
                     })
@@ -1967,8 +2125,8 @@ export default function PensumView({
                   {submitting
                     ? 'Guardando...'
                     : addMode === 'elective'
-                    ? 'Crear Electiva y Asignar'
-                    : 'Asignar al Semestre'}
+                      ? 'Crear Electiva y Asignar'
+                      : 'Asignar al Semestre'}
                 </button>
               </div>
             </form>
