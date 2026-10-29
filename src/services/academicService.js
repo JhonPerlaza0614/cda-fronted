@@ -3,8 +3,9 @@ import { getAuthToken } from './authService'
 
 /**
  * Servicio para la gestión de Programas, Asignaturas y Pensum Académico
- * Conectado directamente a la API REST de Spring Boot (cda-backend)
- * con fallback transparente a Supabase si el backend se encuentra apagado.
+ * Conectado a la API REST de Spring Boot (cda-backend).
+ * Algunas lecturas conservan fallback a Supabase por compatibilidad; las escrituras
+ * del catálogo de asignaturas siempre pasan por el backend para aplicar HU-044.
  */
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api'
@@ -197,106 +198,58 @@ export async function getAsignaturas() {
 }
 
 export async function createAsignatura(asignatura) {
-  try {
-    const creditsVal = parseInt(asignatura.credits, 10)
-    const payload = {
-      code_course: asignatura.code_course.trim().toUpperCase(),
-      name_course: asignatura.name_course.trim(),
-      credits: isNaN(creditsVal) ? 0 : Math.max(0, creditsVal),
-      is_elective: Boolean(asignatura.is_elective),
-      es_complementaria: Boolean(asignatura.es_complementaria),
-      es_basica: Boolean(asignatura.es_basica),
-      facultad: asignatura.facultad ? asignatura.facultad.trim() : null,
-      id_facultad: asignatura.id_facultad ? parseInt(asignatura.id_facultad, 10) : null
-    }
-    return await requestBackend('/asignaturas', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    })
-  } catch (err) {
-    console.warn('Fallo backend en createAsignatura, fallback a Supabase:', err.message)
-    const creditsVal = parseInt(asignatura.credits, 10)
-    const payload = {
-      code_course: asignatura.code_course.trim().toUpperCase(),
-      name_course: asignatura.name_course.trim(),
-      credits: isNaN(creditsVal) ? 0 : Math.max(0, creditsVal),
-      is_elective: Boolean(asignatura.is_elective),
-      es_complementaria: Boolean(asignatura.es_complementaria),
-      es_basica: Boolean(asignatura.es_basica),
-      facultad: asignatura.facultad ? asignatura.facultad.trim() : null,
-      id_facultad: asignatura.id_facultad ? parseInt(asignatura.id_facultad, 10) : null,
-    }
-    const { data, error } = await supabase
-      .from('asignaturas')
-      .insert([payload])
-      .select()
-    if (error) throw error
-    return data?.[0]
+  const creditsVal = parseInt(asignatura.credits, 10)
+  const payload = {
+    code_course: String(asignatura.code_course || '').trim().toUpperCase(),
+    name_course: String(asignatura.name_course || '').trim(),
+    credits: isNaN(creditsVal) ? 0 : Math.max(0, creditsVal),
+    is_elective: Boolean(asignatura.is_elective),
+    es_complementaria: Boolean(asignatura.es_complementaria),
+    es_basica: Boolean(asignatura.es_basica),
+    facultad: asignatura.facultad ? asignatura.facultad.trim() : null,
+    id_facultad: asignatura.id_facultad ? parseInt(asignatura.id_facultad, 10) : null
   }
+
+  // Las escrituras deben pasar siempre por el backend para que se apliquen
+  // las validaciones de HU-044. No usar Supabase como fallback en operaciones de escritura.
+  return requestBackend('/asignaturas', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
 }
 
 export async function updateAsignatura(code_course, changes) {
-  try {
-    const payload = {}
-    if (changes.name_course !== undefined) payload.name_course = changes.name_course.trim()
-    if (changes.credits !== undefined) {
-      const creditsVal = parseInt(changes.credits, 10)
-      payload.credits = isNaN(creditsVal) ? 0 : Math.max(0, creditsVal)
-    }
-    if (changes.is_elective !== undefined) payload.is_elective = Boolean(changes.is_elective)
-    if (changes.es_complementaria !== undefined) payload.es_complementaria = Boolean(changes.es_complementaria)
-    if (changes.es_basica !== undefined) payload.es_basica = Boolean(changes.es_basica)
-    if (changes.id_facultad !== undefined) {
-      const facId = parseInt(changes.id_facultad, 10)
-      payload.id_facultad = !isNaN(facId) ? facId : null
-    }
-    if (changes.facultad !== undefined) payload.facultad = changes.facultad ? changes.facultad.trim() : null
-
-    return await requestBackend(`/asignaturas/${encodeURIComponent(code_course)}`, {
-      method: 'PUT',
-      body: JSON.stringify(payload)
-    })
-  } catch (err) {
-    console.warn('Fallo backend en updateAsignatura, fallback a Supabase:', err.message)
-    const updateData = {}
-    if (changes.name_course !== undefined) updateData.name_course = changes.name_course.trim()
-    if (changes.credits !== undefined) {
-      const creditsVal = parseInt(changes.credits, 10)
-      updateData.credits = isNaN(creditsVal) ? 0 : Math.max(0, creditsVal)
-    }
-    if (changes.is_elective !== undefined) updateData.is_elective = Boolean(changes.is_elective)
-    if (changes.es_complementaria !== undefined) updateData.es_complementaria = Boolean(changes.es_complementaria)
-    if (changes.es_basica !== undefined) updateData.es_basica = Boolean(changes.es_basica)
-    if (changes.id_facultad !== undefined) {
-      const facId = parseInt(changes.id_facultad, 10)
-      updateData.id_facultad = !isNaN(facId) ? facId : null
-    }
-
-    const { data, error } = await supabase
-      .from('asignaturas')
-      .update(updateData)
-      .eq('code_course', code_course)
-      .select()
-
-    if (error) throw error
-    return data?.[0]
+  const payload = {}
+  if (changes.name_course !== undefined) payload.name_course = String(changes.name_course || '').trim()
+  if (changes.credits !== undefined) {
+    const creditsVal = parseInt(changes.credits, 10)
+    payload.credits = isNaN(creditsVal) ? 0 : Math.max(0, creditsVal)
   }
+  if (changes.is_elective !== undefined) payload.is_elective = Boolean(changes.is_elective)
+  if (changes.es_complementaria !== undefined) payload.es_complementaria = Boolean(changes.es_complementaria)
+  if (changes.es_basica !== undefined) payload.es_basica = Boolean(changes.es_basica)
+  if (changes.id_facultad !== undefined) {
+    const facId = parseInt(changes.id_facultad, 10)
+    payload.id_facultad = !isNaN(facId) ? facId : null
+  }
+  if (changes.facultad !== undefined) payload.facultad = changes.facultad ? changes.facultad.trim() : null
+
+  return requestBackend(`/asignaturas/${encodeURIComponent(code_course)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  })
 }
 
+export async function cambiarEstadoAsignatura(code_course, activo) {
+  return requestBackend(
+    `/asignaturas/${encodeURIComponent(code_course)}/estado?activo=${Boolean(activo)}`,
+    { method: 'PATCH' }
+  )
+}
+
+// Alias para no romper imports antiguos: ahora desactivar nunca borra la fila.
 export async function deleteAsignatura(code_course) {
-  try {
-    return await requestBackend(`/asignaturas/${encodeURIComponent(code_course)}`, {
-      method: 'DELETE'
-    })
-  } catch (err) {
-    console.warn('Fallo backend en deleteAsignatura, fallback a Supabase:', err.message)
-    const { error } = await supabase
-      .from('asignaturas')
-      .delete()
-      .eq('code_course', code_course)
-    if (error) throw error
-    return true
-  }
+  return cambiarEstadoAsignatura(code_course, false)
 }
 
 // --- PENSUM ACADÉMICO ---
