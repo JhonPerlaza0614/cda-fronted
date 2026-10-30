@@ -1,3 +1,4 @@
+git mv src/components/temp-malla.css src/components/MallaScroll.cssgit mv src/components/temp-malla.css src/components/MallaScroll.css
 /* Malla curricular tipo tablero: columnas que se ajustan a la pantalla, tarjetas compactas,
    un solo scroll vertical (el de la página) y arrastre entre semestres.
    Los selectores llevan .pensum-container para ganarle a App.css sin tocarlo. */
