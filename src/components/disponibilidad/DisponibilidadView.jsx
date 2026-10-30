@@ -5,9 +5,9 @@ import {
   consultarMiDisponibilidad,
   consultarPeriodoVigente,
   registrarDisponibilidad,
-} from '../services/DisponibilidadService'
-import { getPeriodos, ESTADOS_PERIODO } from '../services/periodosService'
-import { formatearFechaHora } from '../utils/formatoFechas'
+} from '../../services/DisponibilidadService'
+import { getPeriodos, ESTADOS_PERIODO } from '../../services/periodosService'
+import { formatearFechaHora } from '../../utils/formatoFechas'
 import './DisponibilidadView.css'
 
 const DAYS = [

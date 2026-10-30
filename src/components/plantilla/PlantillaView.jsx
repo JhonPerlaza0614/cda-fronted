@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Users,
-  UserCheck,
   UserX,
   Search,
-  Filter,
   GraduationCap,
   Award,
   Mail,
@@ -12,15 +10,12 @@ import {
   BookOpen,
   Plus,
   Edit2,
-  Trash2,
   Eye,
   RefreshCw,
   AlertTriangle,
-  FileText,
   Star,
   CheckCircle2,
-  XCircle,
-  Briefcase
+  XCircle
 } from 'lucide-react'
 import {
   getCoordinadores,
@@ -30,11 +25,11 @@ import {
   toggleCoordinadorActivo,
   getDocentes,
   createDocente,
-  updateDocente,
   toggleDocenteEstado,
   getCategorias,
-  getTiposContrato
-} from '../services/academicService'
+  getTiposContrato,
+  getFacultades
+} from '../../services/academicService'
 
 export default function PlantillaView({ programas = [], onShowToast }) {
   // --- Estados de datos ---
@@ -42,6 +37,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
   const [docentes, setDocentes] = useState([])
   const [categoriasList, setCategoriasList] = useState([])
   const [tiposContratoList, setTiposContratoList] = useState([])
+  const [facultadesList, setFacultadesList] = useState([])
   const [loading, setLoading] = useState(true)
 
   // --- Filtros y Navegación ---
@@ -83,7 +79,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
     telefono: '',
     tipo_docente: 'NOMBRADO',
     categoria: 'AUXILIAR',
-    code_program: '',
+    id_facultad: '',
     evaluacion_periodo: '',
     evaluacion_valor: '',
   })
@@ -92,11 +88,12 @@ export default function PlantillaView({ programas = [], onShowToast }) {
   const loadAllData = useCallback(async () => {
     setLoading(true)
     try {
-      const [coordsRes, docsRes, catsRes, contratosRes] = await Promise.allSettled([
+      const [coordsRes, docsRes, catsRes, contratosRes, facsRes] = await Promise.allSettled([
         getCoordinadores(),
         getDocentes(),
         getCategorias(),
         getTiposContrato(),
+        getFacultades(),
       ])
 
       if (coordsRes.status === 'fulfilled' && Array.isArray(coordsRes.value)) {
@@ -110,6 +107,9 @@ export default function PlantillaView({ programas = [], onShowToast }) {
       }
       if (contratosRes.status === 'fulfilled' && Array.isArray(contratosRes.value)) {
         setTiposContratoList(contratosRes.value)
+      }
+      if (facsRes.status === 'fulfilled' && Array.isArray(facsRes.value)) {
+        setFacultadesList(facsRes.value.filter(f => f.id !== 2 && f.id !== 3))
       }
     } catch (err) {
       console.error('Error al cargar plantilla académica:', err)
@@ -159,6 +159,12 @@ export default function PlantillaView({ programas = [], onShowToast }) {
       correoPersonal: null,
       telefono: d.telefono,
       codeProgram: d.code_program,
+      idFacultad: d.id_facultad,
+      nombreFacultad:
+        d.nombre_facultad ||
+        facultadesList.find(f => String(f.id) === String(d.id_facultad))?.nombre ||
+        d.nombre_programa ||
+        d.name_program,
       nameProgram: d.nombre_programa || d.name_program,
       categoria: d.categoria || 'No asignada',
       tipoContrato: d.tipo_docente || 'No asignado',
@@ -171,7 +177,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
     }))
 
     return [...coordsUnified, ...docsUnified]
-  }, [coordinadores, docentes])
+  }, [coordinadores, docentes, facultadesList])
 
   // --- Filtros combinados ---
   const filteredProfiles = useMemo(() => {
@@ -199,7 +205,8 @@ export default function PlantillaView({ programas = [], onShowToast }) {
         const matchEmailInst = item.correoInstitucional?.toLowerCase().includes(query)
         const matchEmailPers = item.correoPersonal?.toLowerCase().includes(query)
         const matchProg = item.nameProgram?.toLowerCase().includes(query)
-        return matchName || matchId || matchCode || matchEmailInst || matchEmailPers || matchProg
+        const matchFac = item.nombreFacultad?.toLowerCase().includes(query)
+        return matchName || matchId || matchCode || matchEmailInst || matchEmailPers || matchProg || matchFac
       }
 
       return true
@@ -362,7 +369,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
       telefono: '',
       tipo_docente: 'NOMBRADO',
       categoria: 'AUXILIAR',
-      code_program: programas[0]?.code_program || '',
+      id_facultad: facultadesList[0]?.id ? String(facultadesList[0].id) : '',
       evaluacion_periodo: '',
       evaluacion_valor: '',
     })
@@ -384,7 +391,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
         telefono: docenteFormData.telefono.trim() || null,
         tipo_docente: docenteFormData.tipo_docente,
         categoria: docenteFormData.categoria,
-        code_program: docenteFormData.code_program,
+        id_facultad: docenteFormData.id_facultad ? parseInt(docenteFormData.id_facultad, 10) : null,
         evaluacion_periodo: docenteFormData.evaluacion_periodo.trim() || null,
         evaluacion_valor: docenteFormData.evaluacion_valor ? parseFloat(docenteFormData.evaluacion_valor) : null,
       }
@@ -436,9 +443,9 @@ export default function PlantillaView({ programas = [], onShowToast }) {
             }}
           >
             <Users size={28} style={{ color: '#9ca3af' }} />
-            Plantilla de Personal Académico
+            <span style={{ color: '#0f172a' }}>Plantilla de Personal Académico</span>
           </h1>
-          <p style={{ color: '#9ca3af', margin: '0.35rem 0 0 0', fontSize: '0.95rem' }}>
+          <p style={{ color: '#475569', margin: '0.35rem 0 0 0', fontSize: '0.95rem' }}>
             Directorio y gestión unificada de perfiles de docentes y coordinadores registrados
           </p>
         </div>
@@ -671,10 +678,11 @@ export default function PlantillaView({ programas = [], onShowToast }) {
         <button
           onClick={() => setActiveSubTab('todos')}
           style={{
-            backgroundColor: 'transparent',
             border: 'none',
-            borderBottom: activeSubTab === 'todos' ? '2px solid #e5e7eb' : '2px solid transparent',
-            color: activeSubTab === 'todos' ? '#f9fafb' : '#9ca3af',
+            borderBottom: activeSubTab === 'todos' ? '2px solid #1e293b' : '2px solid transparent',
+            backgroundColor: activeSubTab === 'todos' ? '#1e293b' : 'transparent',
+            borderRadius: '8px 8px 0 0',
+            color: activeSubTab === 'todos' ? '#ffffff' : '#64748b',
             padding: '0.75rem 1.25rem',
             fontWeight: 600,
             cursor: 'pointer',
@@ -691,10 +699,11 @@ export default function PlantillaView({ programas = [], onShowToast }) {
         <button
           onClick={() => setActiveSubTab('docentes')}
           style={{
-            backgroundColor: 'transparent',
             border: 'none',
             borderBottom: activeSubTab === 'docentes' ? '2px solid #60a5fa' : '2px solid transparent',
-            color: activeSubTab === 'docentes' ? '#93c5fd' : '#9ca3af',
+            backgroundColor: activeSubTab === 'docentes' ? '#1e3a5f' : 'transparent',
+            borderRadius: '8px 8px 0 0',
+            color: activeSubTab === 'docentes' ? '#ffffff' : '#64748b',
             padding: '0.75rem 1.25rem',
             fontWeight: 600,
             cursor: 'pointer',
@@ -711,10 +720,11 @@ export default function PlantillaView({ programas = [], onShowToast }) {
         <button
           onClick={() => setActiveSubTab('coordinadores')}
           style={{
-            backgroundColor: 'transparent',
             border: 'none',
             borderBottom: activeSubTab === 'coordinadores' ? '2px solid #c084fc' : '2px solid transparent',
-            color: activeSubTab === 'coordinadores' ? '#d8b4fe' : '#9ca3af',
+            backgroundColor: activeSubTab === 'coordinadores' ? '#3b2d54' : 'transparent',
+            borderRadius: '8px 8px 0 0',
+            color: activeSubTab === 'coordinadores' ? '#ffffff' : '#64748b',
             padding: '0.75rem 1.25rem',
             fontWeight: 600,
             cursor: 'pointer',
@@ -1043,9 +1053,9 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                       </div>
                     )}
 
-                    {/* Programa Académico */}
+                    {/* Programa Académico / Facultad */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
-                      <span style={{ color: '#9ca3af', flexShrink: 0 }}>Programa:</span>
+                      <span style={{ color: '#9ca3af', flexShrink: 0 }}>{isCoord ? 'Programa:' : 'Facultad:'}</span>
                       <span
                         style={{
                           fontWeight: 500,
@@ -1055,9 +1065,9 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                         }}
-                        title={profile.nameProgram || 'Sin asignar'}
+                        title={isCoord ? (profile.nameProgram || 'Sin asignar') : (profile.nombreFacultad || 'Sin facultad asignada')}
                       >
-                        {profile.nameProgram || 'Sin programa asignado'}
+                        {isCoord ? (profile.nameProgram || 'Sin programa asignado') : (profile.nombreFacultad || 'Sin facultad asignada')}
                       </span>
                     </div>
 
@@ -1150,8 +1160,6 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                       >
                         <Edit2 size={14} />
                       </button>
-
-                      
                     </div>
                   )}
                 </div>
@@ -1312,11 +1320,13 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', fontSize: '0.9rem' }}>
                   <div style={{ gridColumn: 'span 2' }}>
-                    <span style={{ color: '#9ca3af', display: 'block', fontSize: '0.78rem' }}>Programa Académico</span>
+                    <span style={{ color: '#9ca3af', display: 'block', fontSize: '0.78rem' }}>
+                      {selectedProfile.tipoRol === 'COORDINADOR' ? 'Programa Académico' : 'Facultad de Adscripción'}
+                    </span>
                     <strong style={{ color: '#f3f4f6' }}>
-                      {selectedProfile.nameProgram
-                        ? `${selectedProfile.nameProgram} (${selectedProfile.codeProgram})`
-                        : 'Sin programa académico asignado'}
+                      {selectedProfile.tipoRol === 'COORDINADOR'
+                        ? (selectedProfile.nameProgram ? `${selectedProfile.nameProgram} (${selectedProfile.codeProgram})` : 'Sin programa académico asignado')
+                        : (selectedProfile.nombreFacultad || 'Sin facultad asignada')}
                     </strong>
                   </div>
                   <div>
@@ -1436,12 +1446,15 @@ export default function PlantillaView({ programas = [], onShowToast }) {
             </div>
 
             {/* Footer del Modal */}
-            <div className="modal-footer" style={{ borderTop: '1px solid #374151', backgroundColor: '#1f2937',
+            <div
+              className="modal-footer"
+              style={{
+                borderTop: '1px solid #374151',
+                backgroundColor: '#1f2937',
                 padding: '1rem 1.5rem',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                backgroundColor: '#1f2937',
               }}
             >
               <button
@@ -1805,19 +1818,19 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                   </div>
                 </div>
 
-                {/* Programa de Adscripción */}
+                {/* Facultad de Adscripción */}
                 <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Programa de Adscripción *</label>
+                  <label style={{ color: '#e5e7eb' }}>Facultad de Adscripción *</label>
                   <select
                     required
-                    value={docenteFormData.code_program}
-                    onChange={(e) => setDocenteFormData({ ...docenteFormData, code_program: e.target.value })}
+                    value={docenteFormData.id_facultad}
+                    onChange={(e) => setDocenteFormData({ ...docenteFormData, id_facultad: e.target.value })}
                     style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
                   >
-                    <option value="">-- Seleccionar Programa --</option>
-                    {programas.map(p => (
-                      <option key={p.code_program} value={p.code_program}>
-                        {p.name_program} ({p.code_program})
+                    <option value="">-- Seleccionar Facultad --</option>
+                    {facultadesList.map(f => (
+                      <option key={f.id} value={String(f.id)}>
+                        {f.nombre || f.Nombre}
                       </option>
                     ))}
                   </select>
@@ -1890,6 +1903,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 Cancelar
               </button>
               <button
+                type="button"
                 className="btn-danger"
                 onClick={handleDeleteCoordinador}
                 disabled={submitting}

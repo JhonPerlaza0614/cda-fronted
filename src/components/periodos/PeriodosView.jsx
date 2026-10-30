@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Edit3, ExternalLink, Plus, Save, Trash2, X } from 'lucide-react'
-import { createPeriodo, updatePeriodo } from '../services/academicService'
+import { createPeriodo, updatePeriodo } from '../../services/academicService'
 import {
   getPeriodos,
   desactivarPeriodo,
   ESTADO_LABELS,
   ESTADOS_PERIODO,
-} from '../services/periodosService'
-import { formatearFecha, formatearFechaHora } from '../utils/formatoFechas'
+} from '../../services/periodosService'
+import { formatearFecha, formatearFechaHora } from '../../utils/formatoFechas'
 import EliminarPeriodoModal from './EliminarPeriodoModal'
 
 const emptyForm = {

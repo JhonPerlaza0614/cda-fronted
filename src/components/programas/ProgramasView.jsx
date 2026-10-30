@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Search, Edit2, Trash2, BookOpen, Layers, AlertTriangle, Award, Building2 } from 'lucide-react'
-import { createPrograma, updatePrograma, deletePrograma, getFacultades, createFacultad, getCoordinadores } from '../services/academicService'
+import { createPrograma, updatePrograma, deletePrograma, getFacultades, createFacultad, getCoordinadores } from '../../services/academicService'
 
 export default function ProgramasView({ 
   programas, 
@@ -23,8 +23,8 @@ export default function ProgramasView({
   const [loadingCoordinadores, setLoadingCoordinadores] = useState(false)
   const [currentCoordinatorId, setCurrentCoordinatorId] = useState(null)
 
-  // Estado para creación rápida de facultad
-  const [isAddingNewFacultad, setIsAddingNewFacultad] = useState(false)
+  // Modal independiente para crear facultad (al lado de Nuevo Programa)
+  const [isFacultadModalOpen, setIsFacultadModalOpen] = useState(false)
   const [newFacultadName, setNewFacultadName] = useState('')
   const [newFacultadDesc, setNewFacultadDesc] = useState('')
   const [addingFacultadSubmitting, setAddingFacultadSubmitting] = useState(false)
@@ -67,7 +67,14 @@ export default function ProgramasView({
       .reduce((sum, item) => sum + (item.credits || 0), 0)
   }
 
-  const handleCreateNewFacultadInDb = async () => {
+  const handleOpenFacultadModal = () => {
+    setNewFacultadName('')
+    setNewFacultadDesc('')
+    setIsFacultadModalOpen(true)
+  }
+
+  const handleCreateNewFacultadInDb = async (e) => {
+    if (e) e.preventDefault()
     if (!newFacultadName.trim()) {
       onShowToast('Ingresa el nombre de la nueva facultad', 'error')
       return
@@ -75,20 +82,17 @@ export default function ProgramasView({
 
     setAddingFacultadSubmitting(true)
     try {
-      const created = await createFacultad({ 
+      await createFacultad({ 
         nombre: newFacultadName.trim(),
         descripcion: newFacultadDesc.trim()
       })
-      onShowToast(`Facultad "${newFacultadName}" creada exitosamente`, 'success')
+      onShowToast(`Facultad "${newFacultadName.trim()}" creada exitosamente`, 'success')
       setNewFacultadName('')
       setNewFacultadDesc('')
-      setIsAddingNewFacultad(false)
+      setIsFacultadModalOpen(false)
       
       const updatedFacultades = await getFacultades()
-      setFacultadesList(updatedFacultades)
-      if (created && created.id) {
-        setFormData(prev => ({ ...prev, id_facultad_programa: String(created.id) }))
-      }
+      if (updatedFacultades) setFacultadesList(updatedFacultades)
     } catch (err) {
       onShowToast(`Error al guardar facultad: ${err.message}`, 'error')
     } finally {
@@ -98,9 +102,6 @@ export default function ProgramasView({
 
   const handleOpenCreateModal = () => {
     setEditingProgram(null)
-    setIsAddingNewFacultad(false)
-    setNewFacultadName('')
-    setNewFacultadDesc('')
     setFormData({
       code_program: '',
       name_program: '',
@@ -117,9 +118,6 @@ export default function ProgramasView({
 
   const handleOpenEditModal = async (prog) => {
     setEditingProgram(prog)
-    setIsAddingNewFacultad(false)
-    setNewFacultadName('')
-    setNewFacultadDesc('')
     setCurrentCoordinatorId(null)
     setCoordinadoresList([])
     setLoadingCoordinadores(Boolean(canAssignCoordinator))
@@ -175,7 +173,7 @@ export default function ProgramasView({
       return
     }
 
-     if (numeroResolucion.length > 15) {
+    if (numeroResolucion.length > 15) {
       onShowToast('El número de resolución no puede superar 15 caracteres', 'error')
       return
     }
@@ -249,13 +247,19 @@ export default function ProgramasView({
         <div>
           <h1 className="section-title">Programas Académicos (Carreras)</h1>
           <p className="section-description">
-            Gestiona los programas universitarios en la base de datos.
+            Gestiona los programas universitarios y facultades en la base de datos.
           </p>
         </div>
-        <button className="btn-primary" onClick={handleOpenCreateModal}>
-          <Plus size={18} />
-          <span>Nuevo Programa</span>
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button className="btn-secondary" onClick={handleOpenFacultadModal}>
+            <Building2 size={18} />
+            <span>Nueva Facultad</span>
+          </button>
+          <button className="btn-primary" onClick={handleOpenCreateModal}>
+            <Plus size={18} />
+            <span>Nuevo Programa</span>
+          </button>
+        </div>
       </div>
 
       {/* Control Bar: Search & Stats */}
@@ -362,6 +366,61 @@ export default function ProgramasView({
         </div>
       )}
 
+      {/* Modal Crear Facultad */}
+      {isFacultadModalOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-card" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Nueva Facultad</h2>
+              <button className="modal-close-btn" onClick={() => setIsFacultadModalOpen(false)}>×</button>
+            </div>
+            <form onSubmit={handleCreateNewFacultadInDb}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label htmlFor="facultad_nombre">Nombre de la Facultad *</label>
+                  <input
+                    id="facultad_nombre"
+                    type="text"
+                    placeholder="Ej. Facultad de Ingeniería y Administración"
+                    value={newFacultadName}
+                    onChange={(e) => setNewFacultadName(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="facultad_descripcion">Descripción (opcional)</label>
+                  <input
+                    id="facultad_descripcion"
+                    type="text"
+                    placeholder="Descripción de la facultad"
+                    value={newFacultadDesc}
+                    onChange={(e) => setNewFacultadDesc(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setIsFacultadModalOpen(false)}
+                  disabled={addingFacultadSubmitting}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={addingFacultadSubmitting || !newFacultadName.trim()}
+                >
+                  {addingFacultadSubmitting ? 'Guardando...' : 'Crear Facultad'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal Crear / Editar Programa */}
       {isModalOpen && (
         <div className="modal-backdrop">
@@ -392,7 +451,7 @@ export default function ProgramasView({
                   <input
                     id="code_program"
                     type="text"
-                    placeholder="Ej. ING-SIS, ADM-EMP"
+                    placeholder="Ej. 3743"
                     value={formData.code_program}
                     onChange={(e) => setFormData({ ...formData, code_program: e.target.value })}
                     disabled={!!editingProgram}
@@ -429,71 +488,23 @@ export default function ProgramasView({
                 </div>
 
                 <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label htmlFor="id_facultad_programa">Facultad Perteneciente</label>
-                    <button
-                      type="button"
-                      className="btn-link"
-                      onClick={() => setIsAddingNewFacultad(!isAddingNewFacultad)}
-                      style={{ fontSize: '0.8rem' }}
-                    >
-                      {isAddingNewFacultad ? 'Cancelar' : '+ Agregar Nueva Facultad'}
-                    </button>
-                  </div>
-
-                  {isAddingNewFacultad ? (
-                    <div className="new-group-inline-form" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.4rem' }}>
-                      <input
-                        type="text"
-                        placeholder="Nombre de la facultad (ej. Facultad de Ciencias Sociales y Humanas)"
-                        value={newFacultadName}
-                        onChange={(e) => setNewFacultadName(e.target.value)}
-                        className="select-input"
-                        autoFocus
-                      />
-                      <input
-                        type="text"
-                        placeholder="Descripción de la facultad (opcional)"
-                        value={newFacultadDesc}
-                        onChange={(e) => setNewFacultadDesc(e.target.value)}
-                        className="select-input"
-                      />
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.2rem' }}>
-                        <button
-                          type="button"
-                          className="btn-secondary btn-sm"
-                          onClick={() => setIsAddingNewFacultad(false)}
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-primary btn-sm"
-                          onClick={handleCreateNewFacultadInDb}
-                          disabled={addingFacultadSubmitting || !newFacultadName.trim()}
-                        >
-                          {addingFacultadSubmitting ? 'Guardando...' : 'Guardar en BD'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <select
-                      id="id_facultad_programa"
-                      value={formData.id_facultad_programa}
-                      onChange={(e) => setFormData({ ...formData, id_facultad_programa: e.target.value })}
-                      className="select-input"
-                      style={{ marginTop: '0.35rem' }}
-                    >
-                      <option value="">-- Sin facultad asignada --</option>
-                      {facultadesList
-                        .filter(f => f.id !== 2 && f.id !== 3)
-                        .map(f => (
-                          <option key={f.id} value={f.id}>
-                            {f.nombre || f.Nombre}
-                          </option>
-                        ))}
-                    </select>
-                  )}
+                  <label htmlFor="id_facultad_programa">Facultad Perteneciente</label>
+                  <select
+                    id="id_facultad_programa"
+                    value={formData.id_facultad_programa}
+                    onChange={(e) => setFormData({ ...formData, id_facultad_programa: e.target.value })}
+                    className="select-input"
+                    style={{ marginTop: '0.35rem' }}
+                  >
+                    <option value="">-- Sin facultad asignada --</option>
+                    {facultadesList
+                      .filter(f => f.id !== 2 && f.id !== 3)
+                      .map(f => (
+                        <option key={f.id} value={f.id}>
+                          {f.nombre || f.Nombre}
+                        </option>
+                      ))}
+                  </select>
                   <small className="form-hint">
                     Las electivas especializadas en el pensum se mostrarán exclusivamente según la facultad seleccionada aquí.
                   </small>
@@ -531,7 +542,7 @@ export default function ProgramasView({
                       </option>
                       {coordinadoresList.map(c => (
                         <option key={c.id} value={String(c.id)}>
-                          {c.nombre_completo || `Coordinador #${c.id}`} — {c.code_program || 'Sin programa'}{c.activo === false ? ' (Inactivo)' : ''}
+                          {c.nombre_completo || `Coordinador #${c.id}`} ({c.name_program || c.code_program || 'no asignado'}){c.activo === false ? ' - Inactivo' : ''}
                         </option>
                       ))}
                     </select>

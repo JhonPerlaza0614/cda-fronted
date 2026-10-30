@@ -35,7 +35,7 @@ import {
   getPensumVersion,
   deactivatePensum,
   reactivatePensum
-} from '../services/academicService'
+} from '../../services/academicService'
 import './MallaScroll.css'
 
 function inferTipoAsignatura(item) {
@@ -56,7 +56,8 @@ export default function PensumView({
   onShowToast,
   onNavigateToAsignaturas,
   onNavigateToProgramas,
-  canEdit = true
+  canEdit = true,
+  isProgramLocked = false
 }) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [selectedSemesterForAdd, setSelectedSemesterForAdd] = useState(1)
@@ -935,9 +936,9 @@ export default function PensumView({
       <div className="section-container">
         <div className="empty-state-card">
           <BookOpen size={56} className="empty-icon text-primary" />
-          <h2>No hay programas registrados</h2>
-          <p>Para visualizar y estructurar una malla curricular, primero debes registrar al menos un programa o carrera.</p>
-          <button className="btn-primary" onClick={onNavigateToProgramas}>
+          <h2>{isProgramLocked ? 'Sin programa asignado' : 'No hay programas registrados'}</h2>
+          <p>{isProgramLocked ? 'Aún no tienes un programa o carrera asignado a tu coordinación. Comunícate con el administrador para su asignación.' : 'Para visualizar y estructurar una malla curricular, primero debes registrar al menos un programa o carrera.'}</p>
+          <button className="btn-primary" onClick={onNavigateToProgramas} style={isProgramLocked ? { display: 'none' } : undefined}>
             <Plus size={16} /> Crear Primer Programa
           </button>
         </div>
@@ -954,9 +955,28 @@ export default function PensumView({
         <div className="program-search-wrapper">
           <label className="selector-label">
             <BookOpen size={18} className="text-primary" />
-            <span>Carrera o Programa:</span>
+            <span>{isProgramLocked ? 'Programa Asignado:' : 'Carrera o Programa:'}</span>
           </label>
-          <div className="program-search-combobox" ref={comboboxRef}>
+          {isProgramLocked ? (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.6rem',
+                padding: '0.55rem 0.95rem',
+                background: '#f8fafc',
+                border: '1px solid #cbd5e1',
+                borderRadius: '10px',
+                fontWeight: 600,
+                color: '#0f172a',
+                fontSize: '0.95rem'
+              }}
+            >
+              <span className="prog-item-code">{currentProgram?.code_program}</span>
+              <span>{currentProgram?.name_program}</span>
+            </div>
+          ) : null}
+          <div className="program-search-combobox" ref={comboboxRef} style={isProgramLocked ? { display: 'none' } : undefined}>
             <div className="program-search-input-row">
               <Search size={16} className="prog-search-icon" />
               <input
@@ -1248,7 +1268,7 @@ export default function PensumView({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.85rem' }}>
               <div>
                 <span className="banner-tag" style={{ marginBottom: '0.35rem', display: 'inline-block' }}>
-                  {editorMode === 'edit' ? 'HU-032 · Editar Malla Activa' : 'HU-017 · Registrar Resolución de Programa'}
+                  {editorMode === 'edit' ? 'Editar Malla Activa' : 'Registrar Resolución de Programa'}
                 </span>
                 <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#0f172a' }}>
                   {editorMode === 'edit'

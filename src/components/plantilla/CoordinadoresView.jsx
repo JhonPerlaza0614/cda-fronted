@@ -20,7 +20,7 @@ import {
   createCoordinador,
   updateCoordinador,
   deleteCoordinador
-} from '../services/academicService'
+} from '../../services/academicService'
 
 // Escalafón Docente
 const CATEGORIAS = [

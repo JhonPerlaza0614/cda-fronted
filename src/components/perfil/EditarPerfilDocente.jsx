@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react'
 import { AlertTriangle, Camera, Trash2, UserCircle } from 'lucide-react'
-import { deleteMiFoto, updateMiContacto, uploadMiFoto } from '../services/docenteService'
+import { deleteMiFoto, updateMiContacto, uploadMiFoto } from '../../services/docenteService'
 
 // HU-015: el docente edita su foto, correo personal y teléfono desde "Mi perfil".
 // Nombres, apellidos y correo institucional son de solo lectura.

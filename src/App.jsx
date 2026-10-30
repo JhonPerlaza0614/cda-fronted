@@ -1,23 +1,24 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import Navbar from './components/Navbar'
-import PensumView from './components/PensumView'
-import ProgramasView from './components/ProgramasView'
-import ProgramasCoordinadoresView from './components/ProgramasCoordinadoresView'
-import AsignaturasView from './components/AsignaturasView'
-import PlantillaView from './components/PlantillaView'
-import PeriodosView from './components/PeriodosView'
-import DedicatedInProgressView from './components/DedicatedInProgressView'
-import MiPerfilView from './components/MiPerfilView'
-import DisponibilidadView from './components/DisponibilidadView'
-import SqlSetupModal from './components/SqlSetupModal'
-import Toast from './components/Toast'
+import Navbar from './components/layout/Navbar'
+import PensumView from './components/pensum/PensumView'
+import ProgramasView from './components/programas/ProgramasView'
+import ProgramasCoordinadoresView from './components/programas/ProgramasCoordinadoresView'
+import AsignaturasView from './components/asignaturas/AsignaturasView'
+import PlantillaView from './components/plantilla/PlantillaView'
+import PeriodosView from './components/periodos/PeriodosView'
+import DedicatedInProgressView from './components/layout/DedicatedInProgressView'
+import MiPerfilView from './components/perfil/MiPerfilView'
+import DisponibilidadView from './components/disponibilidad/DisponibilidadView'
+import SqlSetupModal from './components/layout/SqlSetupModal'
+import Toast from './components/layout/Toast'
 import {
   getProgramas,
   getAsignaturas,
   getAllPensum,
   checkDatabaseHealth
 } from './services/academicService'
-import { AlertCircle, Database, RefreshCw, Sparkles, Clock } from 'lucide-react'
+import { getMiPerfilCoordinador } from './services/docenteService'
+import { AlertCircle, Database, RefreshCw } from 'lucide-react'
 import './App.css'
 
 // Si el backend ya trae nombre y créditos (lo normal) no se vuelve a cruzar nada en el navegador;
@@ -33,22 +34,20 @@ const withCourseInfo = (item, asigMap) => {
 }
 
 export default function App({ user, onLogout }) {
-  const rol = user?.rol ?? 1 // 1: Admin, 2: Coordinador, 3: Docente
+  const rol = Number(user?.rol ?? 1) // 1: Admin, 2: Coordinador, 3: Docente
   const isAdmin = rol === 1
   const isCoordinador = rol === 2
   const isDocente = rol === 3
   const canSeeAcademicData = isAdmin || isCoordinador
 
-  // Docentes entran directamente a su portal dedicado
-  const [activeTab, setActiveTab] = useState(() => {
-    if (isDocente) return 'docente_portal'
-    return 'pensum'
-  })
+  // Todos los roles ingresan primero a la pantalla de bienvenida "Bienvenido a CDA"
+  const [activeTab, setActiveTab] = useState('inicio')
 
   const [programas, setProgramas] = useState([])
   const [asignaturas, setAsignaturas] = useState([])
   const [pensumList, setPensumList] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
+  const [coordinadorPerfil, setCoordinadorPerfil] = useState(null)
   // HU-037: programa a editar al llegar a «Programas» desde «Programas y coordinadores»
   const [programaCoordinadorCode, setProgramaCoordinadorCode] = useState(null)
 
@@ -82,9 +81,14 @@ export default function App({ user, onLogout }) {
       .catch(() => { if (seq === loadSeq.current) setIsConnected(false) })
 
     try {
-      const [progs, asigs, pensum] = canSeeAcademicData
-        ? await Promise.all([getProgramas(), getAsignaturas(), getAllPensum()])
-        : [[], [], []]
+      const [progs, asigs, pensum, coordData] = await Promise.all([
+        canSeeAcademicData ? getProgramas() : Promise.resolve([]),
+        canSeeAcademicData ? getAsignaturas() : Promise.resolve([]),
+        canSeeAcademicData ? getAllPensum() : Promise.resolve([]),
+        isCoordinador && user?.email
+          ? getMiPerfilCoordinador(user.email).catch(() => null)
+          : Promise.resolve(null)
+      ])
       if (seq !== loadSeq.current) return
 
       const asigMap = new Map(asigs.map(a => [a.code_course, a]))
@@ -92,8 +96,15 @@ export default function App({ user, onLogout }) {
       setAsignaturas(asigs)
       setPensumList(pensum.map(item => withCourseInfo(item, asigMap)))
 
-      // Si no hay programa seleccionado (o ya no existe), seleccionar el primero
-      if (progs.length > 0) {
+      if (isCoordinador) {
+        setCoordinadorPerfil(coordData)
+        if (coordData?.code_program) {
+          setSelectedProgramCode(coordData.code_program)
+        } else {
+          setSelectedProgramCode('')
+        }
+      } else if (progs.length > 0) {
+        // Si no hay programa seleccionado (o ya no existe), seleccionar el primero
         setSelectedProgramCode(prev =>
           progs.some(p => p.code_program === prev) ? prev : progs[0].code_program
         )
@@ -105,7 +116,7 @@ export default function App({ user, onLogout }) {
     } finally {
       if (seq === loadSeq.current && !isSilent) setLoading(false)
     }
-  }, [canSeeAcademicData, isDocente])
+  }, [canSeeAcademicData, isCoordinador, isDocente, user?.email])
 
   useEffect(() => {
     loadData()
@@ -121,6 +132,11 @@ export default function App({ user, onLogout }) {
     setActiveTab('pensum')
   }
 
+  const coordinadorProgramCode = coordinadorPerfil?.code_program || null
+  const programasParaPensum = isCoordinador
+    ? (coordinadorProgramCode ? programas.filter(p => p.code_program === coordinadorProgramCode) : [])
+    : programas
+
   return (
     <div className="app-layout">
       {/* Barra superior de navegación */}
@@ -132,26 +148,6 @@ export default function App({ user, onLogout }) {
         user={user}
         onLogout={onLogout}
       />
-
-      {/* Banner de aviso para Coordinador cuando navega en asignaturas o pensum */}
-      {isCoordinador && (activeTab === 'pensum' || activeTab === 'asignaturas') && (
-        <div className="coordinador-info-banner">
-          <div className="banner-content">
-            <Sparkles size={18} className="banner-icon" />
-            <div className="banner-text">
-              <strong>Páginas dedicadas en progreso de creación</strong>
-              <span className="banner-subtext"> — Tu cuenta de Coordinador(a) tiene acceso de consulta a Mallas Curriculares y Banco de Asignaturas.</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="btn-banner-link"
-            onClick={() => setActiveTab('coordinador_portal')}
-          >
-            <Clock size={14} /> Ver Estado del Portal
-          </button>
-        </div>
-      )}
 
       {/* Alerta si ocurre un error de RLS o configuración */}
       {initialError && !isDocente && (
@@ -185,10 +181,11 @@ export default function App({ user, onLogout }) {
           </div>
         ) : (
           <>
-            {/* Portales informativos para Docentes y Coordinadores */}
-            {(activeTab === 'docente_portal' || activeTab === 'coordinador_portal') && (
+            {/* Pantalla de bienvenida institucional "Bienvenido a CDA" */}
+            {(activeTab === 'inicio' || activeTab === 'docente_portal' || activeTab === 'coordinador_portal') && (
               <DedicatedInProgressView
                 user={user}
+                coordinadorPerfil={coordinadorPerfil}
                 onNavigate={setActiveTab}
                 onLogout={onLogout}
               />
@@ -205,16 +202,17 @@ export default function App({ user, onLogout }) {
             {/* Malla Curricular */}
             {activeTab === 'pensum' && (
               <PensumView
-                programas={programas}
+                programas={programasParaPensum}
                 asignaturas={asignaturas}
-                selectedProgramCode={selectedProgramCode}
-                setSelectedProgramCode={setSelectedProgramCode}
+                selectedProgramCode={isCoordinador ? (coordinadorProgramCode || '') : selectedProgramCode}
+                setSelectedProgramCode={isCoordinador ? () => {} : setSelectedProgramCode}
                 pensumList={pensumList}
                 onRefresh={() => loadData(true)}
                 onShowToast={showToast}
                 onNavigateToAsignaturas={() => setActiveTab('asignaturas')}
                 onNavigateToProgramas={() => setActiveTab('programas')}
                 canEdit
+                isProgramLocked={isCoordinador}
               />
             )}
 
@@ -234,7 +232,11 @@ export default function App({ user, onLogout }) {
 
             {/* Programas y coordinadores (HU-037): solo administrador */}
             {isAdmin && activeTab === 'programas_coordinadores' && (
-              <ProgramasCoordinadoresView onGestionarCoordinador={handleGestionarCoordinador} />
+              <ProgramasCoordinadoresView
+                onGestionarCoordinador={handleGestionarCoordinador}
+                onShowToast={showToast}
+                onRefresh={() => loadData(true)}
+              />
             )}
 
             {/* Banco de Asignaturas */}

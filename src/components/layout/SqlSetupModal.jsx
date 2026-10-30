@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Copy, Check, Database, ShieldCheck, Zap, X, RefreshCw } from 'lucide-react'
-import { checkDatabaseHealth } from '../services/academicService'
+import { checkDatabaseHealth } from '../../services/academicService'
 
 export default function SqlSetupModal({ isOpen, onClose, onRefreshData }) {
   const [copied, setCopied] = useState(false)

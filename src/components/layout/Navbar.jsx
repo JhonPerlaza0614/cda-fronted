@@ -1,8 +1,8 @@
 import React from 'react'
-import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Clock, UserCircle, CalendarDays, UserCheck } from 'lucide-react'
+import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Home, UserCircle, CalendarDays, UserCheck } from 'lucide-react'
 
 export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout }) {
-  const rol = user?.rol ?? 1 // 1: Admin, 2: Coordinador, 3: Docente
+  const rol = Number(user?.rol ?? 1) // 1: Admin, 2: Coordinador, 3: Docente
   const isAdmin = rol === 1
   const isCoordinador = rol === 2
   const isDocente = rol === 3
@@ -17,14 +17,10 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
     ? 'Administrador'
     : (rol === 2 ? 'Coordinador' : (rol === 3 ? 'Docente' : (user?.rolNombre || 'Usuario')))
 
+  const isHomeActive = activeTab === 'inicio' || activeTab === 'docente_portal' || activeTab === 'coordinador_portal'
+
   const handleBrandClick = () => {
-    if (isDocente) {
-      setActiveTab('docente_portal')
-    } else if (canSeePensum) {
-      setActiveTab('pensum')
-    } else {
-      setActiveTab('periodos')
-    }
+    setActiveTab('inicio')
   }
 
   return (
@@ -41,6 +37,14 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
         </div>
 
         <nav className="navbar-links">
+          <button
+            className={`nav-tab-btn ${isHomeActive ? 'active' : ''}`}
+            onClick={() => setActiveTab('inicio')}
+          >
+            <Home size={18} />
+            <span>Inicio</span>
+          </button>
+
           {canSeePensum && (
             <button
               className={`nav-tab-btn ${activeTab === 'pensum' ? 'active' : ''}`}
@@ -99,26 +103,6 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
             >
               <CalendarDays size={18} />
               <span>Períodos académicos</span>
-            </button>
-          )}
-
-          {isCoordinador && (
-            <button
-              className={`nav-tab-btn ${activeTab === 'coordinador_portal' ? 'active' : ''}`}
-              onClick={() => setActiveTab('coordinador_portal')}
-            >
-              <Clock size={18} />
-              <span>Portal Coordinador</span>
-            </button>
-          )}
-
-          {isDocente && (
-            <button
-              className={`nav-tab-btn ${activeTab === 'docente_portal' ? 'active' : ''}`}
-              onClick={() => setActiveTab('docente_portal')}
-            >
-              <Clock size={18} />
-              <span>Portal Docente</span>
             </button>
           )}
 
