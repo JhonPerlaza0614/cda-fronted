@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Search, Edit2, Trash2, RotateCcw, Library, BookOpen, AlertTriangle, Award, Sparkles, Building2 } from 'lucide-react'
-import { createAsignatura, updateAsignatura, cambiarEstadoAsignatura, getFacultades, createFacultad } from '../services/academicService'
+import { createAsignatura, updateAsignatura, cambiarEstadoAsignatura, getFacultades } from '../../services/academicService'
 
 export default function AsignaturasView({ 
   asignaturas, 
@@ -15,12 +15,6 @@ export default function AsignaturasView({
   const [deletingAsignatura, setDeletingAsignatura] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [facultadesList, setFacultadesList] = useState([])
-
-  // Inline creación de nuevas facultades en la BD (id, nombre, descripcion)
-  const [isAddingNewFacultad, setIsAddingNewFacultad] = useState(false)
-  const [newFacultadName, setNewFacultadName] = useState('')
-  const [newFacultadDesc, setNewFacultadDesc] = useState('')
-  const [addingFacultadSubmitting, setAddingFacultadSubmitting] = useState(false)
 
   // Cargar facultades desde la tabla 'Facultad' de la base de datos Supabase
   const loadFacultadesFromDb = async () => {
@@ -71,10 +65,6 @@ export default function AsignaturasView({
 
   const handleOpenCreateModal = async (isElectivePreset = false) => {
     setEditingAsignatura(null)
-    setIsAddingNewFacultad(false)
-    setNewFacultadName('')
-    setNewFacultadDesc('')
-    
     await loadFacultadesFromDb()
     
     setFormData({
@@ -91,10 +81,6 @@ export default function AsignaturasView({
 
   const handleOpenEditModal = async (asig) => {
     setEditingAsignatura(asig)
-    setIsAddingNewFacultad(false)
-    setNewFacultadName('')
-    setNewFacultadDesc('')
-    
     await loadFacultadesFromDb()
 
     setFormData({
@@ -133,7 +119,6 @@ export default function AsignaturasView({
   }
 
   const handleToggleComplementaria = (checked) => {
-    if (checked) setIsAddingNewFacultad(false)
     setFormData(prev => ({
       ...prev,
       es_complementaria: checked,
@@ -143,42 +128,12 @@ export default function AsignaturasView({
   }
 
   const handleToggleBasica = (checked) => {
-    if (checked) setIsAddingNewFacultad(false)
     setFormData(prev => ({
       ...prev,
       es_basica: checked,
       es_complementaria: false,
       id_facultad: checked ? '3' : (prev.id_facultad === '3' ? '' : prev.id_facultad)
     }))
-  }
-
-  const handleCreateNewFacultadInDb = async () => {
-    if (!newFacultadName.trim()) {
-      onShowToast('Ingresa el nombre de la nueva facultad para la BD', 'error')
-      return
-    }
-
-    setAddingFacultadSubmitting(true)
-    try {
-      const created = await createFacultad({ 
-        nombre: newFacultadName.trim(),
-        descripcion: newFacultadDesc.trim()
-      })
-      onShowToast(`Facultad "${newFacultadName}" guardada en la tabla 'Facultad' de la BD`, 'success')
-      setNewFacultadName('')
-      setNewFacultadDesc('')
-      setIsAddingNewFacultad(false)
-      
-      const updatedFacultades = await getFacultades()
-      setFacultadesList(updatedFacultades)
-      if (created && created.id) {
-        setFormData(prev => ({ ...prev, id_facultad: String(created.id) }))
-      }
-    } catch (err) {
-      onShowToast(`Error al guardar facultad en BD: ${err.message}`, 'error')
-    } finally {
-      setAddingFacultadSubmitting(false)
-    }
   }
 
   const handleSubmit = async (e) => {
@@ -503,95 +458,43 @@ export default function AsignaturasView({
                     const isFacultyLocked = Boolean(formData.es_complementaria || formData.es_basica)
                     return (
                       <div className="form-group" style={{ marginTop: '0.75rem' }}>
-                        <div className="group-label-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <label htmlFor="modal_facultad" className="setting-select-label">
-                            Facultad
-                          </label>
-                          {!isFacultyLocked && (
-                            <button
-                              type="button"
-                              className="btn-link"
-                              onClick={() => setIsAddingNewFacultad(!isAddingNewFacultad)}
-                              style={{ fontSize: '0.8rem' }}
-                            >
-                              {isAddingNewFacultad ? 'Cancelar' : '+ Agregar Nueva Facultad a BD'}
-                            </button>
+                        <label htmlFor="modal_id_facultad" className="setting-select-label">
+                          Facultad
+                        </label>
+                        <select
+                          id="modal_id_facultad"
+                          value={formData.id_facultad}
+                          onChange={(e) => setFormData({ ...formData, id_facultad: e.target.value })}
+                          disabled={isFacultyLocked}
+                          className="select-input"
+                          style={{
+                            marginTop: '0.35rem',
+                            opacity: isFacultyLocked ? 0.65 : 1,
+                            cursor: isFacultyLocked ? 'not-allowed' : 'default',
+                            backgroundColor: isFacultyLocked ? 'rgba(255, 255, 255, 0.05)' : undefined
+                          }}
+                        >
+                          <option value="">-- Seleccionar Facultad --</option>
+                          {facultadesList.length === 0 ? (
+                            <option value="" disabled>No hay facultades en la base de datos</option>
+                          ) : (
+                            facultadesList.map((f, idx) => {
+                              const val = f.id ? String(f.id) : ''
+                              const nameText = f.nombre || f.Nombre || f.name || `Facultad ${f.id || idx + 1}`
+                              const descText = f.descripcion || f.Descripcion || f.descripción || ''
+                              const label = descText ? `${nameText} — ${descText}` : nameText
+                              return (
+                                <option key={f.id || idx} value={val}>
+                                  {label}
+                                </option>
+                              )
+                            })
                           )}
-                        </div>
-
-                        {isAddingNewFacultad && !isFacultyLocked ? (
-                          <div className="new-group-inline-form" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.4rem' }}>
-                            <input
-                              type="text"
-                              placeholder="Nombre de la facultad (ej. Facultad de Ingeniería)"
-                              value={newFacultadName}
-                              onChange={(e) => setNewFacultadName(e.target.value)}
-                              className="select-input"
-                              autoFocus
-                            />
-                            <input
-                              type="text"
-                              placeholder="Descripción de la facultad (opcional)"
-                              value={newFacultadDesc}
-                              onChange={(e) => setNewFacultadDesc(e.target.value)}
-                              className="select-input"
-                            />
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.2rem' }}>
-                              <button
-                                type="button"
-                                className="btn-secondary btn-sm"
-                                onClick={() => setIsAddingNewFacultad(false)}
-                              >
-                                Cancelar
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-primary btn-sm"
-                                onClick={handleCreateNewFacultadInDb}
-                                disabled={addingFacultadSubmitting || !newFacultadName.trim()}
-                              >
-                                {addingFacultadSubmitting ? 'Guardando...' : 'Guardar en BD'}
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <select
-                              id="modal_id_facultad"
-                              value={formData.id_facultad}
-                              onChange={(e) => setFormData({ ...formData, id_facultad: e.target.value })}
-                              disabled={isFacultyLocked}
-                              className="select-input"
-                              style={{
-                                marginTop: '0.35rem',
-                                opacity: isFacultyLocked ? 0.65 : 1,
-                                cursor: isFacultyLocked ? 'not-allowed' : 'default',
-                                backgroundColor: isFacultyLocked ? 'rgba(255, 255, 255, 0.05)' : undefined
-                              }}
-                            >
-                              <option value="">-- Seleccionar Facultad --</option>
-                              {facultadesList.length === 0 ? (
-                                <option value="" disabled>No hay facultades en la base de datos (+ Crear Nueva Facultad)</option>
-                              ) : (
-                                facultadesList.map((f, idx) => {
-                                  const val = f.id ? String(f.id) : ''
-                                  const nameText = f.nombre || f.Nombre || f.name || `Facultad ${f.id || idx + 1}`
-                                  const descText = f.descripcion || f.Descripcion || f.descripción || ''
-                                  const label = descText ? `${nameText} — ${descText}` : nameText
-                                  return (
-                                    <option key={f.id || idx} value={val}>
-                                      {label}
-                                    </option>
-                                  )
-                                })
-                              )}
-                            </select>
-                            {isFacultyLocked && (
-                              <small className="form-hint" style={{ marginTop: '0.35rem', display: 'block', color: '#60a5fa' }}>
-                                🔒 Campo de facultad bloqueado: Asignada automáticamente a Facultad ID {formData.id_facultad} ({formData.es_complementaria ? 'Complementaria' : 'Básica'}).
-                              </small>
-                            )}
-                          </>
+                        </select>
+                        {isFacultyLocked && (
+                          <small className="form-hint" style={{ marginTop: '0.35rem', display: 'block', color: '#60a5fa' }}>
+                            🔒 Campo de facultad bloqueado: Asignada automáticamente a Facultad ID {formData.id_facultad} ({formData.es_complementaria ? 'Complementaria' : 'Básica'}).
+                          </small>
                         )}
                       </div>
                     )

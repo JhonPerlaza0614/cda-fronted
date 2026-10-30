@@ -16,7 +16,7 @@ import {
     AlertTriangle,
     HelpCircle
 } from 'lucide-react'
-import { getDocentes, createDocente, updateDocente } from '../services/docenteService'
+import { getDocentes, createDocente, updateDocente } from '../../services/docenteService'
 
 // Opciones (value = lo que espera el backend)
 const TIPOS_DOCUMENTO = [

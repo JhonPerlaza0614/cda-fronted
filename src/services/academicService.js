@@ -892,12 +892,13 @@ export async function getDocentes() {
     console.warn('Backend no disponible para docentes, fallback Supabase:', err.message)
     const { data, error } = await supabase
       .from('docentes')
-      .select('*, programas(name_program)')
+      .select('*, Facultad(nombre), programas(name_program)')
       .order('apellidos', { ascending: true })
     if (!error && data) {
       return data.map(d => ({
         ...d,
         nombre_completo: `${d.nombres || ''} ${d.apellidos || ''}`.trim(),
+        nombre_facultad: d.Facultad?.nombre || d.nombre_facultad,
         name_program: d.programas?.name_program || d.code_program
       }))
     }

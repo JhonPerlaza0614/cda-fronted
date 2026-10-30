@@ -1,5 +1,7 @@
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api').replace(/\/+$/, '')
 const SESSION_KEY = 'cda.auth.session'
+const ROLES = { 1: 'Administrador', 2: 'Coordinador', 3: 'Docente' }
+const resolveRolNombre = (rol, fallback) => ROLES[Number(rol)] || (fallback && fallback !== 'Usuario' ? fallback : 'Usuario')
 let volatileSession = null
 
 function readSession() {
@@ -15,6 +17,7 @@ function readSession() {
       return null
     }
 
+    if (session.user) session.user.rolNombre = resolveRolNombre(session.user.rol, session.user.rolNombre)
     return session
   } catch {
     return volatileSession?.expiresAt > Date.now() ? volatileSession : null
@@ -77,7 +80,7 @@ export async function loginWithGoogle(credential) {
       apellido: body.apellido,
       email: body.email,
       rol: body.rol,
-      rolNombre: body.rol === 3 ? 'Docente' : 'Usuario',
+      rolNombre: resolveRolNombre(body.rol, body.rolNombre),
     },
   }
 
