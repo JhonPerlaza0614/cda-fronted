@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import Navbar from './components/Navbar'
 import PensumView from './components/PensumView'
 import ProgramasView from './components/ProgramasView'
+import ProgramasCoordinadoresView from './components/ProgramasCoordinadoresView'
 import AsignaturasView from './components/AsignaturasView'
 import PlantillaView from './components/PlantillaView'
 import PeriodosView from './components/PeriodosView'
@@ -48,6 +49,8 @@ export default function App({ user, onLogout }) {
   const [asignaturas, setAsignaturas] = useState([])
   const [pensumList, setPensumList] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
+  // HU-037: programa a editar al llegar a «Programas» desde «Programas y coordinadores»
+  const [programaCoordinadorCode, setProgramaCoordinadorCode] = useState(null)
 
   const [loading, setLoading] = useState(!isDocente)
   const [initialError, setInitialError] = useState(null)
@@ -107,6 +110,11 @@ export default function App({ user, onLogout }) {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  const handleGestionarCoordinador = (code) => {
+    setProgramaCoordinadorCode(code)
+    setActiveTab('programas')
+  }
 
   const handleSelectProgramForPensum = (code) => {
     setSelectedProgramCode(code)
@@ -219,7 +227,14 @@ export default function App({ user, onLogout }) {
                 onShowToast={showToast}
                 onSelectProgramForPensum={handleSelectProgramForPensum}
                 canAssignCoordinator={isAdmin}
+                initialEditCode={programaCoordinadorCode}
+                onInitialEditHandled={() => setProgramaCoordinadorCode(null)}
               />
+            )}
+
+            {/* Programas y coordinadores (HU-037): solo administrador */}
+            {isAdmin && activeTab === 'programas_coordinadores' && (
+              <ProgramasCoordinadoresView onGestionarCoordinador={handleGestionarCoordinador} />
             )}
 
             {/* Banco de Asignaturas */}

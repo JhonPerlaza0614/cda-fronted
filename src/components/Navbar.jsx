@@ -1,5 +1,5 @@
 import React from 'react'
-import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Clock, UserCircle, CalendarDays } from 'lucide-react'
+import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Clock, UserCircle, CalendarDays, UserCheck } from 'lucide-react'
 
 export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout }) {
   const rol = user?.rol ?? 1 // 1: Admin, 2: Coordinador, 3: Docente
@@ -58,6 +58,17 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
             >
               <BookOpen size={18} />
               <span>Programas (Carreras)</span>
+            </button>
+          )}
+
+          {/* HU-037 */}
+          {canSeeProgramas && (
+            <button
+              className={`nav-tab-btn ${activeTab === 'programas_coordinadores' ? 'active' : ''}`}
+              onClick={() => setActiveTab('programas_coordinadores')}
+            >
+              <UserCheck size={18} />
+              <span>Coordinación de programas</span>
             </button>
           )}
 

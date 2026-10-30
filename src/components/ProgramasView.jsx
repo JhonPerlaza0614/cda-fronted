@@ -8,7 +8,10 @@ export default function ProgramasView({
   onRefresh, 
   onShowToast, 
   onSelectProgramForPensum,
-  canAssignCoordinator = false
+  canAssignCoordinator = false,
+  // HU-037: programa cuyo modal de edición se abre al entrar (asignar o cambiar coordinador)
+  initialEditCode = null,
+  onInitialEditHandled
 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -150,6 +153,14 @@ export default function ProgramasView({
       setLoadingCoordinadores(false)
     }
   }
+
+  // HU-037: abre el modal una sola vez cuando el programa pedido ya está en la lista
+  useEffect(() => {
+    if (!initialEditCode) return
+    const prog = programas.find(p => p.code_program === initialEditCode)
+    if (prog) handleOpenEditModal(prog)
+    onInitialEditHandled?.()
+  }, [initialEditCode, programas, handleOpenEditModal, onInitialEditHandled])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
