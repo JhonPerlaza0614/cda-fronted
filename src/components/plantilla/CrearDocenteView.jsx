@@ -436,7 +436,7 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                             key={d.id}
                             style={{
                                 background: '#ffffff',
-                                border: '1px solid #e4e4e7',
+                                border: '1px solid #cbd5e1',
                                 borderRadius: '12px',
                                 padding: '1.25rem',
                                 display: 'flex',
@@ -488,7 +488,7 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                             alignItems: 'center',
                                             gap: '0.3rem',
                                             background: '#f4f4f5',
-                                            border: '1px solid #e4e4e7',
+                                            border: '1px solid #cbd5e1',
                                             color: '#3f3f46',
                                             padding: '0.25rem 0.6rem',
                                             borderRadius: '6px',

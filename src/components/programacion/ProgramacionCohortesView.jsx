@@ -322,28 +322,21 @@ export default function ProgramacionCohortesView({ onShowToast }) {
           </p>
         </div>
 
-        <div className="pc-periodo-selector">
-          <label htmlFor="periodo-select">Período Académico:</label>
-          <div className="pc-select-wrapper">
-            <CalendarDays size={18} className="pc-select-icon" />
-            <select
-              id="periodo-select"
-              value={selectedPeriodoId}
-              onChange={(e) => setSelectedPeriodoId(e.target.value)}
-              className="pc-select"
-            >
-              {periodosVigentes.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.nombre} ★ (Vigente) - Res. {p.numeroResolucion}
-                </option>
-              ))}
-            </select>
-          </div>
-          {selectedPeriodo && (
-            <span className={`pc-badge ${selectedPeriodo.vigente ? 'pc-badge-success' : 'pc-badge-neutral'}`}>
-              {selectedPeriodo.estado || (selectedPeriodo.vigente ? 'VIGENTE' : 'HISTORIAL')}
+        <div className="pc-periodo-selector pc-periodo-info-only" title="Período académico activo">
+          <span className="pc-periodo-label">Período Académico:</span>
+          <div className="pc-periodo-badge-display">
+            <CalendarDays size={18} className="pc-periodo-icon" style={{ color: '#2563eb' }} />
+            <span className="pc-periodo-name">
+              {selectedPeriodo
+                ? `${selectedPeriodo.nombre}${selectedPeriodo.numeroResolucion ? ` · Res. ${selectedPeriodo.numeroResolucion}` : ''}`
+                : 'Docentes (Vigente)'}
             </span>
-          )}
+            {selectedPeriodo && (
+              <span className={`pc-badge ${selectedPeriodo.vigente ? 'pc-badge-success' : 'pc-badge-neutral'}`}>
+                {selectedPeriodo.estado || (selectedPeriodo.vigente ? 'VIGENTE' : 'HISTORIAL')}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react'
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react'
 
 export default function Toast({ message, type = 'info', onClose, duration = 4000 }) {
   useEffect(() => {
@@ -11,9 +11,10 @@ export default function Toast({ message, type = 'info', onClose, duration = 4000
   }, [duration, onClose])
 
   const icons = {
-    success: <CheckCircle2 className="toast-icon success" size={20} />,
-    error: <AlertCircle className="toast-icon error" size={20} />,
-    info: <Info className="toast-icon info" size={20} />,
+    success: <CheckCircle2 className="toast-icon success" size={22} />,
+    error: <AlertCircle className="toast-icon error" size={22} />,
+    warning: <AlertTriangle className="toast-icon warning" size={22} />,
+    info: <Info className="toast-icon info" size={22} />,
   }
 
   return (
