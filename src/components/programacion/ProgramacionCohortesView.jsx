@@ -15,7 +15,7 @@ import {
   Check,
   RotateCcw
 } from 'lucide-react'
-import { getPeriodos, getProgramas } from '../../services/academicService'
+import { getPeriodos, getProgramas, getPensumByProgram } from '../../services/academicService'
 import { getCohortes, guardarCohortes, getPropuestaCohortes } from '../../services/cohortesService'
 import { generarProgramacion, getProgramacion, getResumenProgramacion } from '../../services/programacionService'
 import './ProgramacionCohortesView.css'
@@ -39,6 +39,9 @@ export default function ProgramacionCohortesView({ onShowToast }) {
   // Estado para edición de cohortes del programa seleccionado
   // Array de { semestre: number, jornada: 'DIURNA'|'NOCTURNA', numeroResolucion: string, activo: boolean, confirmada: boolean }
   const [programCohortes, setProgramCohortes] = useState([])
+
+  // Resolución vigente obtenida del pensum del programa seleccionado (puede ser null)
+  const [resolucionVigentePensum, setResolucionVigentePensum] = useState(null)
 
   // Estado modal propuesta
   const [isPropuestaModalOpen, setIsPropuestaModalOpen] = useState(false)
@@ -116,7 +119,32 @@ export default function ProgramacionCohortesView({ onShowToast }) {
     loadPeriodoData()
   }, [loadPeriodoData])
 
-  // 3. Sincronizar el formulario de cohortes del programa seleccionado
+  // 3a. Cargar la resolución vigente real desde el pensum cuando cambia el programa
+  useEffect(() => {
+    if (!selectedPrograma) {
+      setResolucionVigentePensum(null)
+      return
+    }
+    // Si el programa ya trae la resolución, la usamos directamente
+    if (selectedPrograma.numero_resolucion) {
+      setResolucionVigentePensum(selectedPrograma.numero_resolucion)
+      return
+    }
+    // Fallback: consultar el pensum para extraer la resolución (datos legacy con NULL en programas)
+    fetch(`/api/pensum/programa/${selectedPrograma.code_program}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          const res = data.find(p => p.numeroResolucion)?.numeroResolucion || null
+          setResolucionVigentePensum(res)
+        } else {
+          setResolucionVigentePensum(null)
+        }
+      })
+      .catch(() => setResolucionVigentePensum(null))
+  }, [selectedPrograma])
+
+  // 3b. Sincronizar el formulario de cohortes del programa seleccionado
   useEffect(() => {
     if (!selectedPrograma) return
 
@@ -124,7 +152,9 @@ export default function ProgramacionCohortesView({ onShowToast }) {
     const duracionNocturna = selectedPrograma.semestres_nocturna || duracionDiurna
     const jornadaProg = selectedPrograma.jornada || 'DIURNA'
     const maxSemestres = jornadaProg === 'NOCTURNA' ? duracionNocturna : duracionDiurna
-    const resolucionBase = selectedPrograma.numero_resolucion || 'Resolución Vigente'
+
+    // Resolución real del pensum (puede ser null para datos legacy — el backend lo resolverá)
+    const resolucionBase = resolucionVigentePensum ?? ''
 
     // Cohortes existentes en BD para este programa y periodo
     const existentes = allCohortes.filter(c => c.codeProgram === selectedPrograma.code_program)
@@ -136,13 +166,15 @@ export default function ProgramacionCohortesView({ onShowToast }) {
         semestre: sem,
         activo: Boolean(cohorteExistente),
         jornada: cohorteExistente?.jornada || (jornadaProg === 'NOCTURNA' ? 'NOCTURNA' : 'DIURNA'),
-        numeroResolucion: cohorteExistente?.numeroResolucion || resolucionBase,
+        numeroResolucion: cohorteExistente?.numeroResolucion ?? resolucionBase,
         confirmada: cohorteExistente?.confirmada ?? true,
-        enExtincion: cohorteExistente ? cohorteExistente.numeroResolucion !== resolucionBase : false
+        enExtincion: cohorteExistente
+          ? (resolucionBase ? cohorteExistente.numeroResolucion !== resolucionBase : false)
+          : false
       })
     }
     setProgramCohortes(items)
-  }, [selectedPrograma, allCohortes])
+  }, [selectedPrograma, allCohortes, resolucionVigentePensum])
 
   // Manejadores para edición de cohortes
   const toggleSemestreActivo = (semestre) => {
@@ -159,7 +191,8 @@ export default function ProgramacionCohortesView({ onShowToast }) {
       if (item.semestre === semestre) {
         const updated = { ...item, [field]: value }
         if (field === 'numeroResolucion') {
-          updated.enExtincion = value !== selectedPrograma?.numero_resolucion
+          const resRef = resolucionVigentePensum ?? selectedPrograma?.numero_resolucion ?? ''
+          updated.enExtincion = resRef ? value !== resRef : false
         }
         return updated
       }
@@ -401,7 +434,7 @@ export default function ProgramacionCohortesView({ onShowToast }) {
                     <span><strong>Jornada:</strong> {selectedPrograma.jornada}</span>
                     <span><strong>Duración:</strong> {selectedPrograma.numero_semestre || 10} sem. diurna {selectedPrograma.semestres_nocturna ? `/ ${selectedPrograma.semestres_nocturna} nocturna` : ''}</span>
                     <span><strong>Ingreso:</strong> {selectedPrograma.ingreso || 'SEMESTRAL'}</span>
-                    <span><strong>Resolución Vigente:</strong> {selectedPrograma.numero_resolucion || 'Malla Principal'}</span>
+                    <span><strong>Resolución Vigente:</strong> {resolucionVigentePensum || selectedPrograma.numero_resolucion || <em className="pc-text-muted">Sin resolución (malla legacy)</em>}</span>
                   </div>
                 )}
               </div>
