@@ -92,7 +92,7 @@ export default function MiPerfilDocenteView({ correo, onShowToast }) {
             <div
                 style={{
                     background: '#ffffff',
-                    border: '1px solid #e4e4e7',
+                    border: '1px solid #cbd5e1',
                     borderRadius: '12px',
                     padding: '1.5rem',
                     display: 'flex',

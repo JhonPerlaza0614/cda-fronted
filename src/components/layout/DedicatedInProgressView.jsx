@@ -80,9 +80,11 @@ export default function DedicatedInProgressView({ user, coordinadorPerfil, onNav
             <span className="summary-label">Rol en el Sistema</span>
             <span className="summary-value role-badge">{roleTitle}</span>
           </div>
-          <div className="summary-item">
+          <div className="summary-item summary-item-email">
             <span className="summary-label">Correo Institucional</span>
-            <span className="summary-value">{user?.email || 'No disponible'}</span>
+            <span className="summary-value" title={user?.email || 'No disponible'}>
+              {user?.email || 'No disponible'}
+            </span>
           </div>
           {isCoordinador && (
             <div className="summary-item">
@@ -92,7 +94,7 @@ export default function DedicatedInProgressView({ user, coordinadorPerfil, onNav
               </span>
             </div>
           )}
-          <div className="summary-item">
+          <div className="summary-item summary-item-status">
             <span className="summary-label">Estado de la Cuenta</span>
             <span className="summary-value status-active">
               <ShieldCheck size={16} /> Verificada y Activa

@@ -1065,7 +1065,7 @@ export default function PensumView({
                 right: 0,
                 minWidth: '240px',
                 background: '#ffffff',
-                border: '1px solid #e2e8f0',
+                border: '1px solid #cbd5e1',
                 borderRadius: '12px',
                 boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.14)',
                 padding: '0.4rem',
@@ -1278,7 +1278,7 @@ export default function PensumView({
           <div
             style={{
               background: '#ffffff',
-              border: '1px solid #e2e8f0',
+              border: '1px solid #cbd5e1',
               borderRadius: '14px',
               padding: '1.5rem',
               boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.08)'
@@ -1332,7 +1332,7 @@ export default function PensumView({
                   background: '#f8fafc',
                   padding: '1rem',
                   borderRadius: '10px',
-                  border: '1px solid #e2e8f0'
+                  border: '1px solid #cbd5e1'
                 }}
               >
                 {/* Número de resolución */}
@@ -1624,23 +1624,23 @@ export default function PensumView({
       )}
 
       {/* Malla Curricular Grid (Semesters Columns) */}
-      <div className="malla-nav print-hide" style={{ top: stickyTop }}>
-        <button type="button" className="malla-nav-btn" onClick={() => scrollMalla(-1)} title="Desplazar a la izquierda">
-          <ChevronLeft size={16} />
-        </button>
-        <div className="malla-nav-chips">
-          {sortedSemesters.map((num) => (
-            <button key={num} type="button" className="malla-nav-chip" onClick={() => scrollToSemester(num)}>
-              S{num}
-            </button>
-          ))}
-        </div>
-        <button type="button" className="malla-nav-btn" onClick={() => scrollMalla(1)} title="Desplazar a la derecha">
-          <ChevronRight size={16} />
-        </button>
-        {canEdit && hasUnsavedChanges && (
-          <div className="malla-nav-actions">
-            <span className="malla-nav-pending">Cambios sin guardar</span>
+      {/* Aviso de cambios sin guardar */}
+      {canEdit && hasUnsavedChanges && (
+        <div className="malla-unsaved-banner print-hide" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: '#fffbeb',
+          border: '1px solid #fde68a',
+          borderRadius: '10px',
+          padding: '0.65rem 1.25rem',
+          marginBottom: '1rem',
+          boxShadow: '0 2px 8px rgba(245, 158, 11, 0.08)'
+        }}>
+          <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#92400e', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            ⚠️ Tienes cambios pendientes sin guardar en esta malla
+          </span>
+          <div style={{ display: 'flex', gap: '0.6rem' }}>
             <button type="button" className="btn-secondary btn-sm" onClick={handleDiscardChanges} disabled={submitting}>
               Descartar
             </button>
@@ -1648,9 +1648,8 @@ export default function PensumView({
               <Save size={14} /> {submitting ? 'Guardando...' : 'Guardar malla'}
             </button>
           </div>
-        )}
-      </div>
-
+        </div>
+      )}
       <div
         className="malla-grid-wrapper"
         ref={mallaRef}
@@ -1804,8 +1803,8 @@ export default function PensumView({
               </div>
               <p className="electives-dock-desc">
                 {currentFacultyObj
-                  ? <>Electivas especializadas de la facultad <strong>{currentFacultyObj.nombre || currentFacultyObj.Nombre}</strong> y electivas comunes / complementarias institucionales.</>
-                  : <>Electivas especializadas de la propia carrera y electivas comunes / complementarias institucionales.</>
+                  ? <>Electivas profesionales de la facultad <strong>{currentFacultyObj.nombre || currentFacultyObj.Nombre}</strong> y electivas complementarias institucionales.</>
+                  : <>Electivas profesionales de la propia carrera y electivas complementarias institucionales.</>
                 }
               </p>
             </div>
@@ -1845,14 +1844,14 @@ export default function PensumView({
                 className={`dock-tab-btn ${electivesTabFilter === 'especializadas' ? 'active' : ''}`}
                 onClick={() => setElectivesTabFilter('especializadas')}
               >
-                Especializadas ({electivasEspecializadas.length})
+                Profesionales ({electivasEspecializadas.length})
               </button>
               <button
                 type="button"
                 className={`dock-tab-btn ${electivesTabFilter === 'comunes' ? 'active' : ''}`}
                 onClick={() => setElectivesTabFilter('comunes')}
               >
-                Comunes ({electivasComunes.length})
+                Complementarias ({electivasComunes.length})
               </button>
             </div>
 
@@ -1875,9 +1874,9 @@ export default function PensumView({
                   <div className="dock-column-header">
                     <div className="dock-column-header-title">
                       <span className="dock-pill-tag tag-especializada">
-                        <Layers size={13} /> Especializadas
+                        <Layers size={13} /> Profesionales
                       </span>
-                      <h4>{currentFacultyObj ? `Facultad de ${currentFacultyObj.nombre || currentFacultyObj.Nombre}` : 'Especializadas de la Carrera'}</h4>
+                      <h4>{currentFacultyObj ? `Facultad de ${currentFacultyObj.nombre || currentFacultyObj.Nombre}` : 'Profesionales de la Carrera'}</h4>
                     </div>
                     <span className="dock-count-badge">{electivasEspecializadas.length} materias</span>
                   </div>
@@ -1885,9 +1884,9 @@ export default function PensumView({
                   <div className="dock-cards-scroll">
                     {electivasEspecializadas.length === 0 ? (
                       <div className="dock-empty-state">
-                        <p>No hay electivas especializadas registradas para la facultad de esta carrera.</p>
+                        <p>No hay electivas profesionales registradas para la facultad de esta carrera.</p>
                         <button className="btn-link" onClick={onNavigateToAsignaturas}>
-                          + Crear electiva especializada en Asignaturas
+                          + Crear electiva profesional en Asignaturas
                         </button>
                       </div>
                     ) : (
@@ -1924,7 +1923,7 @@ export default function PensumView({
                   <div className="dock-column-header">
                     <div className="dock-column-header-title">
                       <span className="dock-pill-tag tag-comun">
-                        <Sparkles size={13} /> Comunes / Complementarias
+                        <Sparkles size={13} /> Complementarias
                       </span>
                       <h4>Transversales Institucionales</h4>
                     </div>
@@ -1934,7 +1933,7 @@ export default function PensumView({
                   <div className="dock-cards-scroll">
                     {electivasComunes.length === 0 ? (
                       <div className="dock-empty-state">
-                        <p>No hay electivas comunes o complementarias registradas.</p>
+                        <p>No hay electivas complementarias registradas.</p>
                         <button className="btn-link" onClick={onNavigateToAsignaturas}>
                           + Crear electiva complementaria en Asignaturas
                         </button>

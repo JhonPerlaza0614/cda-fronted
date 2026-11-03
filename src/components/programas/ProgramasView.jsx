@@ -506,7 +506,7 @@ export default function ProgramasView({
                       ))}
                   </select>
                   <small className="form-hint">
-                    Las electivas especializadas en el pensum se mostrarán exclusivamente según la facultad seleccionada aquí.
+                    Las electivas profesionales en el pensum se mostrarán exclusivamente según la facultad seleccionada aquí.
                   </small>
                 </div>
 

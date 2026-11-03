@@ -71,7 +71,7 @@ export default function ProgramacionCohortesView({ onShowToast }) {
         setProgramas(programasData || [])
 
         // Seleccionar periodo vigente por defecto
-        const vigente = periodosData?.find(p => p.vigente) || periodosData?.[0]
+        const vigente = periodosData?.find(p => p.vigente)
         if (vigente) {
           setSelectedPeriodoId(String(vigente.id))
         }
@@ -90,6 +90,10 @@ export default function ProgramacionCohortesView({ onShowToast }) {
   const selectedPeriodo = useMemo(() => {
     return periodos.find(p => String(p.id) === String(selectedPeriodoId))
   }, [periodos, selectedPeriodoId])
+
+  const periodosVigentes = useMemo(() => {
+    return periodos.filter(periodo => periodo.vigente)
+  }, [periodos])
 
   const selectedPrograma = useMemo(() => {
     return programas.find(p => p.code_program === selectedProgramCode)
@@ -165,7 +169,7 @@ export default function ProgramacionCohortesView({ onShowToast }) {
       items.push({
         semestre: sem,
         activo: Boolean(cohorteExistente),
-        jornada: cohorteExistente?.jornada || (jornadaProg === 'NOCTURNA' ? 'NOCTURNA' : 'DIURNA'),
+        jornada: jornadaProg,
         numeroResolucion: cohorteExistente?.numeroResolucion ?? resolucionBase,
         confirmada: cohorteExistente?.confirmada ?? true,
         enExtincion: cohorteExistente
@@ -207,7 +211,7 @@ export default function ProgramacionCohortesView({ onShowToast }) {
       .filter(c => c.activo)
       .map(c => ({
         semestre: c.semestre,
-        jornada: c.jornada,
+        jornada: selectedPrograma.jornada || 'DIURNA',
         numeroResolucion: c.numeroResolucion.trim(),
         confirmada: c.confirmada
       }))
@@ -318,28 +322,21 @@ export default function ProgramacionCohortesView({ onShowToast }) {
           </p>
         </div>
 
-        <div className="pc-periodo-selector">
-          <label htmlFor="periodo-select">Período Académico:</label>
-          <div className="pc-select-wrapper">
-            <CalendarDays size={18} className="pc-select-icon" />
-            <select
-              id="periodo-select"
-              value={selectedPeriodoId}
-              onChange={(e) => setSelectedPeriodoId(e.target.value)}
-              className="pc-select"
-            >
-              {periodos.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.nombre} {p.vigente ? '★ (Vigente)' : ''} - Res. {p.numeroResolucion}
-                </option>
-              ))}
-            </select>
-          </div>
-          {selectedPeriodo && (
-            <span className={`pc-badge ${selectedPeriodo.vigente ? 'pc-badge-success' : 'pc-badge-neutral'}`}>
-              {selectedPeriodo.estado || (selectedPeriodo.vigente ? 'VIGENTE' : 'HISTORIAL')}
+        <div className="pc-periodo-selector pc-periodo-info-only" title="Período académico activo">
+          <span className="pc-periodo-label">Período Académico:</span>
+          <div className="pc-periodo-badge-display">
+            <CalendarDays size={18} className="pc-periodo-icon" style={{ color: '#2563eb' }} />
+            <span className="pc-periodo-name">
+              {selectedPeriodo
+                ? `${selectedPeriodo.nombre}${selectedPeriodo.numeroResolucion ? ` · Res. ${selectedPeriodo.numeroResolucion}` : ''}`
+                : 'Docentes (Vigente)'}
             </span>
-          )}
+            {selectedPeriodo && (
+              <span className={`pc-badge ${selectedPeriodo.vigente ? 'pc-badge-success' : 'pc-badge-neutral'}`}>
+                {selectedPeriodo.estado || (selectedPeriodo.vigente ? 'VIGENTE' : 'HISTORIAL')}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -423,7 +420,7 @@ export default function ProgramacionCohortesView({ onShowToast }) {
                     const count = allCohortes.filter(c => c.codeProgram === prog.code_program).length
                     return (
                       <option key={prog.code_program} value={prog.code_program}>
-                        {prog.code_program} - {prog.name_program} ({count > 0 ? `${count} cohortes activas` : 'Sin cohortes'})
+                        {prog.code_program} - {prog.name_program}{prog.estado !== 'ACTIVO' ? ' [DESACTIVADO]' : ''} ({count > 0 ? `${count} cohortes activas` : 'Sin cohortes'})
                       </option>
                     )
                   })}
@@ -435,6 +432,9 @@ export default function ProgramacionCohortesView({ onShowToast }) {
                     <span><strong>Duración:</strong> {selectedPrograma.numero_semestre || 10} sem. diurna {selectedPrograma.semestres_nocturna ? `/ ${selectedPrograma.semestres_nocturna} nocturna` : ''}</span>
                     <span><strong>Ingreso:</strong> {selectedPrograma.ingreso || 'SEMESTRAL'}</span>
                     <span><strong>Resolución Vigente:</strong> {resolucionVigentePensum || selectedPrograma.numero_resolucion || <em className="pc-text-muted">Sin resolución (malla legacy)</em>}</span>
+                    {selectedPrograma.estado !== 'ACTIVO' && (
+                      <span className="pc-badge pc-badge-warning">Programa desactivado</span>
+                    )}
                   </div>
                 )}
               </div>
@@ -464,18 +464,6 @@ export default function ProgramacionCohortesView({ onShowToast }) {
 
                   {cohorte.activo && (
                     <div className="pc-card-body">
-                      <div className="pc-field-group">
-                        <label>Jornada:</label>
-                        <select
-                          value={cohorte.jornada}
-                          onChange={(e) => updateCohorteField(cohorte.semestre, 'jornada', e.target.value)}
-                          className="pc-select-sm"
-                        >
-                          <option value="DIURNA">Diurna</option>
-                          <option value="NOCTURNA">Nocturna</option>
-                        </select>
-                      </div>
-
                       <div className="pc-field-group">
                         <label>Resolución de Malla:</label>
                         <input
