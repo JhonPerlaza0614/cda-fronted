@@ -471,7 +471,7 @@ export default function CoordinadoresView({
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {/* Identificación */}
                 <div className="form-group">
-                  <label>Identificación / Cédula *</label>
+                  <label>N. Documento *</label>
                   <input
                     type="text"
                     required
@@ -482,7 +482,7 @@ export default function CoordinadoresView({
                   />
                   {editingCoord && (
                     <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
-                      La identificación no se puede modificar una vez registrada.
+                      El N. Documento no se puede modificar una vez registrado.
                     </small>
                   )}
                 </div>

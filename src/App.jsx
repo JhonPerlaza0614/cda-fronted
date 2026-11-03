@@ -6,6 +6,7 @@ import ProgramasCoordinadoresView from './components/programas/ProgramasCoordina
 import AsignaturasView from './components/asignaturas/AsignaturasView'
 import PlantillaView from './components/plantilla/PlantillaView'
 import PeriodosView from './components/periodos/PeriodosView'
+import ProgramacionCohortesView from './components/programacion/ProgramacionCohortesView'
 import DedicatedInProgressView from './components/layout/DedicatedInProgressView'
 import MiPerfilView from './components/perfil/MiPerfilView'
 import DisponibilidadView from './components/disponibilidad/DisponibilidadView'
@@ -197,6 +198,11 @@ export default function App({ user, onLogout }) {
             {/* Períodos Académicos (Resolución de Calendario) */}
             {activeTab === 'periodos' && (
               <PeriodosView user={user} onShowToast={showToast} />
+            )}
+
+            {/* Oferta de Cohortes y Programación Académica (HU-042, HU-043, HU-045) */}
+            {isAdmin && activeTab === 'programacion_cohortes' && (
+              <ProgramacionCohortesView onShowToast={showToast} />
             )}
 
             {/* Malla Curricular */}

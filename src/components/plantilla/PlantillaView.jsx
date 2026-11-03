@@ -1039,9 +1039,9 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                   >
                     {/* Documento e Identificación */}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#9ca3af' }}>Documento:</span>
+                      <span style={{ color: '#9ca3af' }}>N. Documento:</span>
                       <span style={{ fontWeight: 500, color: '#f3f4f6' }}>
-                        {profile.tipoDocumento} {profile.identificacion}
+                        {profile.identificacion}
                       </span>
                     </div>
 
@@ -1269,9 +1269,9 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', fontSize: '0.9rem' }}>
                   <div>
-                    <span style={{ color: '#9ca3af', display: 'block', fontSize: '0.78rem' }}>Tipo y Número de Documento</span>
+                    <span style={{ color: '#9ca3af', display: 'block', fontSize: '0.78rem' }}>N. Documento</span>
                     <strong style={{ color: '#f3f4f6' }}>
-                      {selectedProfile.tipoDocumento} {selectedProfile.identificacion}
+                      {selectedProfile.identificacion}
                     </strong>
                   </div>
                   {selectedProfile.codigo && (
@@ -1510,9 +1510,9 @@ export default function PlantillaView({ programas = [], onShowToast }) {
 
             <form onSubmit={handleSaveCoordinador}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                {/* Identificación */}
+                {/* N. Documento */}
                 <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Identificación / Cédula *</label>
+                  <label style={{ color: '#e5e7eb' }}>N. Documento *</label>
                   <input
                     type="text"
                     required
@@ -1524,7 +1524,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                   />
                   {editingCoord && (
                     <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
-                      La identificación no se puede modificar.
+                      El N. Documento no se puede modificar.
                     </small>
                   )}
                 </div>
@@ -1734,31 +1734,17 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                   </div>
                 </div>
 
-                {/* Tipo y Número de Documento */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.75rem' }}>
-                  <div className="form-group">
-                    <label style={{ color: '#e5e7eb' }}>Tipo Doc. *</label>
-                    <select
-                      value={docenteFormData.tipo_documento}
-                      onChange={(e) => setDocenteFormData({ ...docenteFormData, tipo_documento: e.target.value })}
-                      style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                    >
-                      <option value="CC">CC</option>
-                      <option value="CE">CE</option>
-                      <option value="PP">PP</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label style={{ color: '#e5e7eb' }}>Número de Documento *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ej. 1118234567"
-                      value={docenteFormData.numero_documento}
-                      onChange={(e) => setDocenteFormData({ ...docenteFormData, numero_documento: e.target.value })}
-                      style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                    />
-                  </div>
+                {/* N. Documento */}
+                <div className="form-group">
+                  <label style={{ color: '#e5e7eb' }}>N. Documento *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ej. 1118234567"
+                    value={docenteFormData.numero_documento}
+                    onChange={(e) => setDocenteFormData({ ...docenteFormData, numero_documento: e.target.value })}
+                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
+                  />
                 </div>
 
                 {/* Correo institucional (@correounivalle.edu.co) */}

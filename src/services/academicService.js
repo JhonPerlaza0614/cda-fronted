@@ -97,15 +97,21 @@ export async function updatePeriodo(id, periodo) {
 }
 
 export async function createPrograma(programa) {
+  const rawCode = programa.code_program.trim().toUpperCase()
+  const jornadaNorm = (programa.jornada || 'DIURNA').toUpperCase()
+  const formattedCode = /-(DIU|NOC)$/.test(rawCode)
+    ? rawCode
+    : `${rawCode}-${jornadaNorm === 'NOCTURNA' ? 'NOC' : 'DIU'}`
+
   try {
     const payload = {
-      code_program: programa.code_program.trim().toUpperCase(),
+      code_program: formattedCode,
       name_program: programa.name_program.trim(),
       numero_semestre: parseInt(programa.numero_semestre, 10) || 10,
       id_facultad_programa: programa.id_facultad_programa ? parseInt(programa.id_facultad_programa, 10) : null,
       apertura: programa.apertura || null,
       numero_resolucion: String(programa.numero_resolucion || '').trim(),
-      jornada: programa.jornada || 'DIURNA',
+      jornada: jornadaNorm,
       ingreso: programa.ingreso || 'SEMESTRAL'
     }
     return await requestBackend('/programas', {
@@ -115,7 +121,7 @@ export async function createPrograma(programa) {
   } catch (err) {
     console.warn('Fallo backend en createPrograma, fallback a Supabase:', err.message)
     const insertPayload = {
-      code_program: programa.code_program.trim().toUpperCase(),
+      code_program: formattedCode,
       name_program: programa.name_program.trim(),
       numero_semestre: parseInt(programa.numero_semestre, 10) || 10,
       apertura: programa.apertura || null,
@@ -404,10 +410,28 @@ export async function savePensumVersion(code_program, itemsOrPayload) {
     if (!isBackendUnavailable(err)) throw err
     console.warn('Fallo backend en savePensumVersion, fallback a Supabase:', err.message)
     const items = bodyPayload.items || []
+    let targetCodeProgram = code_program
+    const baseCode = String(code_program || '').replace(/-(DIU|NOC)$/i, '')
+    if (bodyPayload.jornada === 'NOCTURNA' && !String(code_program).toUpperCase().endsWith('-NOC')) {
+      targetCodeProgram = `${baseCode}-NOC`
+      const { data: baseProg } = await supabase.from('programas').select('*').eq('code_program', code_program).maybeSingle()
+      await supabase.from('programas').upsert([{
+        code_program: targetCodeProgram,
+        name_program: bodyPayload.name_program || baseProg?.name_program || targetCodeProgram,
+        numero_semestre: bodyPayload.numero_semestre || baseProg?.numero_semestre || 10,
+        id_facultad_programa: baseProg?.id_facultad_programa || null,
+        jornada: 'NOCTURNA',
+        ingreso: bodyPayload.periodo_oferta || baseProg?.ingreso || 'SEMESTRAL',
+        estado: 'ACTIVO',
+        numero_resolucion: bodyPayload.numero_resolucion || null
+      }], { onConflict: 'code_program' })
+    } else if (bodyPayload.jornada === 'DIURNA' && String(code_program).toUpperCase().endsWith('-NOC')) {
+      targetCodeProgram = `${baseCode}-DIU`
+    }
     const { data: current, error: currentError } = await supabase
       .from('pensum_academico')
       .select('version')
-      .eq('code_program', code_program)
+      .eq('code_program', targetCodeProgram)
       .order('version', { ascending: false })
       .limit(1)
     if (currentError) throw currentError
@@ -416,7 +440,7 @@ export async function savePensumVersion(code_program, itemsOrPayload) {
     const { error: deactivateError } = await supabase
       .from('pensum_academico')
       .update({ vigente: false, fecha_desactivacion: now })
-      .eq('code_program', code_program)
+      .eq('code_program', targetCodeProgram)
       .eq('vigente', true)
     if (deactivateError) throw deactivateError
     for (const item of items) {
@@ -432,7 +456,7 @@ export async function savePensumVersion(code_program, itemsOrPayload) {
       }
     }
     const payload = items.map(item => ({
-      code_program,
+      code_program: targetCodeProgram,
       code_course: item.code_course,
       version: nextVersion,
       semestre: parseInt(item.semestre, 10),

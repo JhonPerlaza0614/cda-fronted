@@ -567,8 +567,20 @@ export default function PensumView({
       }
     }
 
+    const isCrossJornada = Boolean(
+      currentProgram?.code_program && (
+        (currentProgram.code_program.endsWith('-DIU') && resolutionForm.jornada === 'NOCTURNA') ||
+        (currentProgram.code_program.endsWith('-NOC') && resolutionForm.jornada === 'DIURNA')
+      )
+    )
+    const targetCodePreview = isCrossJornada
+      ? currentProgram.code_program.replace(/-(DIU|NOC)$/i, '') + (resolutionForm.jornada === 'NOCTURNA' ? '-NOC' : '-DIU')
+      : currentProgram?.code_program
+
     let warningText = null
-    if (mode === 'edit') {
+    if (isCrossJornada) {
+      warningText = `Se registrará la malla en la instancia ${targetCodePreview} (${resolutionForm.jornada === 'NOCTURNA' ? 'Nocturna' : 'Diurna'}), conservando intacta la malla actual de ${currentProgram.code_program}.`
+    } else if (mode === 'edit') {
       const removedCourses = getRemovedCoursesInColumns()
       if (removedCourses.length > 0) {
         warningText = `Atención: Se quitó ${removedCourses.length === 1 ? 'la asignatura' : 'las asignaturas'} ${removedCourses.join(', ')} de las columnas. Si tiene asignaciones en la programación académica vigente, al aceptar esas asignaciones se eliminarán.`
@@ -578,12 +590,12 @@ export default function PensumView({
     }
 
     setConfirmDialog({
-      title: mode === 'edit' ? 'Confirmar edición de malla' : 'Confirmar registro de resolución',
+      title: (mode === 'edit' && !isCrossJornada) ? 'Confirmar edición de malla' : 'Confirmar registro de resolución',
       message: '¿La información ingresada es correcta?',
       warningText,
       confirmLabel: 'Aceptar',
       cancelLabel: 'Cancelar',
-      onConfirm: () => executeSaveResolution(mode)
+      onConfirm: () => executeSaveResolution(isCrossJornada ? 'create' : mode)
     })
   }
 
@@ -617,17 +629,24 @@ export default function PensumView({
     }
 
     try {
+      let savedResult = null
       if (mode === 'edit') {
-        await updatePensumVersion(currentProgram.code_program, payload)
+        savedResult = await updatePensumVersion(currentProgram.code_program, payload)
         onShowToast('Resolución actualizada', 'success')
       } else {
-        await savePensumVersion(currentProgram.code_program, payload)
+        savedResult = await savePensumVersion(currentProgram.code_program, payload)
         onShowToast('Resolución registrada exitosamente', 'success')
       }
+      const resolvedProgramCode = Array.isArray(savedResult) && savedResult[0]?.code_program
+        ? savedResult[0].code_program
+        : currentProgram.code_program
       setHasUnsavedChanges(false)
       setEditorMode(null)
       setIsResolutionFormOpen(false)
       await onRefresh()
+      if (resolvedProgramCode && resolvedProgramCode !== currentProgram.code_program) {
+        setSelectedProgramCode(resolvedProgramCode)
+      }
     } catch (err) {
       if (mode === 'create') {
         const msg = 'No se pudo registrar la resolución'

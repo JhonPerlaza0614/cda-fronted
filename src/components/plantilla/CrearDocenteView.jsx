@@ -43,7 +43,7 @@ const EMPTY_FORM = {
     codigo: '',
     nombres: '',
     apellidos: '',
-    tipo_documento: '',
+    tipo_documento: 'CC',
     numero_documento: '',
     correo_institucional: '',
     telefono: '',
@@ -452,7 +452,7 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', fontSize: '0.85rem', color: '#52525b' }}>
                                         <IdCard size={14} />
                                         <span>
-                                            Código: <strong>{d.codigo}</strong> · {d.tipo_documento} {d.numero_documento}
+                                            Código: <strong>{d.codigo}</strong> · N. Documento: {d.numero_documento}
                                         </span>
                                     </div>
                                 </div>
@@ -577,18 +577,7 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                     />
                                 </Field>
 
-                                <Field label="Tipo de documento" required error={errors.tipo_documento}>
-                                    <select value={formData.tipo_documento} onChange={(e) => update('tipo_documento', e.target.value)}>
-                                        <option value="">-- Selecciona --</option>
-                                        {TIPOS_DOCUMENTO.map((t) => (
-                                            <option key={t.value} value={t.value}>
-                                                {t.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </Field>
-
-                                <Field label="Número de documento" required error={errors.numero_documento}>
+                                <Field label="N. Documento" required error={errors.numero_documento}>
                                     <input
                                         type="text"
                                         inputMode="numeric"

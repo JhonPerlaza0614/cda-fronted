@@ -300,7 +300,7 @@ export default function MiPerfilView({ user, onShowToast }) {
                             <div>
                                 <Badge ok={coordinador.activo !== false} okText="Activo" noText="Inactivo" />
                             </div>
-                            <Row icon={<IdCard size={15} />} label="Identificación">{coordinador.identificacion}</Row>
+                            <Row icon={<IdCard size={15} />} label="N. Documento">{coordinador.identificacion}</Row>
                             <Row icon={<Mail size={15} />} label="Correo institucional">{coordinador.correo_institucional}</Row>
                             {coordinador.correo && <Row icon={<Mail size={15} />} label="Correo personal">{coordinador.correo}</Row>}
                             {coordinador.telefono && <Row icon={<Phone size={15} />} label="Teléfono">{coordinador.telefono}</Row>}
@@ -372,8 +372,8 @@ export default function MiPerfilView({ user, onShowToast }) {
                                 <Badge ok={docente.estado} okText="Activo" noText="Inactivo" />
                             </div>
                             <Row icon={<IdCard size={15} />} label="Código">{docente.codigo}</Row>
-                            <Row icon={<IdCard size={15} />} label="Documento">
-                                {docente.tipo_documento} {docente.numero_documento}
+                            <Row icon={<IdCard size={15} />} label="N. Documento">
+                                {docente.numero_documento}
                             </Row>
                             <Row icon={<Mail size={15} />} label="Correo personal">{docente.correo_personal || '—'}</Row>
                             <Row icon={<Phone size={15} />} label="Teléfono">{docente.telefono || '—'}</Row>
