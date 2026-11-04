@@ -150,13 +150,27 @@
   border-radius: var(--radius-lg);
   border: 1px solid #cbd5e1;
   overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e2e8f0;
   max-width: 100%;
 }
 
 .navbar-links::-webkit-scrollbar {
-  display: none;
+  height: 6px;
+}
+
+.navbar-links::-webkit-scrollbar-track {
+  background-color: #e2e8f0;
+  border-radius: 999px;
+}
+
+.navbar-links::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+  border-radius: 999px;
+}
+
+.navbar-links::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
 }
 
 .nav-tab-btn {

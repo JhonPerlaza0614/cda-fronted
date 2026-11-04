@@ -240,10 +240,18 @@ export default function AsignaturasView({
           <Search size={18} className="search-icon" />
           <input
             type="text"
-            placeholder="Buscar por código, nombre o facultad de la BD..."
+            list="asignaturas-codigos"
+            placeholder="Digita el código o nombre de la asignatura..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          <datalist id="asignaturas-codigos">
+            {asignaturas.map((asignatura) => (
+              <option key={asignatura.code_course} value={asignatura.code_course}>
+                {asignatura.name_course}
+              </option>
+            ))}
+          </datalist>
         </div>
         <div className="stats-pill">
           <span>Total materias: <strong>{asignaturas.length}</strong></span>

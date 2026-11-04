@@ -4,6 +4,7 @@ import PensumView from './components/pensum/PensumView'
 import ProgramasView from './components/programas/ProgramasView'
 import ProgramasCoordinadoresView from './components/programas/ProgramasCoordinadoresView'
 import AsignaturasView from './components/asignaturas/AsignaturasView'
+import AsociacionesDocentesView from './components/asociaciones/AsociacionesDocentesView'
 import PlantillaView from './components/plantilla/PlantillaView'
 import PeriodosView from './components/periodos/PeriodosView'
 import ProgramacionCohortesView from './components/programacion/ProgramacionCohortesView'
@@ -254,6 +255,11 @@ export default function App({ user, onLogout }) {
                 onRefresh={() => loadData(true)}
                 onShowToast={showToast}
               />
+            )}
+
+            {/* Asociaciones docentes (HU-049): solo administrador */}
+            {isAdmin && activeTab === 'asociaciones' && (
+              <AsociacionesDocentesView onShowToast={showToast} />
             )}
 
             {/* Plantilla Administrativa */}
