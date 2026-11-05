@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, Check, Clock3, Edit3, Eraser, Info, RotateCcw, AlertCircle, LoaderCircle, X } from 'lucide-react'
+import { CalendarDays, Check, Clock3, Edit3, Eraser, Info, RotateCcw, AlertCircle, LoaderCircle, X, ArrowLeft } from 'lucide-react'
 import {
   actualizarDisponibilidad,
+  actualizarDisponibilidadDocente,
+  consultarDisponibilidadDocente,
   consultarMiDisponibilidad,
   consultarPeriodoVigente,
   registrarDisponibilidad,
+  registrarDisponibilidadDocente,
 } from '../../services/DisponibilidadService'
 import { getPeriodos, ESTADOS_PERIODO } from '../../services/periodosService'
 import { formatearFechaHora } from '../../utils/formatoFechas'
@@ -102,7 +105,8 @@ function toDisplayIntervals(schedules) {
   })
 }
 
-export default function DisponibilidadView() {
+export default function DisponibilidadView({ docenteId = null, docenteNombre = null, onBack, onSaved }) {
+  const isAdminMode = docenteId !== null && docenteId !== undefined
   const [selectedSlots, setSelectedSlots] = useState(() => new Set())
   const [savedSlots, setSavedSlots] = useState(() => new Set())
   const [schedules, setSchedules] = useState([])
@@ -120,7 +124,9 @@ export default function DisponibilidadView() {
     setLoadError(null)
     try {
       const [availResult, listaPeriodos, periodoVigenteDirecto] = await Promise.all([
-        consultarMiDisponibilidad().catch((err) => ({ __error: err })),
+        (isAdminMode
+          ? consultarDisponibilidadDocente(docenteId)
+          : consultarMiDisponibilidad()).catch((err) => ({ __error: err })),
         getPeriodos().catch(() => null),
         consultarPeriodoVigente(),
       ])
@@ -186,7 +192,7 @@ export default function DisponibilidadView() {
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [])
+  }, [isAdminMode, docenteId])
 
   useEffect(() => {
     loadAvailability()
@@ -299,10 +305,18 @@ export default function DisponibilidadView() {
           horaInicio: slotToApiTime(interval.start),
           horaFin: slotToApiTime(interval.end),
         }))
-        await actualizarDisponibilidad(payload)
+        if (isAdminMode) {
+          await actualizarDisponibilidadDocente(docenteId, payload)
+        } else {
+          await actualizarDisponibilidad(payload)
+        }
         await loadAvailability({ showLoading: false })
         setIsEditing(false)
         setSaving(false)
+        if (isAdminMode) {
+          onSaved?.(`La disponibilidad de ${docenteNombre || 'el docente'} se actualizó correctamente.`)
+          return
+        }
         setNotice({
           type: 'success',
           text: 'Horario actualizado correctamente. La tabla se ha vuelto a bloquear.',
@@ -321,11 +335,16 @@ export default function DisponibilidadView() {
     let errorMessage = null
     try {
       for (const interval of pendingIntervals) {
-        await registrarDisponibilidad({
+        const request = {
           dia: interval.dia,
           horaInicio: slotToApiTime(interval.start),
           horaFin: slotToApiTime(interval.end),
-        })
+        }
+        if (isAdminMode) {
+          await registrarDisponibilidadDocente(docenteId, request)
+        } else {
+          await registrarDisponibilidad(request)
+        }
         savedCount += 1
       }
     } catch (error) {
@@ -343,6 +362,8 @@ export default function DisponibilidadView() {
           ? `Se guardaron ${savedCount} ${savedCount === 1 ? 'intervalo' : 'intervalos'}. Los demás no se guardaron: ${errorMessage}`
           : `No se pudo guardar la disponibilidad: ${errorMessage}`,
       })
+    } else if (isAdminMode) {
+      onSaved?.(`Se registró la disponibilidad de ${docenteNombre || 'el docente'} correctamente (${savedCount} ${savedCount === 1 ? 'intervalo' : 'intervalos'}).`)
     } else {
       setNotice({
         type: 'success',
@@ -417,7 +438,16 @@ export default function DisponibilidadView() {
     return (
       <section className="availability-page">
         <div className="availability-heading">
-          <div><div className="availability-eyebrow"><CalendarDays size={15} /> PLANIFICACIÓN DOCENTE</div><h1>Registra tu disponibilidad</h1><p>Consulta el estado del registro de disponibilidad.</p></div>
+          <div>
+            {isAdminMode && (
+              <button type="button" className="availability-back-button" onClick={onBack}>
+                <ArrowLeft size={15} /> Volver a plantilla
+              </button>
+            )}
+            <div className="availability-eyebrow"><CalendarDays size={15} /> PLANIFICACIÓN DOCENTE</div>
+            <h1>{isAdminMode ? `Disponibilidad de ${docenteNombre || 'docente'}` : 'Registra tu disponibilidad'}</h1>
+            <p>Consulta el estado del registro de disponibilidad.</p>
+          </div>
         </div>
         {renderPlazoBanner()}
         <div className="availability-state-card availability-state-error" role="alert"><AlertCircle size={20} /><span>{loadError}</span><button type="button" onClick={() => loadAvailability()} className="availability-retry-button"><RotateCcw size={15} /> Reintentar</button></div>
@@ -429,21 +459,21 @@ export default function DisponibilidadView() {
     <section className="availability-page">
       <div className="availability-heading">
         <div>
+          {isAdminMode && (
+            <button type="button" className="availability-back-button" onClick={onBack}>
+              <ArrowLeft size={15} /> Volver a plantilla
+            </button>
+          )}
           <div className="availability-eyebrow"><CalendarDays size={15} /> PLANIFICACIÓN DOCENTE</div>
-          <h1>Registra tu disponibilidad</h1>
-          <p>Selecciona los días y los intervalos en los que puedes impartir clases.</p>
+          <h1>{isAdminMode ? `Registra la disponibilidad de ${docenteNombre || 'docente'}` : 'Registra tu disponibilidad'}</h1>
+          <p>{isAdminMode
+            ? 'Selecciona los días y los intervalos en los que este docente puede impartir clases.'
+            : 'Selecciona los días y los intervalos en los que puedes impartir clases.'}</p>
         </div>
         <div className="availability-heading-icon" aria-hidden="true"><CalendarDays size={27} /></div>
       </div>
 
       {renderPlazoBanner()}
-
-      {status?.mensaje && !noPeriod && (
-        <div className={`availability-period-status ${status.estado === 'HABILITADO' ? 'is-enabled' : 'is-blocked'}`} role="status">
-          {status.estado === 'HABILITADO' ? <Check size={18} /> : <Info size={18} />}
-          <div><strong>{status.mensaje}</strong><span>{status.estado === 'HABILITADO' ? 'Puedes seleccionar y registrar nuevos intervalos durante el plazo habilitado.' : 'El registro de nuevos intervalos no está disponible en este momento.'}</span></div>
-        </div>
-      )}
 
       {notice && <div className={`availability-notice ${notice.type}`} role="status"><span className="availability-notice-icon">{notice.type === 'success' ? <Check size={17} /> : notice.type === 'error' ? <AlertCircle size={17} /> : <Info size={17} />}</span><span>{notice.text}</span><button type="button" aria-label="Cerrar aviso" onClick={() => setNotice(null)}>×</button></div>}
 
@@ -457,7 +487,7 @@ export default function DisponibilidadView() {
           <div className="availability-card">
             <div className="availability-card-top">
               <div className="availability-card-title"><span className="availability-card-title-icon"><Clock3 size={18} /></span><div><h2>Horario semanal</h2><p>Lunes a sábado · bloques de 30 minutos</p></div></div>
-              <div className="availability-selected-count"><span /> {displayedIntervalCount} {displayedIntervalCount === 1 ? 'intervalo' : 'intervalos'} · {totalHours} h</div>
+              <div className="availability-selected-count"><span /> {displayedIntervalCount} {displayedIntervalCount === 1 ? 'intervalo' : 'disponibilidades'} · {totalHours} h</div>
             </div>
 
             <div className="availability-table-scroll">
@@ -545,8 +575,8 @@ export default function DisponibilidadView() {
         </>
       )}
 
-      {noPeriod && <div className="availability-state-card availability-state-error"><Info size={20} /><div><strong>No hay un período académico vigente</strong><span>Por ahora no puedes registrar disponibilidades. Intenta nuevamente cuando se habilite un período.</span></div></div>}
-      {!noPeriod && schedules.length === 0 && status?.estado !== 'HABILITADO' && <div className="availability-state-card"><Info size={20} /><div><strong>Sin horarios registrados</strong><span>No tienes disponibilidades registradas para el período vigente.</span></div></div>}
+      {noPeriod && <div className="availability-state-card availability-state-error"><Info size={20} /><div><strong>No hay un período académico vigente</strong><span>Por ahora no se pueden registrar disponibilidades. Intenta nuevamente cuando se habilite un período.</span></div></div>}
+      {!noPeriod && schedules.length === 0 && status?.estado !== 'HABILITADO' && <div className="availability-state-card"><Info size={20} /><div><strong>Sin horarios registrados</strong><span>{isAdminMode ? 'Este docente no tiene disponibilidades registradas para el período vigente.' : 'No tienes disponibilidades registradas para el período vigente.'}</span></div></div>}
 
       <p className="availability-footnote"><RotateCcw size={14} /> Los nuevos intervalos se guardan en el servidor al pulsar “Guardar disponibilidad”. Los horarios existentes se muestran como consulta; la eliminación o edición de horarios requiere endpoints adicionales en el backend.</p>
     </section>
