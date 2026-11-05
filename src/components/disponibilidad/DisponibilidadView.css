@@ -6,6 +6,20 @@
 .availability-heading h1 { margin: 0; color: #1b2a42; font-size: clamp(25px, 2.5vw, 32px); line-height: 1.2; font-weight: 780; letter-spacing: -.045em; }
 .availability-heading p { margin: 9px 0 0; color: #748198; font-size: 13px; line-height: 1.7; }
 .availability-heading-icon { display: grid; flex: 0 0 54px; width: 54px; height: 54px; place-items: center; border: 1px solid #e5eaff; border-radius: 16px; background: #edf1ff; color: #3b59d2; }
+.availability-deadline-card { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; padding: 15px 18px; border: 1px solid #e2e8f0; border-radius: 13px; background: #ffffff; box-shadow: 0 3px 10px rgba(15, 23, 42, 0.04); }
+.availability-deadline-card.is-open { border-color: #a7f3d0; background: #f0fdf4; }
+.availability-deadline-card.is-closed { border-color: #fecaca; background: #fef2f2; }
+.availability-deadline-card.is-undefined { border-color: #fde68a; background: #fffbeb; }
+.availability-deadline-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.availability-deadline-title { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; color: #1e293b; }
+.availability-deadline-badge { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; }
+.availability-deadline-badge.badge-open { background: #16a34a; color: #ffffff; }
+.availability-deadline-badge.badge-closed { background: #dc2626; color: #ffffff; }
+.availability-deadline-dates { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px 20px; }
+.availability-deadline-date-item { display: flex; flex-direction: column; gap: 3px; padding: 8px 12px; border-radius: 9px; background: rgba(255, 255, 255, 0.78); border: 1px solid rgba(15, 23, 42, 0.08); }
+.availability-deadline-label { font-size: 11px; font-weight: 650; color: #64748b; }
+.availability-deadline-date-item strong { font-size: 13px; font-weight: 800; color: #0f172a; }
+.availability-deadline-empty { margin: 0; font-size: 13px; font-weight: 700; color: #92400e; }
 .availability-period-status { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 20px; padding: 14px 16px; border: 1px solid #f2dfb5; border-radius: 12px; background: #fffaf0; color: #805717; }
 .availability-period-status.is-enabled { border-color: #ccefe1; background: #f0fbf6; color: #187a57; }
 .availability-period-status > div { display: flex; flex-direction: column; gap: 4px; }
@@ -74,7 +88,11 @@
 .availability-retry-button { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding: 8px 11px; border: 1px solid #e3e8f2; border-radius: 8px; background: #fff; color: #3d4e69; cursor: pointer; }
 .availability-readonly-note { display: flex; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid #edf0f5; color: #78869b; background: #fcfdff; font-size: 11px; }
 .availability-saved-summary { margin-top: 18px; padding: 17px 20px; border: 1px solid #e7ebf3; border-radius: 12px; background: #fff; color: #34425c; font-size: 12px; }
-.availability-saved-summary > strong { display: block; margin-bottom: 10px; }
+.availability-saved-summary-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.availability-saved-summary-header > strong { display: block; margin: 0; font-size: 13px; }
+.availability-edit-button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid #3654cd; border-radius: 8px; background: #3b59d5; color: #ffffff; font-size: 11px; font-weight: 750; cursor: pointer; transition: background 0.15s ease, transform 0.1s ease; }
+.availability-edit-button:hover { background: #2948bf; }
+.availability-edit-button:active { transform: translateY(1px); }
 .availability-saved-summary ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 7px 22px; margin: 0; padding: 0; list-style: none; }
 .availability-saved-summary li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f0f2f7; color: #68768c; }
 .availability-saved-summary li span:last-child { white-space: nowrap; color: #394b73; font-weight: 700; }

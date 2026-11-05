@@ -3,8 +3,9 @@ import { getAuthToken } from './authService'
 
 /**
  * Servicio para la gestión de Programas, Asignaturas y Pensum Académico
- * Conectado directamente a la API REST de Spring Boot (cda-backend)
- * con fallback transparente a Supabase si el backend se encuentra apagado.
+ * Conectado a la API REST de Spring Boot (cda-backend).
+ * Algunas lecturas conservan fallback a Supabase por compatibilidad; las escrituras
+ * del catálogo de asignaturas siempre pasan por el backend para aplicar HU-044.
  */
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api'
@@ -65,6 +66,16 @@ export async function getProgramas() {
 
 }
 
+// HU-037: programas activos con su coordinador (docs/contratos/HU-037.md en cda-backend).
+// Sin fallback a Supabase: la búsqueda y el filtro son del servidor y un fallo debe verse (criterio 5).
+export async function getProgramasConCoordinador({ q = '', sinCoordinador = false } = {}) {
+  const params = new URLSearchParams()
+  if (q.trim()) params.set('q', q.trim())
+  if (sinCoordinador) params.set('sinCoordinador', 'true')
+  const query = params.toString()
+  return requestBackend(`/programas/coordinadores${query ? `?${query}` : ''}`)
+}
+
 // --- PERIODOS ACADEMICOS (HU-002 / HU-003) ---
 
 export async function getPeriodos() {
@@ -86,14 +97,21 @@ export async function updatePeriodo(id, periodo) {
 }
 
 export async function createPrograma(programa) {
+  const rawCode = programa.code_program.trim().toUpperCase()
+  const jornadaNorm = (programa.jornada || 'DIURNA').toUpperCase()
+  const formattedCode = /-(DIU|NOC)$/.test(rawCode)
+    ? rawCode
+    : `${rawCode}-${jornadaNorm === 'NOCTURNA' ? 'NOC' : 'DIU'}`
+
   try {
     const payload = {
-      code_program: programa.code_program.trim().toUpperCase(),
+      code_program: formattedCode,
       name_program: programa.name_program.trim(),
       numero_semestre: parseInt(programa.numero_semestre, 10) || 10,
       id_facultad_programa: programa.id_facultad_programa ? parseInt(programa.id_facultad_programa, 10) : null,
       apertura: programa.apertura || null,
-      jornada: programa.jornada || 'DIURNA',
+      numero_resolucion: String(programa.numero_resolucion || '').trim(),
+      jornada: jornadaNorm,
       ingreso: programa.ingreso || 'SEMESTRAL'
     }
     return await requestBackend('/programas', {
@@ -103,10 +121,11 @@ export async function createPrograma(programa) {
   } catch (err) {
     console.warn('Fallo backend en createPrograma, fallback a Supabase:', err.message)
     const insertPayload = {
-      code_program: programa.code_program.trim().toUpperCase(),
+      code_program: formattedCode,
       name_program: programa.name_program.trim(),
       numero_semestre: parseInt(programa.numero_semestre, 10) || 10,
       apertura: programa.apertura || null,
+      numero_resolucion: String(programa.numero_resolucion || '').trim(),
     }
     if (programa.id_facultad_programa) {
       insertPayload.id_facultad_programa = parseInt(programa.id_facultad_programa, 10)
@@ -129,11 +148,18 @@ export async function updatePrograma(code_program, changes) {
       payload.id_facultad_programa = changes.id_facultad_programa ? parseInt(changes.id_facultad_programa, 10) : null
     }
     if (changes.apertura !== undefined) payload.apertura = changes.apertura || null
+    if (changes.numero_resolucion !== undefined) payload.numero_resolucion = String(changes.numero_resolucion).trim()
+    if (changes.id_coordinador_nuevo !== undefined) {
+      payload.id_coordinador_nuevo = parseInt(changes.id_coordinador_nuevo, 10)
+    }
     return await requestBackend(`/programas/${encodeURIComponent(code_program)}`, {
       method: 'PUT',
       body: JSON.stringify(payload)
     })
   } catch (err) {
+    // El intercambio solo es seguro si lo procesa el backend en una transacción.
+    // No se debe degradar a una actualización directa de Supabase.
+    if (changes.id_coordinador_nuevo !== undefined) throw err
     console.warn('Fallo backend en updatePrograma, fallback a Supabase:', err.message)
     const updateData = {}
     if (changes.name_program !== undefined) updateData.name_program = changes.name_program.trim()
@@ -144,6 +170,7 @@ export async function updatePrograma(code_program, changes) {
       updateData.id_facultad_programa = changes.id_facultad_programa ? parseInt(changes.id_facultad_programa, 10) : null
     }
     if (changes.apertura !== undefined) updateData.apertura = changes.apertura || null
+    if (changes.numero_resolucion !== undefined) updateData.numero_resolucion = String(changes.numero_resolucion).trim()
     const { data, error } = await supabase
       .from('programas')
       .update(updateData)
@@ -187,109 +214,129 @@ export async function getAsignaturas() {
 }
 
 export async function createAsignatura(asignatura) {
-  try {
-    const creditsVal = parseInt(asignatura.credits, 10)
-    const payload = {
-      code_course: asignatura.code_course.trim().toUpperCase(),
-      name_course: asignatura.name_course.trim(),
-      credits: isNaN(creditsVal) ? 0 : Math.max(0, creditsVal),
-      is_elective: Boolean(asignatura.is_elective),
-      es_complementaria: Boolean(asignatura.es_complementaria),
-      es_basica: Boolean(asignatura.es_basica),
-      facultad: asignatura.facultad ? asignatura.facultad.trim() : null,
-      id_facultad: asignatura.id_facultad ? parseInt(asignatura.id_facultad, 10) : null
-    }
-    return await requestBackend('/asignaturas', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    })
-  } catch (err) {
-    console.warn('Fallo backend en createAsignatura, fallback a Supabase:', err.message)
-    const creditsVal = parseInt(asignatura.credits, 10)
-    const payload = {
-      code_course: asignatura.code_course.trim().toUpperCase(),
-      name_course: asignatura.name_course.trim(),
-      credits: isNaN(creditsVal) ? 0 : Math.max(0, creditsVal),
-      is_elective: Boolean(asignatura.is_elective),
-      es_complementaria: Boolean(asignatura.es_complementaria),
-      es_basica: Boolean(asignatura.es_basica),
-      facultad: asignatura.facultad ? asignatura.facultad.trim() : null,
-      id_facultad: asignatura.id_facultad ? parseInt(asignatura.id_facultad, 10) : null,
-    }
-    const { data, error } = await supabase
-      .from('asignaturas')
-      .insert([payload])
-      .select()
-    if (error) throw error
-    return data?.[0]
+  const creditsVal = parseInt(asignatura.credits, 10)
+  const payload = {
+    code_course: String(asignatura.code_course || '').trim().toUpperCase(),
+    name_course: String(asignatura.name_course || '').trim(),
+    credits: isNaN(creditsVal) ? 0 : Math.max(0, creditsVal),
+    is_elective: Boolean(asignatura.is_elective),
+    es_complementaria: Boolean(asignatura.es_complementaria),
+    es_basica: Boolean(asignatura.es_basica),
+    facultad: asignatura.facultad ? asignatura.facultad.trim() : null,
+    id_facultad: asignatura.id_facultad ? parseInt(asignatura.id_facultad, 10) : null
   }
+
+  // Las escrituras deben pasar siempre por el backend para que se apliquen
+  // las validaciones de HU-044. No usar Supabase como fallback en operaciones de escritura.
+  return requestBackend('/asignaturas', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
 }
 
 export async function updateAsignatura(code_course, changes) {
-  try {
-    const payload = {}
-    if (changes.name_course !== undefined) payload.name_course = changes.name_course.trim()
-    if (changes.credits !== undefined) {
-      const creditsVal = parseInt(changes.credits, 10)
-      payload.credits = isNaN(creditsVal) ? 0 : Math.max(0, creditsVal)
-    }
-    if (changes.is_elective !== undefined) payload.is_elective = Boolean(changes.is_elective)
-    if (changes.es_complementaria !== undefined) payload.es_complementaria = Boolean(changes.es_complementaria)
-    if (changes.es_basica !== undefined) payload.es_basica = Boolean(changes.es_basica)
-    if (changes.id_facultad !== undefined) {
-      const facId = parseInt(changes.id_facultad, 10)
-      payload.id_facultad = !isNaN(facId) ? facId : null
-    }
-    if (changes.facultad !== undefined) payload.facultad = changes.facultad ? changes.facultad.trim() : null
-
-    return await requestBackend(`/asignaturas/${encodeURIComponent(code_course)}`, {
-      method: 'PUT',
-      body: JSON.stringify(payload)
-    })
-  } catch (err) {
-    console.warn('Fallo backend en updateAsignatura, fallback a Supabase:', err.message)
-    const updateData = {}
-    if (changes.name_course !== undefined) updateData.name_course = changes.name_course.trim()
-    if (changes.credits !== undefined) {
-      const creditsVal = parseInt(changes.credits, 10)
-      updateData.credits = isNaN(creditsVal) ? 0 : Math.max(0, creditsVal)
-    }
-    if (changes.is_elective !== undefined) updateData.is_elective = Boolean(changes.is_elective)
-    if (changes.es_complementaria !== undefined) updateData.es_complementaria = Boolean(changes.es_complementaria)
-    if (changes.es_basica !== undefined) updateData.es_basica = Boolean(changes.es_basica)
-    if (changes.id_facultad !== undefined) {
-      const facId = parseInt(changes.id_facultad, 10)
-      updateData.id_facultad = !isNaN(facId) ? facId : null
-    }
-
-    const { data, error } = await supabase
-      .from('asignaturas')
-      .update(updateData)
-      .eq('code_course', code_course)
-      .select()
-
-    if (error) throw error
-    return data?.[0]
+  const payload = {}
+  if (changes.name_course !== undefined) payload.name_course = String(changes.name_course || '').trim()
+  if (changes.credits !== undefined) {
+    const creditsVal = parseInt(changes.credits, 10)
+    payload.credits = isNaN(creditsVal) ? 0 : Math.max(0, creditsVal)
   }
+  if (changes.is_elective !== undefined) payload.is_elective = Boolean(changes.is_elective)
+  if (changes.es_complementaria !== undefined) payload.es_complementaria = Boolean(changes.es_complementaria)
+  if (changes.es_basica !== undefined) payload.es_basica = Boolean(changes.es_basica)
+  if (changes.id_facultad !== undefined) {
+    const facId = parseInt(changes.id_facultad, 10)
+    payload.id_facultad = !isNaN(facId) ? facId : null
+  }
+  if (changes.facultad !== undefined) payload.facultad = changes.facultad ? changes.facultad.trim() : null
+
+  return requestBackend(`/asignaturas/${encodeURIComponent(code_course)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  })
 }
 
+export async function cambiarEstadoAsignatura(code_course, activo) {
+  return requestBackend(
+    `/asignaturas/${encodeURIComponent(code_course)}/estado?activo=${Boolean(activo)}`,
+    { method: 'PATCH' }
+  )
+}
+
+// Alias para no romper imports antiguos: ahora desactivar nunca borra la fila.
 export async function deleteAsignatura(code_course) {
-  try {
-    return await requestBackend(`/asignaturas/${encodeURIComponent(code_course)}`, {
-      method: 'DELETE'
-    })
-  } catch (err) {
-    console.warn('Fallo backend en deleteAsignatura, fallback a Supabase:', err.message)
-    const { error } = await supabase
-      .from('asignaturas')
-      .delete()
-      .eq('code_course', code_course)
-    if (error) throw error
-    return true
-  }
+  return cambiarEstadoAsignatura(code_course, false)
 }
 
 // --- PENSUM ACADÉMICO ---
+
+function parsePensumMeta(rawFacultad) {
+  if (!rawFacultad || !String(rawFacultad).startsWith('META|')) {
+    return {
+      facultad: rawFacultad || null,
+      horas_clase: 4,
+      horas_independiente: 8,
+      tipo_asignatura: 'Profesional',
+      descripcion: ''
+    }
+  }
+  const result = {
+    facultad: null,
+    horas_clase: 4,
+    horas_independiente: 8,
+    tipo_asignatura: 'Profesional',
+    descripcion: ''
+  }
+  const parts = String(rawFacultad).substring(5).split('|')
+  for (const part of parts) {
+    const idx = part.indexOf('=')
+    if (idx <= 0) continue
+    const k = part.substring(0, idx)
+    const v = part.substring(idx + 1)
+    if (k === 'hc') result.horas_clase = parseInt(v, 10) || 4
+    else if (k === 'hi') result.horas_independiente = parseInt(v, 10) || 8
+    else if (k === 'tipo' && v) result.tipo_asignatura = v
+    else if (k === 'desc') result.descripcion = v
+  }
+  return result
+}
+
+function encodePensumMeta({ horas_clase, horas_independiente, tipo_asignatura, descripcion }) {
+  const hc = horas_clase !== undefined && horas_clase !== null ? parseInt(horas_clase, 10) : 4
+  const hi = horas_independiente !== undefined && horas_independiente !== null ? parseInt(horas_independiente, 10) : 8
+  const tipo = String(tipo_asignatura || 'Profesional').replace(/[|=]/g, ' ').trim()
+  let desc = String(descripcion || '').replace(/[|=]/g, ' ').trim()
+  if (desc.length > 75) desc = desc.substring(0, 75)
+  const raw = `META|hc=${hc}|hi=${hi}|tipo=${tipo}|desc=${desc}`
+  return raw.length > 150 ? raw.substring(0, 150) : raw
+}
+
+function buildPensumRequestPayload(code_program, itemsOrPayload) {
+  const isArray = Array.isArray(itemsOrPayload)
+  const rawItems = isArray ? itemsOrPayload : (itemsOrPayload?.items || [])
+  const payload = {
+    code_program,
+    items: rawItems.map(item => ({
+      code_course: String(item.code_course || '').trim().toUpperCase(),
+      name_course: item.name_course ? String(item.name_course).trim() : undefined,
+      credits: item.credits !== undefined && item.credits !== '' ? parseInt(item.credits, 10) : undefined,
+      semestre: parseInt(item.semestre, 10),
+      horas_clase: item.horas_clase !== undefined && item.horas_clase !== '' ? parseInt(item.horas_clase, 10) : undefined,
+      horas_independiente: item.horas_independiente !== undefined && item.horas_independiente !== '' ? parseInt(item.horas_independiente, 10) : undefined,
+      tipo_asignatura: item.tipo_asignatura || undefined,
+      original_code_course: item.original_code_course || undefined
+    }))
+  }
+  if (!isArray && itemsOrPayload) {
+    if (itemsOrPayload.name_program !== undefined) payload.name_program = itemsOrPayload.name_program
+    if (itemsOrPayload.descripcion !== undefined) payload.descripcion = itemsOrPayload.descripcion
+    if (itemsOrPayload.jornada !== undefined) payload.jornada = itemsOrPayload.jornada
+    if (itemsOrPayload.periodo_oferta !== undefined) payload.periodo_oferta = itemsOrPayload.periodo_oferta
+    if (itemsOrPayload.numero_semestre !== undefined) payload.numero_semestre = parseInt(itemsOrPayload.numero_semestre, 10)
+    if (itemsOrPayload.numero_resolucion !== undefined) payload.numero_resolucion = itemsOrPayload.numero_resolucion
+  }
+  return payload
+}
 
 export async function getPensumByProgram(code_program) {
   try {
@@ -315,10 +362,15 @@ export async function getPensumByProgram(code_program) {
     const courseMap = new Map((coursesData || []).map(c => [c.code_course, c]))
     return pensumData.map(item => {
       const course = courseMap.get(item.code_course)
+      const meta = parsePensumMeta(item.facultad)
       return {
         ...item,
         name_course: course?.name_course || item.code_course,
         credits: course?.credits !== undefined && course?.credits !== null ? course.credits : 0,
+        horas_clase: meta.horas_clase,
+        horas_independiente: meta.horas_independiente,
+        tipo_asignatura: meta.tipo_asignatura,
+        descripcion: meta.descripcion
       }
     })
   }
@@ -334,29 +386,52 @@ export async function getAllPensum() {
       .select('*')
       .eq('vigente', true)
     if (error) throw error
-    return data || []
+    return (data || []).map(item => {
+      const meta = parsePensumMeta(item.facultad)
+      return {
+        ...item,
+        horas_clase: meta.horas_clase,
+        horas_independiente: meta.horas_independiente,
+        tipo_asignatura: meta.tipo_asignatura,
+        descripcion: meta.descripcion
+      }
+    })
   }
 }
 
-export async function savePensumVersion(code_program, items) {
+export async function savePensumVersion(code_program, itemsOrPayload) {
+  const bodyPayload = buildPensumRequestPayload(code_program, itemsOrPayload)
   try {
     return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/guardar`, {
       method: 'POST',
-      body: JSON.stringify({
-        code_program,
-        items: items.map(item => ({
-          code_course: item.code_course,
-          semestre: parseInt(item.semestre, 10)
-        }))
-      })
+      body: JSON.stringify(bodyPayload)
     })
   } catch (err) {
     if (!isBackendUnavailable(err)) throw err
     console.warn('Fallo backend en savePensumVersion, fallback a Supabase:', err.message)
+    const items = bodyPayload.items || []
+    let targetCodeProgram = code_program
+    const baseCode = String(code_program || '').replace(/-(DIU|NOC)$/i, '')
+    if (bodyPayload.jornada === 'NOCTURNA' && !String(code_program).toUpperCase().endsWith('-NOC')) {
+      targetCodeProgram = `${baseCode}-NOC`
+      const { data: baseProg } = await supabase.from('programas').select('*').eq('code_program', code_program).maybeSingle()
+      await supabase.from('programas').upsert([{
+        code_program: targetCodeProgram,
+        name_program: bodyPayload.name_program || baseProg?.name_program || targetCodeProgram,
+        numero_semestre: bodyPayload.numero_semestre || baseProg?.numero_semestre || 10,
+        id_facultad_programa: baseProg?.id_facultad_programa || null,
+        jornada: 'NOCTURNA',
+        ingreso: bodyPayload.periodo_oferta || baseProg?.ingreso || 'SEMESTRAL',
+        estado: 'ACTIVO',
+        numero_resolucion: bodyPayload.numero_resolucion || null
+      }], { onConflict: 'code_program' })
+    } else if (bodyPayload.jornada === 'DIURNA' && String(code_program).toUpperCase().endsWith('-NOC')) {
+      targetCodeProgram = `${baseCode}-DIU`
+    }
     const { data: current, error: currentError } = await supabase
       .from('pensum_academico')
       .select('version')
-      .eq('code_program', code_program)
+      .eq('code_program', targetCodeProgram)
       .order('version', { ascending: false })
       .limit(1)
     if (currentError) throw currentError
@@ -365,18 +440,104 @@ export async function savePensumVersion(code_program, items) {
     const { error: deactivateError } = await supabase
       .from('pensum_academico')
       .update({ vigente: false, fecha_desactivacion: now })
-      .eq('code_program', code_program)
+      .eq('code_program', targetCodeProgram)
       .eq('vigente', true)
     if (deactivateError) throw deactivateError
+    for (const item of items) {
+      if (item.name_course) {
+        await supabase.from('asignaturas').upsert([{
+          code_course: item.code_course,
+          name_course: item.name_course,
+          credits: item.credits ?? 3,
+          is_elective: (item.tipo_asignatura || '').toLowerCase().includes('electiv') || (item.tipo_asignatura || '').toLowerCase().includes('extracurricular'),
+          es_complementaria: (item.tipo_asignatura || '').toLowerCase().includes('complementar'),
+          es_basica: (item.tipo_asignatura || '').toLowerCase().includes('básic') || (item.tipo_asignatura || '').toLowerCase().includes('basic')
+        }], { onConflict: 'code_course' })
+      }
+    }
     const payload = items.map(item => ({
-      code_program,
+      code_program: targetCodeProgram,
       code_course: item.code_course,
       version: nextVersion,
       semestre: parseInt(item.semestre, 10),
       vigente: true,
-      activo: true
+      activo: true,
+      numero_resolucion: bodyPayload.numero_resolucion || null,
+      numero_semestres: bodyPayload.numero_semestre || null,
+      editada: false,
+      fecha_edicion: null,
+      facultad: encodePensumMeta({
+        horas_clase: item.horas_clase,
+        horas_independiente: item.horas_independiente,
+        tipo_asignatura: item.tipo_asignatura,
+        descripcion: bodyPayload.descripcion
+      })
     }))
     if (payload.length === 0) return []
+    const { data, error } = await supabase.from('pensum_academico').insert(payload).select()
+    if (error) throw error
+    return data || []
+  }
+}
+
+export async function updatePensumVersion(code_program, itemsOrPayload) {
+  const bodyPayload = buildPensumRequestPayload(code_program, itemsOrPayload)
+  try {
+    return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/editar`, {
+      method: 'PUT',
+      body: JSON.stringify(bodyPayload)
+    })
+  } catch (err) {
+    if (!isBackendUnavailable(err)) throw err
+    console.warn('Fallo backend en updatePensumVersion, fallback a Supabase:', err.message)
+    const items = bodyPayload.items || []
+    const { data: activeRows, error: activeError } = await supabase
+      .from('pensum_academico')
+      .select('*')
+      .eq('code_program', code_program)
+      .eq('vigente', true)
+    if (activeError) throw activeError
+    if (!activeRows || activeRows.length === 0) {
+      throw new Error('Solo las mallas activas pueden ser editadas. Las mallas inactivas son de solo consulta.')
+    }
+    const activeVersion = activeRows[0].version || 1
+    for (const item of items) {
+      if (item.name_course) {
+        await supabase.from('asignaturas').upsert([{
+          code_course: item.code_course,
+          name_course: item.name_course,
+          credits: item.credits ?? 3,
+          is_elective: (item.tipo_asignatura || '').toLowerCase().includes('electiv') || (item.tipo_asignatura || '').toLowerCase().includes('extracurricular'),
+          es_complementaria: (item.tipo_asignatura || '').toLowerCase().includes('complementar'),
+          es_basica: (item.tipo_asignatura || '').toLowerCase().includes('básic') || (item.tipo_asignatura || '').toLowerCase().includes('basic')
+        }], { onConflict: 'code_course' })
+      }
+    }
+    const { error: delError } = await supabase
+      .from('pensum_academico')
+      .delete()
+      .eq('code_program', code_program)
+      .eq('version', activeVersion)
+    if (delError) throw delError
+    const nowEdit = new Date().toISOString()
+    const payload = items.map(item => ({
+      code_program,
+      code_course: item.code_course,
+      version: activeVersion,
+      semestre: parseInt(item.semestre, 10),
+      vigente: true,
+      activo: true,
+      numero_resolucion: bodyPayload.numero_resolucion || activeRows[0]?.numero_resolucion || null,
+      numero_semestres: bodyPayload.numero_semestre || activeRows[0]?.numero_semestres || null,
+      editada: true,
+      fecha_edicion: nowEdit,
+      facultad: encodePensumMeta({
+        horas_clase: item.horas_clase,
+        horas_independiente: item.horas_independiente,
+        tipo_asignatura: item.tipo_asignatura,
+        descripcion: bodyPayload.descripcion
+      })
+    }))
     const { data, error } = await supabase.from('pensum_academico').insert(payload).select()
     if (error) throw error
     return data || []
@@ -391,21 +552,29 @@ export async function getPensumHistory(code_program) {
     console.warn('Fallo backend en getPensumHistory, usando Supabase:', err.message)
     const { data, error } = await supabase
       .from('pensum_academico')
-      .select('version, fecha_desactivacion, code_course')
+      .select('version, fecha_desactivacion, code_course, numero_resolucion, numero_semestres, editada, fecha_edicion')
       .eq('code_program', code_program)
       .eq('vigente', false)
       .order('fecha_desactivacion', { ascending: false })
     if (error) throw error
     const grouped = new Map()
-      ; (data || []).forEach(item => {
-        const current = grouped.get(item.version) || {
-          version: item.version,
-          fechaDesactivacion: item.fecha_desactivacion,
-          totalAsignaturas: 0
-        }
-        current.totalAsignaturas += 1
-        grouped.set(item.version, current)
-      })
+    ;(data || []).forEach(item => {
+      const current = grouped.get(item.version) || {
+        version: item.version,
+        fechaDesactivacion: item.fecha_desactivacion,
+        totalAsignaturas: 0,
+        numero_resolucion: item.numero_resolucion || null,
+        numero_semestres: item.numero_semestres || null,
+        editada: Boolean(item.editada),
+        fecha_edicion: item.fecha_edicion || null
+      }
+      current.totalAsignaturas += 1
+      if (item.editada) current.editada = true
+      if (item.fecha_edicion && (!current.fecha_edicion || item.fecha_edicion > current.fecha_edicion)) {
+        current.fecha_edicion = item.fecha_edicion
+      }
+      grouped.set(item.version, current)
+    })
     return [...grouped.values()]
   }
 }
@@ -747,12 +916,13 @@ export async function getDocentes() {
     console.warn('Backend no disponible para docentes, fallback Supabase:', err.message)
     const { data, error } = await supabase
       .from('docentes')
-      .select('*, programas(name_program)')
+      .select('*, Facultad(nombre), programas(name_program)')
       .order('apellidos', { ascending: true })
     if (!error && data) {
       return data.map(d => ({
         ...d,
         nombre_completo: `${d.nombres || ''} ${d.apellidos || ''}`.trim(),
+        nombre_facultad: d.Facultad?.nombre || d.nombre_facultad,
         name_program: d.programas?.name_program || d.code_program
       }))
     }

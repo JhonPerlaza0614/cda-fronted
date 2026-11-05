@@ -13,7 +13,7 @@ import {
     Phone,
     Pencil
 } from 'lucide-react'
-import { getMiFoto, getMiPerfil, getMiPerfilCoordinador } from '../services/docenteService'
+import { getMiFoto, getMiPerfil, getMiPerfilCoordinador } from '../../services/docenteService'
 import EditarPerfilDocente from './EditarPerfilDocente'
 
 // 1: Administrador, 2: Coordinador, 3: Docente (igual que en el login)
@@ -26,7 +26,7 @@ const CATEGORIA_LABEL = { AUXILIAR: 'Auxiliar', ASISTENTE: 'Asistente', ASOCIADO
 
 const cardStyle = {
     background: '#ffffff',
-    border: '1px solid #e4e4e7',
+    border: '1px solid #cbd5e1',
     borderRadius: '12px',
     padding: '1.5rem'
 }
@@ -63,8 +63,8 @@ function Badge({ ok, okText, noText }) {
 }
 
 export default function MiPerfilView({ user, onShowToast }) {
-    const rol = user?.rol
-    const rolNombre = user?.rolNombre || ROLES[rol] || 'Usuario'
+    const rol = Number(user?.rol)
+    const rolNombre = ROLES[rol] || (user?.rolNombre && user?.rolNombre !== 'Usuario' ? user.rolNombre : 'Usuario')
     const esDocente = rol === ROL_DOCENTE
     const esCoordinador = rol === ROL_COORDINADOR
 
@@ -300,14 +300,16 @@ export default function MiPerfilView({ user, onShowToast }) {
                             <div>
                                 <Badge ok={coordinador.activo !== false} okText="Activo" noText="Inactivo" />
                             </div>
-                            <Row icon={<IdCard size={15} />} label="Identificación">{coordinador.identificacion}</Row>
+                            <Row icon={<IdCard size={15} />} label="N. Documento">{coordinador.identificacion}</Row>
                             <Row icon={<Mail size={15} />} label="Correo institucional">{coordinador.correo_institucional}</Row>
                             {coordinador.correo && <Row icon={<Mail size={15} />} label="Correo personal">{coordinador.correo}</Row>}
                             {coordinador.telefono && <Row icon={<Phone size={15} />} label="Teléfono">{coordinador.telefono}</Row>}
                             <Row icon={<Award size={15} />} label="Categoría">{coordinador.categoria || 'No asignada'}</Row>
                             <Row icon={<Briefcase size={15} />} label="Tipo de contrato">{coordinador.tipo_contrato || 'No asignado'}</Row>
-                            <Row icon={<BookOpen size={15} />} label="Programa">
-                                {coordinador.name_program || coordinador.code_program || 'Sin programa asignado'}
+                            <Row icon={<BookOpen size={15} />} label="Malla / Programa">
+                                {coordinador.code_program && coordinador.name_program
+                                    ? `${coordinador.code_program} — ${coordinador.name_program}`
+                                    : (coordinador.name_program || coordinador.code_program || 'Sin programa asignado')}
                             </Row>
                         </div>
                     )}
@@ -370,8 +372,8 @@ export default function MiPerfilView({ user, onShowToast }) {
                                 <Badge ok={docente.estado} okText="Activo" noText="Inactivo" />
                             </div>
                             <Row icon={<IdCard size={15} />} label="Código">{docente.codigo}</Row>
-                            <Row icon={<IdCard size={15} />} label="Documento">
-                                {docente.tipo_documento} {docente.numero_documento}
+                            <Row icon={<IdCard size={15} />} label="N. Documento">
+                                {docente.numero_documento}
                             </Row>
                             <Row icon={<Mail size={15} />} label="Correo personal">{docente.correo_personal || '—'}</Row>
                             <Row icon={<Phone size={15} />} label="Teléfono">{docente.telefono || '—'}</Row>
@@ -381,8 +383,8 @@ export default function MiPerfilView({ user, onShowToast }) {
                             <Row icon={<Award size={15} />} label="Categoría">
                                 {CATEGORIA_LABEL[docente.categoria] || docente.categoria}
                             </Row>
-                            <Row icon={<BookOpen size={15} />} label="Programa">
-                                {docente.nombre_programa || docente.code_program}
+                            <Row icon={<BookOpen size={15} />} label="Facultad">
+                                {docente.nombre_facultad || docente.nombre_programa || docente.code_program || 'Sin facultad asignada'}
                             </Row>
                             <Row icon={<Star size={15} />} label="Evaluación">
                                 {tieneEvaluacion ? (

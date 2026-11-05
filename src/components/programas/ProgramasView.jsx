@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Search, Edit2, Trash2, BookOpen, Layers, AlertTriangle, Award, Building2 } from 'lucide-react'
-import { createPrograma, updatePrograma, deletePrograma, getFacultades, createFacultad } from '../services/academicService'
+import { createPrograma, updatePrograma, deletePrograma, getFacultades, createFacultad, getCoordinadores } from '../../services/academicService'
 
 export default function ProgramasView({ 
   programas, 
   pensumList, 
   onRefresh, 
   onShowToast, 
-  onSelectProgramForPensum 
+  onSelectProgramForPensum,
+  canAssignCoordinator = false,
+  // HU-037: programa cuyo modal de edición se abre al entrar (asignar o cambiar coordinador)
+  initialEditCode = null,
+  onInitialEditHandled
 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -15,9 +19,12 @@ export default function ProgramasView({
   const [deletingProgram, setDeletingProgram] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [facultadesList, setFacultadesList] = useState([])
+  const [coordinadoresList, setCoordinadoresList] = useState([])
+  const [loadingCoordinadores, setLoadingCoordinadores] = useState(false)
+  const [currentCoordinatorId, setCurrentCoordinatorId] = useState(null)
 
-  // Estado para creación rápida de facultad
-  const [isAddingNewFacultad, setIsAddingNewFacultad] = useState(false)
+  // Modal independiente para crear facultad (al lado de Nuevo Programa)
+  const [isFacultadModalOpen, setIsFacultadModalOpen] = useState(false)
   const [newFacultadName, setNewFacultadName] = useState('')
   const [newFacultadDesc, setNewFacultadDesc] = useState('')
   const [addingFacultadSubmitting, setAddingFacultadSubmitting] = useState(false)
@@ -35,9 +42,11 @@ export default function ProgramasView({
   const [formData, setFormData] = useState({
     code_program: '',
     name_program: '',
+    numero_resolucion: '',
     numero_semestre: 10,
     id_facultad_programa: '',
     apertura: '',
+    id_coordinador_nuevo: '',
   })
 
   // Filtered programs
@@ -58,7 +67,14 @@ export default function ProgramasView({
       .reduce((sum, item) => sum + (item.credits || 0), 0)
   }
 
-  const handleCreateNewFacultadInDb = async () => {
+  const handleOpenFacultadModal = () => {
+    setNewFacultadName('')
+    setNewFacultadDesc('')
+    setIsFacultadModalOpen(true)
+  }
+
+  const handleCreateNewFacultadInDb = async (e) => {
+    if (e) e.preventDefault()
     if (!newFacultadName.trim()) {
       onShowToast('Ingresa el nombre de la nueva facultad', 'error')
       return
@@ -66,20 +82,17 @@ export default function ProgramasView({
 
     setAddingFacultadSubmitting(true)
     try {
-      const created = await createFacultad({ 
+      await createFacultad({ 
         nombre: newFacultadName.trim(),
         descripcion: newFacultadDesc.trim()
       })
-      onShowToast(`Facultad "${newFacultadName}" creada exitosamente`, 'success')
+      onShowToast(`Facultad "${newFacultadName.trim()}" creada exitosamente`, 'success')
       setNewFacultadName('')
       setNewFacultadDesc('')
-      setIsAddingNewFacultad(false)
+      setIsFacultadModalOpen(false)
       
       const updatedFacultades = await getFacultades()
-      setFacultadesList(updatedFacultades)
-      if (created && created.id) {
-        setFormData(prev => ({ ...prev, id_facultad_programa: String(created.id) }))
-      }
+      if (updatedFacultades) setFacultadesList(updatedFacultades)
     } catch (err) {
       onShowToast(`Error al guardar facultad: ${err.message}`, 'error')
     } finally {
@@ -89,38 +102,79 @@ export default function ProgramasView({
 
   const handleOpenCreateModal = () => {
     setEditingProgram(null)
-    setIsAddingNewFacultad(false)
-    setNewFacultadName('')
-    setNewFacultadDesc('')
     setFormData({
       code_program: '',
       name_program: '',
+      numero_resolucion: '',
       numero_semestre: 10,
       id_facultad_programa: '',
       apertura: '',
+      id_coordinador_nuevo: '',
     })
+    setCurrentCoordinatorId(null)
+    setLoadingCoordinadores(false)
     setIsModalOpen(true)
   }
 
-  const handleOpenEditModal = (prog) => {
+  const handleOpenEditModal = async (prog) => {
     setEditingProgram(prog)
-    setIsAddingNewFacultad(false)
-    setNewFacultadName('')
-    setNewFacultadDesc('')
+    setCurrentCoordinatorId(null)
+    setCoordinadoresList([])
+    setLoadingCoordinadores(Boolean(canAssignCoordinator))
     setFormData({
       code_program: prog.code_program,
       name_program: prog.name_program,
+      numero_resolucion: prog.numero_resolucion || '',
       numero_semestre: prog.numero_semestre !== undefined && prog.numero_semestre !== null ? prog.numero_semestre : 10,
       id_facultad_programa: prog.id_facultad_programa ? String(prog.id_facultad_programa) : '',
       apertura: prog.apertura || '',
+      id_coordinador_nuevo: '',
     })
     setIsModalOpen(true)
+
+    if (!canAssignCoordinator) return
+
+    try {
+      const data = await getCoordinadores()
+      const lista = Array.isArray(data) ? data : []
+      setCoordinadoresList(lista)
+      const asignado = lista.find(c => String(c.code_program || '') === String(prog.code_program))
+      const idAsignado = asignado?.id != null ? String(asignado.id) : ''
+      setCurrentCoordinatorId(idAsignado || null)
+      setFormData(prev => prev.code_program === prog.code_program
+        ? { ...prev, id_coordinador_nuevo: idAsignado }
+        : prev)
+    } catch (err) {
+      console.error('Error al cargar coordinadores para el programa:', err)
+      onShowToast(`No fue posible cargar la lista de coordinadores: ${err.message || 'Error desconocido'}`, 'error')
+    } finally {
+      setLoadingCoordinadores(false)
+    }
   }
+
+  // HU-037: abre el modal una sola vez cuando el programa pedido ya está en la lista
+  useEffect(() => {
+    if (!initialEditCode) return
+    const prog = programas.find(p => p.code_program === initialEditCode)
+    if (prog) handleOpenEditModal(prog)
+    onInitialEditHandled?.()
+  }, [initialEditCode, programas, handleOpenEditModal, onInitialEditHandled])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!formData.name_program.trim()) {
       onShowToast('El nombre del programa es obligatorio', 'error')
+      return
+    }
+
+    const numeroResolucion = formData.numero_resolucion.trim()
+    if (!numeroResolucion) {
+      onShowToast('El número de resolución es obligatorio', 'error')
+      return
+    }
+
+    if (numeroResolucion.length > 15) {
+      onShowToast('El número de resolución no puede superar 15 caracteres', 'error')
       return
     }
 
@@ -133,11 +187,18 @@ export default function ProgramasView({
     setSubmitting(true)
     try {
       if (editingProgram) {
+        const coordinadorSeleccionado = formData.id_coordinador_nuevo
+        const cambioCoordinador = canAssignCoordinator
+          && coordinadorSeleccionado
+          && coordinadorSeleccionado !== String(currentCoordinatorId ?? '')
+
         await updatePrograma(editingProgram.code_program, {
           name_program: formData.name_program,
           numero_semestre: numSemestres,
+          numero_resolucion: numeroResolucion,
           id_facultad_programa: formData.id_facultad_programa ? parseInt(formData.id_facultad_programa, 10) : null,
           apertura: formData.apertura || null,
+          ...(cambioCoordinador ? { id_coordinador_nuevo: parseInt(coordinadorSeleccionado, 10) } : {}),
         })
         onShowToast('Programa actualizado correctamente', 'success')
       } else {
@@ -148,6 +209,7 @@ export default function ProgramasView({
         }
         await createPrograma({
           ...formData,
+          numero_resolucion: numeroResolucion,
           numero_semestre: numSemestres,
           id_facultad_programa: formData.id_facultad_programa ? parseInt(formData.id_facultad_programa, 10) : null,
           apertura: formData.apertura || null,
@@ -168,7 +230,7 @@ export default function ProgramasView({
     setSubmitting(true)
     try {
       await deletePrograma(deletingProgram.code_program)
-      onShowToast(`Programa ${deletingProgram.code_program} eliminado`, 'success')
+      onShowToast(`Programa ${deletingProgram.code_program} desactivado`, 'success')
       setDeletingProgram(null)
       onRefresh()
     } catch (err) {
@@ -185,13 +247,19 @@ export default function ProgramasView({
         <div>
           <h1 className="section-title">Programas Académicos (Carreras)</h1>
           <p className="section-description">
-            Gestiona los programas universitarios en la base de datos.
+            Gestiona los programas universitarios y facultades en la base de datos.
           </p>
         </div>
-        <button className="btn-primary" onClick={handleOpenCreateModal}>
-          <Plus size={18} />
-          <span>Nuevo Programa</span>
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button className="btn-secondary" onClick={handleOpenFacultadModal}>
+            <Building2 size={18} />
+            <span>Nueva Facultad</span>
+          </button>
+          <button className="btn-primary" onClick={handleOpenCreateModal}>
+            <Plus size={18} />
+            <span>Nuevo Programa</span>
+          </button>
+        </div>
       </div>
 
       {/* Control Bar: Search & Stats */}
@@ -232,14 +300,19 @@ export default function ProgramasView({
             const count = getCoursesCount(prog.code_program)
             const credits = getProgramCredits(prog.code_program)
             return (
-              <div key={prog.code_program} className="item-card">
+              <div key={prog.code_program} className={`item-card${prog.estado === 'INACTIVO' ? ' item-card-inactive' : ''}`}>
                 <div className="item-card-header">
-                  <div className="badge-code">{prog.code_program}</div>
-                  {prog.id_facultad_programa && (
-                    <span className="badge-group" title="Facultad">
-                      <Building2 size={12} /> {facultadesList.find(f => f.id === prog.id_facultad_programa)?.nombre || 'Facultad'}
-                    </span>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <div className="badge-code">{prog.code_program}</div>
+                    {prog.estado === 'INACTIVO' && (
+                      <span className="badge-inactive" title="Programa desactivado">Desactivado</span>
+                    )}
+                    {prog.id_facultad_programa && (
+                      <span className="badge-group" title="Facultad">
+                        <Building2 size={12} /> {facultadesList.find(f => f.id === prog.id_facultad_programa)?.nombre || 'Facultad'}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <h3 className="item-card-title">{prog.name_program}</h3>
@@ -281,7 +354,7 @@ export default function ProgramasView({
                     <button
                       className="btn-icon text-danger"
                       onClick={() => setDeletingProgram(prog)}
-                      title="Eliminar programa"
+                      title="Desactivar programa"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -290,6 +363,61 @@ export default function ProgramasView({
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Modal Crear Facultad */}
+      {isFacultadModalOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-card" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Nueva Facultad</h2>
+              <button className="modal-close-btn" onClick={() => setIsFacultadModalOpen(false)}>×</button>
+            </div>
+            <form onSubmit={handleCreateNewFacultadInDb}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label htmlFor="facultad_nombre">Nombre de la Facultad *</label>
+                  <input
+                    id="facultad_nombre"
+                    type="text"
+                    placeholder="Ej. Facultad de Ingeniería y Administración"
+                    value={newFacultadName}
+                    onChange={(e) => setNewFacultadName(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="facultad_descripcion">Descripción (opcional)</label>
+                  <input
+                    id="facultad_descripcion"
+                    type="text"
+                    placeholder="Descripción de la facultad"
+                    value={newFacultadDesc}
+                    onChange={(e) => setNewFacultadDesc(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setIsFacultadModalOpen(false)}
+                  disabled={addingFacultadSubmitting}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={addingFacultadSubmitting || !newFacultadName.trim()}
+                >
+                  {addingFacultadSubmitting ? 'Guardando...' : 'Crear Facultad'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -323,7 +451,7 @@ export default function ProgramasView({
                   <input
                     id="code_program"
                     type="text"
-                    placeholder="Ej. ING-SIS, ADM-EMP"
+                    placeholder="Ej. 3743"
                     value={formData.code_program}
                     onChange={(e) => setFormData({ ...formData, code_program: e.target.value })}
                     disabled={!!editingProgram}
@@ -346,76 +474,39 @@ export default function ProgramasView({
                   />
                 </div>
 
-              
+                <div className="form-group">
+                  <label htmlFor="numero_resolucion">Número de resolución *</label>
+                  <input
+                    id="numero_resolucion"
+                    type="text"
+                    maxLength={15}
+                    placeholder="Ej. RES-123-2026"
+                    value={formData.numero_resolucion}
+                    onChange={(e) => setFormData({ ...formData, numero_resolucion: e.target.value })}
+                    required
+                  />
+                </div>
 
                 <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label htmlFor="id_facultad_programa">Facultad Perteneciente</label>
-                    <button
-                      type="button"
-                      className="btn-link"
-                      onClick={() => setIsAddingNewFacultad(!isAddingNewFacultad)}
-                      style={{ fontSize: '0.8rem' }}
-                    >
-                      {isAddingNewFacultad ? 'Cancelar' : '+ Agregar Nueva Facultad'}
-                    </button>
-                  </div>
-
-                  {isAddingNewFacultad ? (
-                    <div className="new-group-inline-form" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.4rem' }}>
-                      <input
-                        type="text"
-                        placeholder="Nombre de la facultad (ej. Facultad de Ciencias Sociales y Humanas)"
-                        value={newFacultadName}
-                        onChange={(e) => setNewFacultadName(e.target.value)}
-                        className="select-input"
-                        autoFocus
-                      />
-                      <input
-                        type="text"
-                        placeholder="Descripción de la facultad (opcional)"
-                        value={newFacultadDesc}
-                        onChange={(e) => setNewFacultadDesc(e.target.value)}
-                        className="select-input"
-                      />
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.2rem' }}>
-                        <button
-                          type="button"
-                          className="btn-secondary btn-sm"
-                          onClick={() => setIsAddingNewFacultad(false)}
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-primary btn-sm"
-                          onClick={handleCreateNewFacultadInDb}
-                          disabled={addingFacultadSubmitting || !newFacultadName.trim()}
-                        >
-                          {addingFacultadSubmitting ? 'Guardando...' : 'Guardar en BD'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <select
-                      id="id_facultad_programa"
-                      value={formData.id_facultad_programa}
-                      onChange={(e) => setFormData({ ...formData, id_facultad_programa: e.target.value })}
-                      className="select-input"
-                      style={{ marginTop: '0.35rem' }}
-                    >
-                      <option value="">-- Sin facultad asignada --</option>
-                      {facultadesList
-                        .filter(f => f.id !== 2 && f.id !== 3)
-                        .map(f => (
-                          <option key={f.id} value={f.id}>
-                            {f.nombre || f.Nombre}
-                          </option>
-                        ))}
-                    </select>
-                  )}
+                  <label htmlFor="id_facultad_programa">Facultad Perteneciente</label>
+                  <select
+                    id="id_facultad_programa"
+                    value={formData.id_facultad_programa}
+                    onChange={(e) => setFormData({ ...formData, id_facultad_programa: e.target.value })}
+                    className="select-input"
+                    style={{ marginTop: '0.35rem' }}
+                  >
+                    <option value="">-- Sin facultad asignada --</option>
+                    {facultadesList
+                      .filter(f => f.id !== 2 && f.id !== 3)
+                      .map(f => (
+                        <option key={f.id} value={f.id}>
+                          {f.nombre || f.Nombre}
+                        </option>
+                      ))}
+                  </select>
                   <small className="form-hint">
-                    Las electivas especializadas en el pensum se mostrarán exclusivamente según la facultad seleccionada aquí.
+                    Las electivas profesionales en el pensum se mostrarán exclusivamente según la facultad seleccionada aquí.
                   </small>
                 </div>
 
@@ -435,6 +526,37 @@ export default function ProgramasView({
                     Define la duración exacta y el total de semestres que se mostrarán en la malla curricular (ej. 10 para carreras profesionales, 6 para tecnologías).
                   </small>
                 </div>
+
+                {canAssignCoordinator && editingProgram && (
+                  <div className="form-group">
+                    <label htmlFor="id_coordinador_nuevo">Coordinador asignado</label>
+                    <select
+                      id="id_coordinador_nuevo"
+                      value={formData.id_coordinador_nuevo}
+                      onChange={(e) => setFormData({ ...formData, id_coordinador_nuevo: e.target.value })}
+                      className="select-input"
+                      disabled={loadingCoordinadores || coordinadoresList.length === 0}
+                    >
+                      <option value="">
+                        {loadingCoordinadores ? 'Cargando coordinadores...' : '-- Sin cambios en la asignación --'}
+                      </option>
+                      {coordinadoresList.map(c => (
+                        <option key={c.id} value={String(c.id)}>
+                          {c.nombre_completo || `Coordinador #${c.id}`} ({c.name_program || c.code_program || 'no asignado'}){c.activo === false ? ' - Inactivo' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <small className="form-hint">
+                      {loadingCoordinadores
+                        ? 'Consultando los coordinadores registrados.'
+                        : coordinadoresList.length === 0
+                          ? 'No hay coordinadores disponibles para seleccionar.'
+                          : currentCoordinatorId
+                            ? 'Se seleccionó automáticamente al coordinador que dirige este programa. Al cambiarlo, las asignaciones se intercambiarán en una sola transacción.'
+                            : 'Este programa no tiene una asignación detectada. El cambio solo se aplicará si seleccionas un coordinador compatible con un intercambio seguro.'}
+                    </small>
+                  </div>
+                )}
               </div>
 
               <div className="modal-footer">
@@ -455,25 +577,25 @@ export default function ProgramasView({
         </div>
       )}
 
-      {/* Modal Confirmar Eliminación */}
+      {/* Modal Confirmar Desactivación */}
       {deletingProgram && (
         <div className="modal-backdrop">
           <div className="modal-card">
             <div className="modal-header">
               <div className="modal-title-with-icon">
                 <AlertTriangle className="text-danger" size={24} />
-                <h2>Confirmar Eliminación</h2>
+                <h2>Confirmar Desactivación</h2>
               </div>
               <button className="modal-close-btn" onClick={() => setDeletingProgram(null)}>×</button>
             </div>
             <div className="modal-body">
               <p>
-                ¿Estás seguro de que deseas eliminar el programa <strong>{deletingProgram.name_program}</strong> ({deletingProgram.code_program})?
+                ¿Estás seguro de que deseas desactivar el programa <strong>{deletingProgram.name_program}</strong> ({deletingProgram.code_program})?
               </p>
               <div className="alert-warning-box">
                 <p>
-                  <strong>Atención:</strong> Debido a la restricción <code>ON DELETE CASCADE</code> en la base de datos, 
-                  todas las materias asignadas a este programa en el pensum también se desvincularán automáticamente.
+                  El programa quedará marcado como <strong>Desactivado</strong> y se conservarán sus materias y su malla curricular.
+                  No se borra información de la base de datos.
                 </p>
               </div>
             </div>
@@ -492,7 +614,7 @@ export default function ProgramasView({
                 onClick={handleDelete}
                 disabled={submitting}
               >
-                {submitting ? 'Eliminando...' : 'Sí, Eliminar Programa'}
+                {submitting ? 'Desactivando...' : 'Sí, Desactivar Programa'}
               </button>
             </div>
           </div>

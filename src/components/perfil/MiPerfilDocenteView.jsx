@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { UserCircle, Mail, IdCard, Award, Briefcase, BookOpen, CheckCircle2, XCircle, Star } from 'lucide-react'
-import { getMiPerfil } from '../services/docenteService'
+import { getMiPerfil } from '../../services/docenteService'
 
 const TIPO_DOCENTE_LABEL = { NOMBRADO: 'Nombrado', HORA_CATEDRA: 'Hora cátedra' }
 const CATEGORIA_LABEL = { AUXILIAR: 'Auxiliar', ASISTENTE: 'Asistente', ASOCIADO: 'Asociado', TITULAR: 'Titular' }
@@ -92,7 +92,7 @@ export default function MiPerfilDocenteView({ correo, onShowToast }) {
             <div
                 style={{
                     background: '#ffffff',
-                    border: '1px solid #e4e4e7',
+                    border: '1px solid #cbd5e1',
                     borderRadius: '12px',
                     padding: '1.5rem',
                     display: 'flex',
