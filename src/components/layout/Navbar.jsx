@@ -1,5 +1,5 @@
 import React from 'react'
-import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Home, UserCircle, CalendarDays, UserCheck, CalendarCheck, Link2 } from 'lucide-react'
+import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Home, UserCircle, CalendarDays, UserCheck, CalendarCheck, Link2, ScrollText } from 'lucide-react'
 
 export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout }) {
   const rol = Number(user?.rol ?? 1) // 1: Admin, 2: Coordinador, 3: Docente
@@ -13,6 +13,7 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
   const canSeePlantilla = isAdmin
   const canSeeAsociaciones = isAdmin
   const canSeePeriodos = isAdmin
+  const canSeeBitacora = isAdmin
 
   const rolLabel = rol === 1
     ? 'Administrador'
@@ -159,6 +160,18 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               >
                 <CalendarCheck size={18} />
                 <span>Programación y Cohortes</span>
+              </button>
+            )}
+
+            {/* HU-058: bitácora, solo administrador */}
+            {canSeeBitacora && (
+              <button
+                className={`nav-tab-btn ${activeTab === 'bitacora' ? 'active' : ''}`}
+                onClick={() => setActiveTab('bitacora')}
+                title="Bitácora"
+              >
+                <ScrollText size={18} />
+                <span>Bitácora</span>
               </button>
             )}
 
