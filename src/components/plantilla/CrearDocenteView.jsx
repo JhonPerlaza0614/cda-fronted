@@ -50,7 +50,6 @@ const EMPTY_FORM = {
     tipo_docente: '',
     categoria: '',
     code_program: '',
-    foto_url: '',
     evaluacion_periodo: '',
     evaluacion_valor: ''
 }
@@ -93,15 +92,6 @@ function validate(f) {
     if (!f.categoria) e.categoria = 'La categoría es obligatoria'
     if (!f.code_program) e.code_program = 'El programa de adscripción es obligatorio'
 
-    if (f.foto_url.trim()) {
-        try {
-            const u = new URL(f.foto_url.trim())
-            if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error()
-        } catch {
-            e.foto_url = 'Ingresa una URL válida (http o https)'
-        }
-    }
-
     if (f.evaluacion_periodo.length > 10) e.evaluacion_periodo = 'El periodo no puede exceder 10 caracteres'
     if (f.evaluacion_valor !== '' && Number.isNaN(Number(f.evaluacion_valor))) {
         e.evaluacion_valor = 'El valor debe ser numérico'
@@ -126,7 +116,6 @@ function buildPayload(f) {
         tipo_docente: f.tipo_docente,
         categoria: f.categoria,
         code_program: f.code_program,
-        foto_url: opt(f.foto_url),
         evaluacion_periodo: opt(f.evaluacion_periodo),
         evaluacion_valor: f.evaluacion_valor === '' ? null : Number(f.evaluacion_valor)
     }
@@ -639,15 +628,6 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                             </option>
                                         ))}
                                     </select>
-                                </Field>
-
-                                <Field label="Foto (URL)" error={errors.foto_url}>
-                                    <input
-                                        type="url"
-                                        placeholder="https://ejemplo.com/foto.jpg"
-                                        value={formData.foto_url}
-                                        onChange={(e) => update('foto_url', e.target.value)}
-                                    />
                                 </Field>
 
                                 <Field label="Evaluación - Periodo" error={errors.evaluacion_periodo}>

@@ -13,7 +13,7 @@ import {
     Phone,
     Pencil
 } from 'lucide-react'
-import { getMiFoto, getMiPerfil, getMiPerfilCoordinador } from '../../services/docenteService'
+import { getMiPerfil, getMiPerfilCoordinador } from '../../services/docenteService'
 import EditarPerfilDocente from './EditarPerfilDocente'
 
 // 1: Administrador, 2: Coordinador, 3: Docente (igual que en el login)
@@ -71,10 +71,6 @@ export default function MiPerfilView({ user, onShowToast }) {
     // Datos adicionales solo para docentes
     const [docente, setDocente] = useState(null)
     const [docenteStatus, setDocenteStatus] = useState('idle') // idle | loading | ok | notfound | error
-    const [fotoError, setFotoError] = useState(false)
-    // HU-015: la foto se descarga con el token y se muestra como object URL
-    const [fotoSrc, setFotoSrc] = useState(null)
-    const [fotoVersion, setFotoVersion] = useState(0)
     const [editando, setEditando] = useState(false)
 
     // Datos adicionales solo para coordinadores
@@ -117,7 +113,6 @@ export default function MiPerfilView({ user, onShowToast }) {
         }
         let cancelled = false
         setDocenteStatus('loading')
-        setFotoError(false)
 
         getMiPerfil()
             .then((data) => {
@@ -140,37 +135,6 @@ export default function MiPerfilView({ user, onShowToast }) {
         }
     }, [esDocente, user?.email])
 
-    const tieneFoto = docenteStatus === 'ok' && Boolean(docente?.tiene_foto)
-
-    // Sin foto activa no se descarga nada: fotoUrl ya depende de tieneFoto
-    useEffect(() => {
-        if (!tieneFoto) return
-        let cancelled = false
-        let url = null
-
-        getMiFoto()
-            .then((blob) => {
-                if (cancelled || !blob) return
-                url = URL.createObjectURL(blob)
-                setFotoSrc(url)
-            })
-            .catch(() => {
-                if (!cancelled) setFotoError(true)
-            })
-
-        return () => {
-            cancelled = true
-            if (url) URL.revokeObjectURL(url)
-        }
-    }, [tieneFoto, fotoVersion])
-
-    // HU-015: tras subir o eliminar la foto se actualiza el perfil y se recarga la imagen
-    const handleFotoChange = (actualizado) => {
-        setDocente(actualizado)
-        setFotoError(false)
-        setFotoVersion((v) => v + 1)
-    }
-
     const handleContactoGuardado = (actualizado) => {
         setDocente(actualizado)
         setEditando(false)
@@ -189,9 +153,6 @@ export default function MiPerfilView({ user, onShowToast }) {
     }
 
     const nombreCompleto = `${user.nombre ?? ''} ${user.apellido ?? ''}`.trim() || 'Usuario'
-    const iniciales = `${user.nombre?.[0] ?? ''}${user.apellido?.[0] ?? ''}`.toUpperCase()
-    const fotoUrl = tieneFoto && fotoSrc && !fotoError ? fotoSrc : null
-
     const tieneEvaluacion = docente && docente.evaluacion_valor !== null && docente.evaluacion_valor !== undefined
 
     return (
@@ -204,66 +165,36 @@ export default function MiPerfilView({ user, onShowToast }) {
                     </h1>
                     <p className="view-subtitle">
                         {esDocente
-                            ? 'Información de tu cuenta. Puedes editar tu foto, correo personal y teléfono.'
+                            ? 'Información de tu cuenta. Puedes editar tu facultad, correo personal y teléfono.'
                             : 'Información de tu cuenta (solo lectura)'}
                     </p>
                 </div>
             </div>
 
             {/* Datos generales del usuario con sesión */}
-            <div style={{ ...cardStyle, display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                <div style={{ flexShrink: 0 }}>
-                    {fotoUrl ? (
-                        <img
-                            src={fotoUrl}
-                            alt={`Foto de ${nombreCompleto}`}
-                            onError={() => setFotoError(true)}
-                            style={{ width: '120px', height: '120px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #d4d4d8' }}
-                        />
-                    ) : (
-                        <div
-                            style={{
-                                width: '120px',
-                                height: '120px',
-                                borderRadius: '50%',
-                                background: '#f4f4f5',
-                                border: '2px solid #d4d4d8',
-                                color: '#52525b',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '2.2rem',
-                                fontWeight: 600
-                            }}
-                            aria-label="Sin foto"
-                        >
-                            {iniciales || <UserCircle size={48} />}
-                        </div>
-                    )}
+            <div style={cardStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                    <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#18181b' }}>{nombreCompleto}</h2>
+                    <span
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            padding: '0.25rem 0.7rem',
+                            borderRadius: '9999px',
+                            fontSize: '0.78rem',
+                            fontWeight: 600,
+                            background: '#eff6ff',
+                            color: '#1d4ed8',
+                            border: '1px solid #bfdbfe'
+                        }}
+                    >
+                        <Shield size={12} />
+                        {rolNombre}
+                    </span>
                 </div>
 
-                <div style={{ flex: 1, minWidth: '280px', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
-                        <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#18181b' }}>{nombreCompleto}</h2>
-                        <span
-                            style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.3rem',
-                                padding: '0.25rem 0.7rem',
-                                borderRadius: '9999px',
-                                fontSize: '0.78rem',
-                                fontWeight: 600,
-                                background: '#eff6ff',
-                                color: '#1d4ed8',
-                                border: '1px solid #bfdbfe'
-                            }}
-                        >
-                            <Shield size={12} />
-                            {rolNombre}
-                        </span>
-                    </div>
-
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
                     <Row icon={<UserCircle size={15} />} label="Nombre">{user.nombre || '—'}</Row>
                     <Row icon={<UserCircle size={15} />} label="Apellido">{user.apellido || '—'}</Row>
                     <Row icon={<Mail size={15} />} label="Correo">{user.email || '—'}</Row>
@@ -339,10 +270,8 @@ export default function MiPerfilView({ user, onShowToast }) {
                     {docenteStatus === 'ok' && docente && editando && (
                         <EditarPerfilDocente
                             docente={docente}
-                            fotoSrc={fotoUrl}
                             onCancel={() => setEditando(false)}
                             onSaved={handleContactoGuardado}
-                            onFotoChange={handleFotoChange}
                             onShowToast={onShowToast}
                         />
                     )}

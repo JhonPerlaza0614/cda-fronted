@@ -21,7 +21,6 @@ export default function MiPerfilDocenteView({ correo, onShowToast }) {
     const [docente, setDocente] = useState(null)
     const [loading, setLoading] = useState(true)
     const [notFound, setNotFound] = useState(false)
-    const [fotoError, setFotoError] = useState(false)
 
     useEffect(() => {
         if (!correo) {
@@ -31,7 +30,6 @@ export default function MiPerfilDocenteView({ correo, onShowToast }) {
         let cancelled = false
         setLoading(true)
         setNotFound(false)
-        setFotoError(false)
 
         getMiPerfil(correo)
             .then((data) => {
@@ -75,7 +73,6 @@ export default function MiPerfilDocenteView({ correo, onShowToast }) {
     }
 
     const tieneEvaluacion = docente.evaluacion_valor !== null && docente.evaluacion_valor !== undefined
-    const iniciales = `${docente.nombres?.[0] ?? ''}${docente.apellidos?.[0] ?? ''}`.toUpperCase()
 
     return (
         <div className="view-container">
@@ -96,90 +93,55 @@ export default function MiPerfilDocenteView({ correo, onShowToast }) {
                     borderRadius: '12px',
                     padding: '1.5rem',
                     display: 'flex',
-                    gap: '1.5rem',
-                    flexWrap: 'wrap',
-                    alignItems: 'flex-start'
+                    flexDirection: 'column',
+                    gap: '0.7rem'
                 }}
             >
-                {/* Foto */}
-                <div style={{ flexShrink: 0 }}>
-                    {docente.foto_url && !fotoError ? (
-                        <img
-                            src={docente.foto_url}
-                            alt={`Foto de ${docente.nombres} ${docente.apellidos}`}
-                            onError={() => setFotoError(true)}
-                            style={{ width: '120px', height: '120px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #d4d4d8' }}
-                        />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.5rem' }}>
+                    <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#18181b' }}>
+                        {docente.nombres} {docente.apellidos}
+                    </h2>
+                    <span
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            padding: '0.25rem 0.6rem',
+                            borderRadius: '9999px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            background: docente.estado ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                            color: docente.estado ? '#10b981' : '#ef4444'
+                        }}
+                    >
+                        {docente.estado ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                        {docente.estado ? 'Activo' : 'Inactivo'}
+                    </span>
+                </div>
+
+                <Row icon={<IdCard size={15} />} label="Código">{docente.codigo}</Row>
+                <Row icon={<Mail size={15} />} label="Correo">{docente.correo_institucional}</Row>
+                <Row icon={<Briefcase size={15} />} label="Tipo de docente">
+                    {TIPO_DOCENTE_LABEL[docente.tipo_docente] || docente.tipo_docente}
+                </Row>
+                <Row icon={<Award size={15} />} label="Categoría">
+                    {CATEGORIA_LABEL[docente.categoria] || docente.categoria}
+                </Row>
+                <Row icon={<BookOpen size={15} />} label="Programa">
+                    {docente.nombre_programa || docente.code_program}
+                </Row>
+                <Row icon={<Star size={15} />} label="Evaluación">
+                    {tieneEvaluacion ? (
+                        <>
+                            {docente.evaluacion_valor}
+                            {docente.evaluacion_periodo && (
+                                <span style={{ color: '#52525b' }}> (periodo {docente.evaluacion_periodo})</span>
+                            )}
+                        </>
                     ) : (
-                        <div
-                            style={{
-                                width: '120px',
-                                height: '120px',
-                                borderRadius: '50%',
-                                background: '#f4f4f5',
-                                border: '2px solid #d4d4d8',
-                                color: '#52525b',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '2.2rem',
-                                fontWeight: 600
-                            }}
-                            aria-label="Sin foto"
-                        >
-                            {iniciales || <UserCircle size={48} />}
-                        </div>
+                        <span style={{ color: '#52525b' }}>Sin evaluación registrada</span>
                     )}
-                </div>
-
-                {/* Datos */}
-                <div style={{ flex: 1, minWidth: '280px', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
-                        <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#18181b' }}>
-                            {docente.nombres} {docente.apellidos}
-                        </h2>
-                        <span
-                            style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                padding: '0.25rem 0.6rem',
-                                borderRadius: '9999px',
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                background: docente.estado ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                                color: docente.estado ? '#10b981' : '#ef4444'
-                            }}
-                        >
-                            {docente.estado ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-                            {docente.estado ? 'Activo' : 'Inactivo'}
-                        </span>
-                    </div>
-
-                    <Row icon={<IdCard size={15} />} label="Código">{docente.codigo}</Row>
-                    <Row icon={<Mail size={15} />} label="Correo">{docente.correo_institucional}</Row>
-                    <Row icon={<Briefcase size={15} />} label="Tipo de docente">
-                        {TIPO_DOCENTE_LABEL[docente.tipo_docente] || docente.tipo_docente}
-                    </Row>
-                    <Row icon={<Award size={15} />} label="Categoría">
-                        {CATEGORIA_LABEL[docente.categoria] || docente.categoria}
-                    </Row>
-                    <Row icon={<BookOpen size={15} />} label="Programa">
-                        {docente.nombre_programa || docente.code_program}
-                    </Row>
-                    <Row icon={<Star size={15} />} label="Evaluación">
-                        {tieneEvaluacion ? (
-                            <>
-                                {docente.evaluacion_valor}
-                                {docente.evaluacion_periodo && (
-                                    <span style={{ color: '#52525b' }}> (periodo {docente.evaluacion_periodo})</span>
-                                )}
-                            </>
-                        ) : (
-                            <span style={{ color: '#52525b' }}>Sin evaluación registrada</span>
-                        )}
-                    </Row>
-                </div>
+                </Row>
             </div>
         </div>
     )
