@@ -172,7 +172,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
       categoria: d.categoria || 'No asignada',
       tipoContrato: d.tipo_docente || 'No asignado',
       activo: d.estado !== false,
-      fotoUrl: d.foto_url,
       evaluacionPeriodo: d.evaluacion_periodo,
       evaluacionValor: d.evaluacion_valor,
       createdAt: d.created_at,
