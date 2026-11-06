@@ -69,3 +69,27 @@ export async function getResumenProgramacion(periodoId) {
     }
   }
 }
+
+// HU-047: ajustes del administrador sobre la programación generada.
+// Contrato: docs/contratos/HU-047.md del backend.
+
+/** Cómo quedarían los grupos de la asignatura si se excluye el curso (no guarda nada). */
+export async function getVistaPreviaExclusion(cursoId) {
+  return requestBackend(`/programacion/cursos/${cursoId}/exclusion/vista-previa`)
+}
+
+/** Excluye el curso con justificación y renumera los grupos de la asignatura. */
+export async function excluirCurso(cursoId, justificacion) {
+  return requestBackend(`/programacion/cursos/${cursoId}/excluir`, {
+    method: 'PATCH',
+    body: JSON.stringify({ justificacion }),
+  })
+}
+
+/** Reactiva un curso excluido; toma el siguiente grupo de la serie. */
+export async function reactivarCurso(cursoId, justificacion) {
+  return requestBackend(`/programacion/cursos/${cursoId}/reactivar`, {
+    method: 'PATCH',
+    body: JSON.stringify({ justificacion }),
+  })
+}

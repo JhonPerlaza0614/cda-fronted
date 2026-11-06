@@ -10,14 +10,13 @@ import {
   BookOpen,
   Info,
   Sparkles,
-  Filter,
-  Search,
   Check,
   RotateCcw
 } from 'lucide-react'
 import { getPeriodos, getProgramas, getPensumByProgram } from '../../services/academicService'
 import { getCohortes, guardarCohortes, getPropuestaCohortes } from '../../services/cohortesService'
 import { generarProgramacion, getProgramacion, getResumenProgramacion } from '../../services/programacionService'
+import CursosProgramadosPanel from './CursosProgramadosPanel'
 import './ProgramacionCohortesView.css'
 
 export default function ProgramacionCohortesView({ onShowToast }) {
@@ -52,11 +51,6 @@ export default function ProgramacionCohortesView({ onShowToast }) {
 
   // Estado confirmación regenerar
   const [isConfirmRegenerarOpen, setIsConfirmRegenerarOpen] = useState(false)
-
-  // Filtros cursos
-  const [filterProgram, setFilterProgram] = useState('')
-  const [filterJornada, setFilterJornada] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
 
   // 1. Cargar períodos y programas al montar
   useEffect(() => {
@@ -298,18 +292,6 @@ export default function ProgramacionCohortesView({ onShowToast }) {
   }
 
   // Filtrado de cursos
-  const filteredCursos = useMemo(() => {
-    return cursos.filter(c => {
-      const matchProg = !filterProgram || c.codeProgram === filterProgram
-      const matchJor = !filterJornada || c.jornada === filterJornada
-      const q = searchTerm.toLowerCase().trim()
-      const matchSearch = !q ||
-        c.codeCourse?.toLowerCase().includes(q) ||
-        c.nombreAsignatura?.toLowerCase().includes(q) ||
-        c.nombrePrograma?.toLowerCase().includes(q)
-      return matchProg && matchJor && matchSearch
-    })
-  }, [cursos, filterProgram, filterJornada, searchTerm])
 
   return (
     <div className="programacion-cohortes-container">
@@ -615,108 +597,15 @@ export default function ProgramacionCohortesView({ onShowToast }) {
         </div>
       )}
 
-      {/* Pestaña 3: Cursos Programados */}
+      {/* Pestaña 3: Cursos Programados (HU-047) */}
       {activeTab === 'cursos' && (
         <div className="pc-tab-content">
-          <div className="pc-panel">
-            {/* Filtros */}
-            <div className="pc-filters-bar">
-              <div className="pc-search-box">
-                <Search size={16} className="pc-search-icon" />
-                <input
-                  type="text"
-                  placeholder="Buscar por código, nombre de materia o carrera..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pc-input"
-                />
-              </div>
-
-              <div className="pc-filter-group">
-                <Filter size={16} />
-                <select
-                  value={filterProgram}
-                  onChange={(e) => setFilterProgram(e.target.value)}
-                  className="pc-select"
-                >
-                  <option value="">Todos los programas</option>
-                  {programas.map(p => (
-                    <option key={p.code_program} value={p.code_program}>
-                      {p.name_program}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={filterJornada}
-                  onChange={(e) => setFilterJornada(e.target.value)}
-                  className="pc-select"
-                >
-                  <option value="">Todas las jornadas</option>
-                  <option value="DIURNA">Diurna</option>
-                  <option value="NOCTURNA">Nocturna</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Tabla de cursos */}
-            <div className="pc-table-wrapper">
-              <table className="pc-table">
-                <thead>
-                  <tr>
-                    <th>Grupo</th>
-                    <th>Código</th>
-                    <th>Asignatura</th>
-                    <th>Semestre</th>
-                    <th>Jornada</th>
-                    <th>Créditos</th>
-                    <th>Programa</th>
-                    <th>Resolución</th>
-                    <th>Docente</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCursos.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="pc-empty-cell">
-                        No hay cursos para mostrar. Vaya a la pestaña "Generar Programación" si aún no ha generado la oferta.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredCursos.map((curso) => (
-                      <tr key={curso.id}>
-                        <td><span className="pc-grupo-badge">{curso.grupo || '50'}</span></td>
-                        <td><code>{curso.codeCourse}</code></td>
-                        <td><strong>{curso.nombreAsignatura}</strong></td>
-                        <td>{curso.semestre}º</td>
-                        <td>
-                          <span className={`pc-badge ${curso.jornada === 'NOCTURNA' ? 'pc-badge-purple' : 'pc-badge-blue'}`}>
-                            {curso.jornada}
-                          </span>
-                        </td>
-                        <td>{curso.credits}</td>
-                        <td>{curso.nombrePrograma}</td>
-                        <td><small className="pc-text-muted">{curso.numeroResolucion}</small></td>
-                        <td>
-                          {curso.nombreDocente ? (
-                            <span className="pc-docente-assigned">{curso.nombreDocente}</span>
-                          ) : (
-                            <span className="pc-text-muted">Sin docente asignado</span>
-                          )}
-                        </td>
-                        <td>
-                          <span className={`pc-badge ${curso.estado === 'ASIGNADO' ? 'pc-badge-success' : 'pc-badge-warning'}`}>
-                            {curso.estado}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <CursosProgramadosPanel
+            cursos={cursos}
+            programas={programas}
+            onCambio={loadPeriodoData}
+            onShowToast={onShowToast}
+          />
         </div>
       )}
 
@@ -855,8 +744,10 @@ export default function ProgramacionCohortesView({ onShowToast }) {
                 Ya existe una programación generada para el período <strong>{selectedPeriodo?.nombre}</strong>.
               </p>
               <p>
-                Al volver a generar, <strong>se conservarán los docentes que ya hayan sido asignados</strong> a los cursos
-                cuyas materias sigan ofertándose.
+                Al volver a generar, <strong>se conservarán los docentes asignados, los cursos excluidos con su
+                justificación y los grupos</strong> de los cursos que sigan ofertándose. Los cursos nuevos se agregan al
+                final de la serie de su asignatura. Los que ya no estén en la oferta no se borran: quedan marcados como
+                «Requiere revisión».
               </p>
               <p className="pc-text-muted">
                 ¿Desea sobrescribir la programación actual?
