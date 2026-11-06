@@ -4,6 +4,7 @@ import PensumView from './components/pensum/PensumView'
 import ProgramasView from './components/programas/ProgramasView'
 import ProgramasCoordinadoresView from './components/programas/ProgramasCoordinadoresView'
 import AsignaturasView from './components/asignaturas/AsignaturasView'
+import AsociacionesDocentesView from './components/asociaciones/AsociacionesDocentesView'
 import PlantillaView from './components/plantilla/PlantillaView'
 import PeriodosView from './components/periodos/PeriodosView'
 import ProgramacionCohortesView from './components/programacion/ProgramacionCohortesView'
@@ -51,6 +52,8 @@ export default function App({ user, onLogout }) {
   const [coordinadorPerfil, setCoordinadorPerfil] = useState(null)
   // HU-037: programa a editar al llegar a «Programas» desde «Programas y coordinadores»
   const [programaCoordinadorCode, setProgramaCoordinadorCode] = useState(null)
+  // Docente seleccionado desde Plantilla para el registro administrativo de disponibilidad.
+  const [docenteDisponibilidadSeleccionado, setDocenteDisponibilidadSeleccionado] = useState(null)
 
   const [loading, setLoading] = useState(!isDocente)
   const [initialError, setInitialError] = useState(null)
@@ -133,6 +136,26 @@ export default function App({ user, onLogout }) {
     setActiveTab('pensum')
   }
 
+  const handleRegistrarDisponibilidad = (docente) => {
+    if (!isAdmin || !docente?.id) return
+    setDocenteDisponibilidadSeleccionado({
+      id: Number(docente.id),
+      nombre: docente.nombre || 'Docente seleccionado',
+    })
+    setActiveTab('disponibilidad_admin')
+  }
+
+  const handleVolverAPlantilla = () => {
+    setDocenteDisponibilidadSeleccionado(null)
+    setActiveTab('plantilla')
+  }
+
+  const handleDisponibilidadGuardada = (message) => {
+    setDocenteDisponibilidadSeleccionado(null)
+    setActiveTab('plantilla')
+    showToast(message || 'Disponibilidad registrada correctamente.', 'success')
+  }
+
   const coordinadorProgramCode = coordinadorPerfil?.code_program || null
   const programasParaPensum = isCoordinador
     ? (coordinadorProgramCode ? programas.filter(p => p.code_program === coordinadorProgramCode) : [])
@@ -142,7 +165,7 @@ export default function App({ user, onLogout }) {
     <div className="app-layout">
       {/* Barra superior de navegación */}
       <Navbar
-        activeTab={activeTab}
+        activeTab={activeTab === 'disponibilidad_admin' ? 'plantilla' : activeTab}
         setActiveTab={setActiveTab}
         onOpenSqlModal={() => setIsSqlModalOpen(true)}
         isConnected={isConnected}
@@ -194,6 +217,17 @@ export default function App({ user, onLogout }) {
 
             {/* Disponibilidad docente: visible únicamente para el rol docente */}
             {isDocente && activeTab === 'disponibilidad' && <DisponibilidadView />}
+
+            {/* Registro administrativo: usa docentes.id del perfil seleccionado en Plantilla. */}
+            {isAdmin && activeTab === 'disponibilidad_admin' && docenteDisponibilidadSeleccionado && (
+              <DisponibilidadView
+                key={docenteDisponibilidadSeleccionado.id}
+                docenteId={docenteDisponibilidadSeleccionado.id}
+                docenteNombre={docenteDisponibilidadSeleccionado.nombre}
+                onBack={handleVolverAPlantilla}
+                onSaved={handleDisponibilidadGuardada}
+              />
+            )}
 
             {/* Períodos Académicos (Resolución de Calendario) */}
             {activeTab === 'periodos' && (
@@ -256,11 +290,17 @@ export default function App({ user, onLogout }) {
               />
             )}
 
+            {/* Asociaciones docentes (HU-049): solo administrador */}
+            {isAdmin && activeTab === 'asociaciones' && (
+              <AsociacionesDocentesView onShowToast={showToast} />
+            )}
+
             {/* Plantilla Administrativa */}
             {(activeTab === 'plantilla' || activeTab === 'coordinadores') && (
               <PlantillaView
                 programas={programas}
                 onShowToast={showToast}
+                onRegistrarDisponibilidad={isAdmin ? handleRegistrarDisponibilidad : undefined}
               />
             )}
 

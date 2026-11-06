@@ -15,7 +15,9 @@ import {
   AlertTriangle,
   Star,
   CheckCircle2,
-  XCircle
+  XCircle,
+  ChevronDown,
+  CalendarPlus
 } from 'lucide-react'
 import {
   getCoordinadores,
@@ -31,7 +33,7 @@ import {
   getFacultades
 } from '../../services/academicService'
 
-export default function PlantillaView({ programas = [], onShowToast }) {
+export default function PlantillaView({ programas = [], onShowToast, onRegistrarDisponibilidad }) {
   // --- Estados de datos ---
   const [coordinadores, setCoordinadores] = useState([])
   const [docentes, setDocentes] = useState([])
@@ -54,6 +56,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
   const [deletingCoord, setDeletingCoord] = useState(null)
   const [isDocenteModalOpen, setIsDocenteModalOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [openActionsId, setOpenActionsId] = useState(null)
 
   // Formulario de Coordinador
   const [coordFormData, setCoordFormData] = useState({
@@ -1126,6 +1129,7 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                     gap: '0.5rem',
                   }}
                 >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
                   <button
                     className="btn-secondary"
                     onClick={() => setSelectedProfile(profile)}
@@ -1143,6 +1147,83 @@ export default function PlantillaView({ programas = [], onShowToast }) {
                     <Eye size={14} />
                     <span>Ver Perfil</span>
                   </button>
+
+                  {/* Acciones de disponibilidad para perfiles docentes. */}
+                  {!isCoord && onRegistrarDisponibilidad && (
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={!profile.activo}
+                        aria-haspopup="menu"
+                        aria-expanded={openActionsId === profile.id}
+                        onClick={() => setOpenActionsId(current => current === profile.id ? null : profile.id)}
+                        title={profile.activo ? 'Más acciones para este docente' : 'El docente debe estar activo para registrar disponibilidad'}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          padding: '0.4rem 0.75rem',
+                          fontSize: '0.82rem',
+                          backgroundColor: '#374151',
+                          color: profile.activo ? '#f9fafb' : '#9ca3af',
+                          border: '1px solid #4b5563',
+                          opacity: profile.activo ? 1 : 0.55,
+                          cursor: profile.activo ? 'pointer' : 'not-allowed',
+                        }}
+                      >
+                        <span>Acciones</span>
+                        <ChevronDown size={14} />
+                      </button>
+
+                      {openActionsId === profile.id && profile.activo && (
+                        <div
+                          role="menu"
+                          style={{
+                            position: 'absolute',
+                            top: 'calc(100% + 6px)',
+                            right: 0,
+                            zIndex: 30,
+                            minWidth: '205px',
+                            padding: '0.35rem',
+                            border: '1px solid #4b5563',
+                            borderRadius: '8px',
+                            backgroundColor: '#111827',
+                            boxShadow: '0 12px 24px rgba(0,0,0,0.28)',
+                          }}
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setOpenActionsId(null)
+                              onRegistrarDisponibilidad({ id: profile.rawId, nombre: profile.nombre })
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.55rem',
+                              width: '100%',
+                              padding: '0.6rem 0.65rem',
+                              border: 0,
+                              borderRadius: '6px',
+                              background: 'transparent',
+                              color: '#e5e7eb',
+                              textAlign: 'left',
+                              fontSize: '0.82rem',
+                              cursor: 'pointer',
+                            }}
+                            onMouseEnter={(event) => { event.currentTarget.style.backgroundColor = '#1f2937' }}
+                            onMouseLeave={(event) => { event.currentTarget.style.backgroundColor = 'transparent' }}
+                          >
+                            <CalendarPlus size={15} />
+                            <span>Registrar disponibilidad</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  </div>
 
                   {/* Acciones adicionales si es Coordinador */}
                   {isCoord && (

@@ -68,3 +68,30 @@ export function actualizarDisponibilidad(intervalos) {
     body: JSON.stringify(intervalos),
   })
 }
+
+// Operaciones administrativas sobre el docente seleccionado en Plantilla.
+// docenteId debe ser el valor de docentes.id (no usuarios.id).
+function rutaDisponibilidadDocente(docenteId) {
+  if (docenteId === null || docenteId === undefined || !Number.isInteger(Number(docenteId)) || Number(docenteId) <= 0) {
+    throw new DisponibilidadApiError('El ID del docente seleccionado no es válido.')
+  }
+  return `/admin/docentes/${encodeURIComponent(Number(docenteId))}/disponibilidades`
+}
+
+export function consultarDisponibilidadDocente(docenteId) {
+  return request(rutaDisponibilidadDocente(docenteId))
+}
+
+export function registrarDisponibilidadDocente(docenteId, { dia, horaInicio, horaFin }) {
+  return request(rutaDisponibilidadDocente(docenteId), {
+    method: 'POST',
+    body: JSON.stringify({ dia, horaInicio, horaFin }),
+  })
+}
+
+export function actualizarDisponibilidadDocente(docenteId, intervalos) {
+  return request(rutaDisponibilidadDocente(docenteId), {
+    method: 'PUT',
+    body: JSON.stringify(intervalos),
+  })
+}
