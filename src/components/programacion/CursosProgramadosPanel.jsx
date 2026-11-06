@@ -110,11 +110,14 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
     try {
       if (ajuste.tipo === 'excluir') {
         await excluirCurso(ajuste.curso.id, texto)
-        onShowToast?.(`Curso ${ajuste.curso.codigoCurso} excluido`, 'success')
+        onShowToast?.(`Grupo ${ajuste.curso.grupo} de ${ajuste.curso.nombreAsignatura} excluido`, 'success')
       } else {
         const r = await reactivarCurso(ajuste.curso.id, texto)
         const nuevo = r?.cursos?.find((g) => g.id === ajuste.curso.id)?.grupoDespues
-        onShowToast?.(`Curso reactivado${nuevo ? ` como ${ajuste.curso.codeCourse}-${nuevo}` : ''}`, 'success')
+        onShowToast?.(
+          `Curso de ${ajuste.curso.nombreAsignatura} reactivado${nuevo ? ` como grupo ${nuevo}` : ''}`,
+          'success',
+        )
       }
       cerrarAjuste()
       await onCambio?.()
@@ -202,7 +205,7 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
         <table className="pc-table">
           <thead>
             <tr>
-              <th>Curso</th>
+              <th>Grupo</th>
               <th>Asignatura</th>
               <th>Semestre</th>
               <th>Jornada</th>
@@ -232,10 +235,11 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
                     className={excluido ? 'pc-row-excluido' : curso.requiereRevision ? 'pc-row-revision' : ''}
                   >
                     <td>
-                      {excluido ? (
-                        <span className="pc-grupo-badge pc-grupo-excluido">Sin grupo</span>
+                      {/* Solo el número de grupo (decisión 2026-11-06); el curso se sigue identificando por su id */}
+                      {excluido || curso.grupo == null ? (
+                        <span className="pc-text-muted" aria-label="Sin grupo">—</span>
                       ) : (
-                        <span className="pc-grupo-badge">{curso.codigoCurso || `${curso.codeCourse}-${curso.grupo}`}</span>
+                        <span className="pc-grupo-badge">{curso.grupo}</span>
                       )}
                     </td>
                     <td>
@@ -321,8 +325,9 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
                   <RotateCcw size={22} />
                 )}
                 <h3>
-                  {ajuste.tipo === 'excluir' ? 'Excluir curso' : 'Reactivar curso'}{' '}
-                  {ajuste.curso.codigoCurso || ajuste.curso.codeCourse}
+                  {ajuste.tipo === 'excluir'
+                    ? `Excluir grupo ${ajuste.curso.grupo} de ${ajuste.curso.nombreAsignatura}`
+                    : `Reactivar curso de ${ajuste.curso.nombreAsignatura}`}
                 </h3>
               </div>
               <button type="button" className="pc-btn-close" onClick={cerrarAjuste} disabled={guardando}>
@@ -337,7 +342,7 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
 
               {ajuste.tipo === 'excluir' && (
                 <>
-                  <h4 className="pc-ajuste-subtitulo">Así quedarán los grupos de {ajuste.curso.codeCourse}</h4>
+                  <h4 className="pc-ajuste-subtitulo">Así quedarán los grupos de {ajuste.curso.nombreAsignatura}</h4>
                   {cargandoAjuste ? (
                     <p className="pc-text-muted">
                       <RefreshCw size={14} className="pc-spin" /> Calculando vista previa…
@@ -363,13 +368,13 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
                             >
                               <td>{g.nombrePrograma}</td>
                               <td>{g.jornada}</td>
-                              <td>{g.grupoAntes ?? '—'}</td>
+                              <td>{g.grupoAntes != null ? `Grupo ${g.grupoAntes}` : '—'}</td>
                               <td><ArrowRight size={14} /></td>
                               <td>
                                 {g.excluido ? (
                                   <span className="pc-badge pc-badge-excluido">Excluido</span>
                                 ) : (
-                                  <strong>{g.grupoDespues}</strong>
+                                  <strong>Grupo {g.grupoDespues}</strong>
                                 )}
                               </td>
                             </tr>
@@ -385,7 +390,7 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
                 <div className="pc-alert pc-alert-info-ajuste">
                   <span>
                     El curso volverá a la programación sin docente y tomará el siguiente grupo de la serie
-                    (<strong>{ajuste.curso.codeCourse}-{ajuste.grupoEstimado}</strong>). Los demás cursos no cambian.
+                    (<strong>Grupo {ajuste.grupoEstimado}</strong>). Los demás cursos no cambian.
                   </span>
                 </div>
               )}
@@ -448,8 +453,9 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
                 </div>
                 <div className="pc-modal-body">
                   <p>
-                    <strong>{ajuste.curso.nombreDocente || 'Un docente'}</strong> está asignado a{' '}
-                    {ajuste.curso.codigoCurso}. Al excluir el curso se quitará esta asignación.
+                    <strong>{ajuste.curso.nombreDocente || 'Un docente'}</strong> está asignado al grupo{' '}
+                    {ajuste.curso.grupo} de {ajuste.curso.nombreAsignatura}. Al excluir el curso se quitará esta
+                    asignación.
                   </p>
                   <p className="pc-text-muted">¿Desea continuar?</p>
                 </div>
