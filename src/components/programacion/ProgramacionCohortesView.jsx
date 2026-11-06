@@ -686,7 +686,7 @@ export default function ProgramacionCohortesView({ onShowToast }) {
                   ) : (
                     filteredCursos.map((curso) => (
                       <tr key={curso.id}>
-                        <td><span className="pc-grupo-badge">{curso.codeCourse}-{curso.grupo || '50'}</span></td>
+                        <td><span className="pc-grupo-badge">{curso.grupo || '50'}</span></td>
                         <td><code>{curso.codeCourse}</code></td>
                         <td><strong>{curso.nombreAsignatura}</strong></td>
                         <td>{curso.semestre}º</td>
