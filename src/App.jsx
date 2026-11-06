@@ -5,6 +5,7 @@ import ProgramasView from './components/programas/ProgramasView'
 import ProgramasCoordinadoresView from './components/programas/ProgramasCoordinadoresView'
 import AsignaturasView from './components/asignaturas/AsignaturasView'
 import AsociacionesDocentesView from './components/asociaciones/AsociacionesDocentesView'
+import BitacoraView from './components/bitacora/BitacoraView'
 import PlantillaView from './components/plantilla/PlantillaView'
 import PeriodosView from './components/periodos/PeriodosView'
 import ProgramacionCohortesView from './components/programacion/ProgramacionCohortesView'
@@ -294,6 +295,9 @@ export default function App({ user, onLogout }) {
             {isAdmin && activeTab === 'asociaciones' && (
               <AsociacionesDocentesView onShowToast={showToast} />
             )}
+
+            {/* Bitácora (HU-058): solo administrador, solo lectura */}
+            {isAdmin && activeTab === 'bitacora' && <BitacoraView />}
 
             {/* Plantilla Administrativa */}
             {(activeTab === 'plantilla' || activeTab === 'coordinadores') && (
