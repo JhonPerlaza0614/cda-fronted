@@ -1,7 +1,7 @@
 import React, { Component, useCallback, useEffect, useRef, useState } from 'react'
 import Login from './LoginView.jsx'
 import App from './App.jsx'
-import { getCurrentSession, loginWithGoogle, logout } from './services/authService.js'
+import { getCurrentSession, loginWithGoogle, logout, notifySessionExpired } from './services/authService.js'
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -101,22 +101,78 @@ export default function AppInicial() {
     }
   }, [])
 
+  // Cierre manual de sesión por el usuario
   const handleLogout = useCallback(() => {
     logout()
     setSession(null)
     setLoginError(null)
   }, [])
 
+  // Cierre automático cuando la sesión expira
+  const handleSessionExpired = useCallback((message) => {
+    logout()
+    setSession(null)
+    setLoginError(message || 'Tu sesión ha expirado. Por favor, inicia sesión de nuevo.')
+  }, [])
+
+  // 1. Escuchar eventos globales de desautorización o expiración de sesión (401 o llamadas a notifySessionExpired)
   useEffect(() => {
-    const handleUnauthorized = () => {
-      logout()
-      setSession(null)
-      setLoginError('Tu sesión expiró o dejó de ser válida. Inicia sesión otra vez.')
+    const handleUnauthorizedEvent = (e) => {
+      const msg = e?.detail?.message || 'Tu sesión ha expirado o ya no es válida. Inicia sesión de nuevo.'
+      handleSessionExpired(msg)
     }
 
-    window.addEventListener('auth:unauthorized', handleUnauthorized)
-    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized)
-  }, [])
+    window.addEventListener('auth:unauthorized', handleUnauthorizedEvent)
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorizedEvent)
+  }, [handleSessionExpired])
+
+  // 2. Monitoreo activo y temporizador para la expiración de la sesión
+  useEffect(() => {
+    if (!session) return
+
+    const verifySession = () => {
+      const activeSession = getCurrentSession()
+      if (!activeSession) {
+        handleSessionExpired('Tu sesión ha expirado. Por favor, inicia sesión de nuevo.')
+        return false
+      }
+      return true
+    }
+
+    // Comprobación inicial inmediata
+    if (!verifySession()) return
+
+    // Temporizador exacto programado para el instante de expiración
+    const timeRemaining = (session.expiresAt || 0) - Date.now()
+    let timer = null
+    if (timeRemaining > 0) {
+      timer = setTimeout(() => {
+        verifySession()
+      }, timeRemaining)
+    }
+
+    // Intervalo de respaldo periódico cada 5 segundos (cubre suspensión, hibernación o cambios de reloj)
+    const interval = setInterval(() => {
+      verifySession()
+    }, 5000)
+
+    // Al regresar a la pestaña o ventana del navegador
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        verifySession()
+      }
+    }
+
+    window.addEventListener('visibilitychange', handleVisibilityOrFocus)
+    window.addEventListener('focus', handleVisibilityOrFocus)
+
+    return () => {
+      if (timer) clearTimeout(timer)
+      clearInterval(interval)
+      window.removeEventListener('visibilitychange', handleVisibilityOrFocus)
+      window.removeEventListener('focus', handleVisibilityOrFocus)
+    }
+  }, [session, handleSessionExpired])
 
   if (!session) {
     return (

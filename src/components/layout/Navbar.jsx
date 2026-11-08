@@ -8,7 +8,7 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
   const isDocente = rol === 3
 
   const canSeePensum = isAdmin || isCoordinador
-  const canSeeProgramas = isAdmin
+  const canSeeProgramas = isAdmin || isCoordinador
   const canSeeAsignaturas = isAdmin || isCoordinador
   const canSeePlantilla = isAdmin
   const canSeeAsociaciones = isAdmin
@@ -42,9 +42,27 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
 
           <div className="navbar-actions">
             {user && (
-              <div className="navbar-user" title={user.email || ''}>
-                <span className="navbar-user-name">{user.nombre} {user.apellido}</span>
-                <span className="navbar-user-role">{rolLabel}</span>
+              <div className="navbar-user-group">
+                <button
+                  type="button"
+                  className={`navbar-user-card ${activeTab === 'mi-perfil' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('mi-perfil')}
+                  title="Ver Mi Perfil"
+                >
+                  <div className="navbar-user">
+                    <span className="navbar-user-name">{user.nombre} {user.apellido}</span>
+                    <span className="navbar-user-role">{rolLabel}</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className={`navbar-profile-btn ${activeTab === 'mi-perfil' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('mi-perfil')}
+                  title="Acceder a Mi Perfil"
+                >
+                  <UserCircle size={17} />
+                  <span>Mi perfil</span>
+                </button>
               </div>
             )}
             <div className={`status-pill ${isConnected ? 'online' : 'offline'}`} title="Estado de Conexión">
@@ -74,16 +92,7 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               <span>Inicio</span>
             </button>
 
-            {canSeePensum && (
-              <button
-                className={`nav-tab-btn ${activeTab === 'pensum' ? 'active' : ''}`}
-                onClick={() => setActiveTab('pensum')}
-                title="Malla Curricular"
-              >
-                <Layers size={18} />
-                <span>Malla Curricular</span>
-              </button>
-            )}
+            
 
             {canSeeProgramas && (
               <button
@@ -186,17 +195,7 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               </button>
             )}
 
-            {/* Mi perfil: visible para todos los roles */}
-            {user && (
-              <button
-                className={`nav-tab-btn ${activeTab === 'mi-perfil' ? 'active' : ''}`}
-                onClick={() => setActiveTab('mi-perfil')}
-                title="Mi perfil"
-              >
-                <UserCircle size={18} />
-                <span style={{ whiteSpace: 'nowrap' }}>Mi perfil</span>
-              </button>
-            )}
+            
           </nav>
         </div>
       </div>

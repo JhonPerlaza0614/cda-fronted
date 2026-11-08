@@ -1,5 +1,5 @@
 import { supabase } from '../supabase'
-import { getAuthToken } from './authService'
+import { getAuthToken, notifySessionExpired } from './authService'
 
 /**
  * Servicio para la gestión de Programas, Asignaturas y Pensum Académico
@@ -26,6 +26,9 @@ export async function requestBackend(endpoint, options = {}) {
   })
 
   if (!response.ok) {
+    if (response.status === 401) {
+      notifySessionExpired('Tu sesión ha expirado o ya no es válida. Inicia sesión de nuevo.')
+    }
     let errorMsg = `Error ${response.status}: ${response.statusText}`
     try {
       const errorBody = await response.json()

@@ -260,7 +260,7 @@ export default function App({ user, onLogout }) {
             {/* Programas */}
             {activeTab === 'programas' && (
               <ProgramasView
-                programas={programas}
+                programas={isCoordinador ? programasParaPensum : programas}
                 pensumList={pensumList}
                 onRefresh={() => loadData(true)}
                 onShowToast={showToast}
