@@ -1,4 +1,4 @@
-import { getAuthToken } from './authService'
+import { getAuthToken, notifySessionExpired } from './authService'
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api').replace(/\/+$/, '')
 
@@ -36,6 +36,9 @@ async function request(path, options = {}) {
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      notifySessionExpired('Tu sesión ha expirado o ya no es válida. Inicia sesión de nuevo.')
+    }
     const message = body?.message || body?.detail || body?.error || `Error ${response.status} al consultar la disponibilidad.`
     throw new DisponibilidadApiError(message, response.status, body)
   }

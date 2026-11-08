@@ -1,16 +1,12 @@
 // Servicio de Docentes (HU-026 y HU-022)
 // Misma URL base que usa el login (ya incluye /api) y mismo token de sesión.
+import { getAuthToken, notifySessionExpired } from './authService'
+
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api').replace(/\/+$/, '')
-const SESSION_KEY = 'cda.auth.session'
 
 function authHeaders() {
-    try {
-        const raw = window.sessionStorage.getItem(SESSION_KEY)
-        const token = raw ? JSON.parse(raw)?.token : null
-        return token ? { Authorization: `Bearer ${token}` } : {}
-    } catch {
-        return {}
-    }
+    const token = getAuthToken()
+    return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 // Error con status y cuerpo, para que la vista pueda distinguir 400 / 409 / 500
@@ -42,6 +38,9 @@ async function request(path, options = {}) {
     }
 
     if (!res.ok) {
+        if (res.status === 401) {
+            notifySessionExpired('Tu sesión ha expirado o ya no es válida. Inicia sesión de nuevo.')
+        }
         throw new ApiError(body?.message || `Error ${res.status}`, res.status, body)
     }
     return body
@@ -71,6 +70,9 @@ async function rawFetch(path, options = {}) {
 }
 
 async function errorDe(res) {
+    if (res.status === 401) {
+        notifySessionExpired('Tu sesión ha expirado o ya no es válida. Inicia sesión de nuevo.')
+    }
     let body = null
     try {
         body = await res.json()

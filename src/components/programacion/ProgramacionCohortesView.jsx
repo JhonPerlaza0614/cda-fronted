@@ -129,8 +129,7 @@ export default function ProgramacionCohortesView({ onShowToast }) {
       return
     }
     // Fallback: consultar el pensum para extraer la resolución (datos legacy con NULL en programas)
-    fetch(`/api/pensum/programa/${selectedPrograma.code_program}`)
-      .then(r => r.ok ? r.json() : null)
+    getPensumByProgram(selectedPrograma.code_program)
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
           const res = data.find(p => p.numeroResolucion)?.numeroResolucion || null

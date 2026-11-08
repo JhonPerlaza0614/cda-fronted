@@ -103,12 +103,40 @@
   flex-shrink: 0;
 }
 
+.navbar-user-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.navbar-user-card {
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: right;
+}
+
+.navbar-user-card:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.navbar-user-card.active {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
 .navbar-user {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   min-width: 0;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
 .navbar-user-name {
@@ -124,6 +152,36 @@
 .navbar-user-role {
   color: var(--text-muted);
   font-size: .75rem;
+}
+
+.navbar-profile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.navbar-profile-btn:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+  color: var(--primary);
+}
+
+.navbar-profile-btn.active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.15);
 }
 
 /* Nivel inferior: Apartados de Navegación grandes y cómodos */

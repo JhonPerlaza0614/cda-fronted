@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, Edit2, Trash2, BookOpen, Layers, AlertTriangle, Award, Building2 } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, BookOpen, Layers, AlertTriangle, Award, Building2 , UserCheck} from 'lucide-react'
 import { createPrograma, updatePrograma, deletePrograma, getFacultades, createFacultad, getCoordinadores } from '../../services/academicService'
 
 export default function ProgramasView({ 
@@ -22,6 +22,7 @@ export default function ProgramasView({
   const [coordinadoresList, setCoordinadoresList] = useState([])
   const [loadingCoordinadores, setLoadingCoordinadores] = useState(false)
   const [currentCoordinatorId, setCurrentCoordinatorId] = useState(null)
+  const [assignedCoordinator, setAssignedCoordinator] = useState(null)
 
   // Modal independiente para crear facultad (al lado de Nuevo Programa)
   const [isFacultadModalOpen, setIsFacultadModalOpen] = useState(false)
@@ -36,6 +37,12 @@ export default function ProgramasView({
         if (data && data.length > 0) setFacultadesList(data)
       })
       .catch(err => console.warn('Error al cargar facultades:', err))
+
+    getCoordinadores()
+      .then(data => {
+        if (data && Array.isArray(data)) setCoordinadoresList(data)
+      })
+      .catch(err => console.warn('Error al cargar coordinadores:', err))
   }, [])
 
   // Form state
@@ -102,6 +109,7 @@ export default function ProgramasView({
 
   const handleOpenCreateModal = () => {
     setEditingProgram(null)
+    setAssignedCoordinator(null)
     setFormData({
       code_program: '',
       name_program: '',
@@ -118,9 +126,6 @@ export default function ProgramasView({
 
   const handleOpenEditModal = async (prog) => {
     setEditingProgram(prog)
-    setCurrentCoordinatorId(null)
-    setCoordinadoresList([])
-    setLoadingCoordinadores(Boolean(canAssignCoordinator))
     setFormData({
       code_program: prog.code_program,
       name_program: prog.name_program,
@@ -130,25 +135,31 @@ export default function ProgramasView({
       apertura: prog.apertura || '',
       id_coordinador_nuevo: '',
     })
+
+    // Localizar coordinador asignado de inmediato si ya está en memoria
+    const matchMem = coordinadoresList.find(c => String(c.code_program || '').trim().toUpperCase() === String(prog.code_program || '').trim().toUpperCase())
+    if (matchMem) {
+      setAssignedCoordinator(matchMem)
+    } else {
+      setAssignedCoordinator(null)
+    }
+
     setIsModalOpen(true)
 
-    if (!canAssignCoordinator) return
-
-    try {
-      const data = await getCoordinadores()
-      const lista = Array.isArray(data) ? data : []
-      setCoordinadoresList(lista)
-      const asignado = lista.find(c => String(c.code_program || '') === String(prog.code_program))
-      const idAsignado = asignado?.id != null ? String(asignado.id) : ''
-      setCurrentCoordinatorId(idAsignado || null)
-      setFormData(prev => prev.code_program === prog.code_program
-        ? { ...prev, id_coordinador_nuevo: idAsignado }
-        : prev)
-    } catch (err) {
-      console.error('Error al cargar coordinadores para el programa:', err)
-      onShowToast(`No fue posible cargar la lista de coordinadores: ${err.message || 'Error desconocido'}`, 'error')
-    } finally {
-      setLoadingCoordinadores(false)
+    // Si la lista aún no estaba cargada en memoria, consultar el endpoint
+    if (coordinadoresList.length === 0) {
+      setLoadingCoordinadores(true)
+      try {
+        const data = await getCoordinadores()
+        const lista = Array.isArray(data) ? data : []
+        setCoordinadoresList(lista)
+        const asignado = lista.find(c => String(c.code_program || '').trim().toUpperCase() === String(prog.code_program || '').trim().toUpperCase())
+        setAssignedCoordinator(asignado || null)
+      } catch (err) {
+        console.error('Error al cargar coordinador del programa:', err)
+      } finally {
+        setLoadingCoordinadores(false)
+      }
     }
   }
 
@@ -187,18 +198,12 @@ export default function ProgramasView({
     setSubmitting(true)
     try {
       if (editingProgram) {
-        const coordinadorSeleccionado = formData.id_coordinador_nuevo
-        const cambioCoordinador = canAssignCoordinator
-          && coordinadorSeleccionado
-          && coordinadorSeleccionado !== String(currentCoordinatorId ?? '')
-
         await updatePrograma(editingProgram.code_program, {
           name_program: formData.name_program,
           numero_semestre: numSemestres,
           numero_resolucion: numeroResolucion,
           id_facultad_programa: formData.id_facultad_programa ? parseInt(formData.id_facultad_programa, 10) : null,
           apertura: formData.apertura || null,
-          ...(cambioCoordinador ? { id_coordinador_nuevo: parseInt(coordinadorSeleccionado, 10) } : {}),
         })
         onShowToast('Programa actualizado correctamente', 'success')
       } else {
@@ -336,11 +341,20 @@ export default function ProgramasView({
 
                 <div className="item-card-actions">
                   <button
-                    className="btn-link"
+                    className="btn-primary btn-sm"
                     onClick={() => onSelectProgramForPensum(prog.code_program)}
-                    title="Ver malla curricular"
+                    title="Ver y estructurar la malla curricular de este programa"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      fontWeight: 600,
+                      padding: '0.45rem 0.85rem',
+                      fontSize: '0.84rem'
+                    }}
                   >
-                    Ver Malla
+                    <Layers size={14} />
+                    <span>Ver Malla Curricular</span>
                   </button>
 
                   <div className="action-buttons-group">
@@ -527,33 +541,65 @@ export default function ProgramasView({
                   </small>
                 </div>
 
-                {canAssignCoordinator && editingProgram && (
+                {editingProgram && (
                   <div className="form-group">
-                    <label htmlFor="id_coordinador_nuevo">Coordinador asignado</label>
-                    <select
-                      id="id_coordinador_nuevo"
-                      value={formData.id_coordinador_nuevo}
-                      onChange={(e) => setFormData({ ...formData, id_coordinador_nuevo: e.target.value })}
-                      className="select-input"
-                      disabled={loadingCoordinadores || coordinadoresList.length === 0}
+                    <label htmlFor="coordinador_asignado_fijo">Coordinador asignado</label>
+                    <div
+                      id="coordinador_asignado_fijo"
+                      className="readonly-display-box"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '0.75rem',
+                        padding: '0.65rem 0.85rem',
+                        backgroundColor: '#f8fafc',
+                        border: '1.5px solid #e2e8f0',
+                        borderRadius: 'var(--radius-sm, 6px)',
+                        minHeight: '44px'
+                      }}
                     >
-                      <option value="">
-                        {loadingCoordinadores ? 'Cargando coordinadores...' : '-- Sin cambios en la asignación --'}
-                      </option>
-                      {coordinadoresList.map(c => (
-                        <option key={c.id} value={String(c.id)}>
-                          {c.nombre_completo || `Coordinador #${c.id}`} ({c.name_program || c.code_program || 'no asignado'}){c.activo === false ? ' - Inactivo' : ''}
-                        </option>
-                      ))}
-                    </select>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                        <UserCheck size={18} style={{ color: assignedCoordinator ? '#2563eb' : '#94a3b8', flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{
+                            fontWeight: 600,
+                            fontSize: '0.9rem',
+                            color: assignedCoordinator ? '#0f172a' : '#64748b',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}>
+                            {loadingCoordinadores
+                              ? 'Consultando asignación...'
+                              : (assignedCoordinator?.nombre_completo || 'Sin coordinador asignado')}
+                          </div>
+                          {assignedCoordinator?.correo_institucional && (
+                            <div style={{ fontSize: '0.78rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {assignedCoordinator.correo_institucional}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {!loadingCoordinadores && (
+                        <span
+                          style={{
+                            flexShrink: 0,
+                            fontSize: '0.72rem',
+                            padding: '0.2rem 0.55rem',
+                            fontWeight: 600,
+                            borderRadius: '9999px',
+                            backgroundColor: assignedCoordinator ? '#dcfce7' : '#f1f5f9',
+                            color: assignedCoordinator ? '#15803d' : '#64748b',
+                            border: `1px solid ${assignedCoordinator ? '#bbf7d0' : '#cbd5e1'}`
+                          }}
+                        >
+                          {assignedCoordinator ? 'Asignado' : 'No asignado'}
+                        </span>
+                      )}
+                    </div>
                     <small className="form-hint">
-                      {loadingCoordinadores
-                        ? 'Consultando los coordinadores registrados.'
-                        : coordinadoresList.length === 0
-                          ? 'No hay coordinadores disponibles para seleccionar.'
-                          : currentCoordinatorId
-                            ? 'Se seleccionó automáticamente al coordinador que dirige este programa. Al cambiarlo, las asignaciones se intercambiarán en una sola transacción.'
-                            : 'Este programa no tiene una asignación detectada. El cambio solo se aplicará si seleccionas un coordinador compatible con un intercambio seguro.'}
+                      El coordinador asignado es de solo lectura en este formulario. Para asignar o reasignar la coordinación, diríjase al módulo de Coordinación de programas.
                     </small>
                   </div>
                 )}

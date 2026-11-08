@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import {
   Plus,
+  ArrowLeft,
   BookOpen,
   ChevronRight,
   ChevronLeft,
@@ -971,6 +972,26 @@ export default function PensumView({
     <div className="pensum-container">
       {/* Program Selector & Actions Topbar */}
       <div className="pensum-header-card print-hide">
+        {onNavigateToProgramas && (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={onNavigateToProgramas}
+            title="Volver al catálogo de programas"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              fontWeight: 600,
+              padding: '0.55rem 0.95rem',
+              fontSize: '0.85rem',
+              flexShrink: 0
+            }}
+          >
+            <ArrowLeft size={16} />
+            <span>Volver a Programas</span>
+          </button>
+        )}
         <div className="program-search-wrapper">
           <label className="selector-label">
             <BookOpen size={18} className="text-primary" />
