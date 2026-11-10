@@ -9,7 +9,9 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
 
   const canSeePensum = isAdmin || isCoordinador
   const canSeeProgramas = isAdmin || isCoordinador
-  const canSeeAsignaturas = isAdmin || isCoordinador
+  const canSeeAsignaturas = isAdmin
+  const canSeeProgramasCoordinadores = isAdmin
+  const canSeeAsignacionDocente = isCoordinador || isAdmin
   const canSeePlantilla = isAdmin
   const canSeeAsociaciones = isAdmin
   const canSeePeriodos = isAdmin
@@ -105,8 +107,19 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               </button>
             )}
 
+            {canSeeAsignacionDocente && (
+              <button
+                className={`nav-tab-btn ${activeTab === 'asignacion_docente' ? 'active' : ''}`}
+                onClick={() => setActiveTab('asignacion_docente')}
+                title="Asignación y Designación Docente"
+              >
+                <CalendarCheck size={18} />
+                <span>Asignación Docente</span>
+              </button>
+            )}
+
             {/* HU-037 */}
-            {canSeeProgramas && (
+            {canSeeProgramasCoordinadores && (
               <button
                 className={`nav-tab-btn ${activeTab === 'programas_coordinadores' ? 'active' : ''}`}
                 onClick={() => setActiveTab('programas_coordinadores')}
