@@ -345,6 +345,7 @@
   color: #fff;
   cursor: pointer;
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
   transition: background .11s ease, border-color .11s ease, box-shadow .11s ease;
 }
 
@@ -359,11 +360,6 @@
 
 .availability-hour-start .availability-slot {
   border-top-width: 1px;
-}
-
-.availability-slot:hover:not(.is-readonly):not(.is-saved) {
-  border-color: #aab8fa;
-  background: #f0f3ff;
 }
 
 .availability-slot.is-selected {
@@ -896,4 +892,60 @@
   border: 1px solid #e5e7eb;
   border-radius: 3px;
   background: repeating-linear-gradient(135deg, #f3f4f6 0 2px, #e5e7eb 2px 4px);
+}
+
+/* Segunda ronda de usabilidad (2026-11-10), HU-007 y HU-051 */
+
+/* R2: las casillas sin seleccionar no cambian de color con el mouse
+   (se eliminó la regla :hover que las pintaba de azul claro). */
+
+/* R1: botón «Seleccionar todo» de cada día, debajo del nombre. */
+.availability-table thead th:not(:first-child) {
+  padding: 5px 3px;
+}
+
+.availability-day-select-button {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 3px 2px;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  background: #fff;
+  color: #3b58d2;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.availability-day-select-button:hover:not(:disabled) {
+  border-color: #3b58d2;
+}
+
+.availability-day-select-button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.availability-day-select-button:focus-visible {
+  outline: 3px solid #91a4ff;
+  outline-offset: 1px;
+}
+
+.availability-day-select-short {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .availability-day-select-long {
+    display: none;
+  }
+
+  .availability-day-select-short {
+    display: inline;
+  }
 }
