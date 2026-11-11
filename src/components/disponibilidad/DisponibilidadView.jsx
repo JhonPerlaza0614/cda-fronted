@@ -35,6 +35,8 @@ const BLOCKED_SLOTS = { sabado: new Set([38, 39, 40, 41]) }
 export const MENSAJE_MINIMO_UNA_HORA = 'No se puede seleccionar 30 minutos, el registro mínimo es 1 hora'
 export const MENSAJE_CONFIRMAR_GUARDADO = '¿Desea guardar esta disponibilidad de horario?'
 export const MENSAJE_GUARDADO_EXITOSO = 'Disponibilidad horaria registrada exitosamente'
+// Segunda ronda de usabilidad (2026-11-10): confirmación al limpiar lo ya registrado.
+export const MENSAJE_CONFIRMAR_LIMPIAR = '¿Está seguro de eliminar el registro actual de disponibilidad horaria?'
 
 const DIALOGO_MINIMO_UNA_HORA = {
   type: 'warning',
@@ -133,13 +135,6 @@ function shortIntervalKeys(selected) {
     .map((interval) => `${day.id}-${interval.start}-${interval.end}`))
 }
 
-// Verdadero solo si `next` tiene un intervalo corto que no estaba en `prev`.
-// Así los datos antiguos de 30 minutos no bloquean otros cambios del usuario.
-function createsShortInterval(prev, next) {
-  const before = new Set(shortIntervalKeys(prev))
-  return shortIntervalKeys(next).some((key) => !before.has(key))
-}
-
 function toDisplayIntervals(schedules) {
   return (schedules || []).map((schedule) => {
     const day = DAYS.find((item) => item.value === Number(schedule.dia))
@@ -165,10 +160,9 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
   const [notice, setNotice] = useState(null)
   const [dialog, setDialog] = useState(null)
   const dragMode = useRef(null)
-  // Copia sincrónica de la selección y selección al iniciar el gesto, para
-  // revertir un arrastre o un clic que deje un intervalo de 30 minutos.
+  // Copia sincrónica de la selección, para que un arrastre rápido no lea un
+  // estado desactualizado. El mínimo de 1 hora se valida solo al guardar.
   const selectedRef = useRef(new Set())
-  const gestureSnapshot = useRef(null)
 
   const replaceSelection = useCallback((next) => {
     selectedRef.current = next
@@ -255,23 +249,14 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
   }, [loadAvailability])
 
   useEffect(() => {
-    const stopDragging = () => {
-      dragMode.current = null
-      const snapshot = gestureSnapshot.current
-      gestureSnapshot.current = null
-      // Si el gesto dejó un intervalo nuevo de 30 minutos, se revierte completo.
-      if (snapshot && createsShortInterval(snapshot, selectedRef.current)) {
-        replaceSelection(snapshot)
-        setDialog(DIALOGO_MINIMO_UNA_HORA)
-      }
-    }
+    const stopDragging = () => { dragMode.current = null }
     window.addEventListener('pointerup', stopDragging)
     window.addEventListener('pointercancel', stopDragging)
     return () => {
       window.removeEventListener('pointerup', stopDragging)
       window.removeEventListener('pointercancel', stopDragging)
     }
-  }, [replaceSelection])
+  }, [])
 
   const isPeriodEnabled = status?.estado === 'HABILITADO' && !loading && !saving
   const hasSavedSchedule = savedSlots.size > 0
@@ -316,7 +301,6 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
-    gestureSnapshot.current = new Set(selectedRef.current)
     dragMode.current = !selectedRef.current.has(key)
     setSlot(day.id, slot, dragMode.current)
   }
@@ -329,12 +313,7 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
   const handleKeyboardClick = (event, day, slot) => {
     const key = slotKey(day.id, slot)
     if (!canEdit || event.detail !== 0 || (!isEditing && savedSlots.has(key))) return
-    const snapshot = new Set(selectedRef.current)
-    setSlot(day.id, slot, !snapshot.has(key))
-    if (createsShortInterval(snapshot, selectedRef.current)) {
-      replaceSelection(snapshot)
-      setDialog(DIALOGO_MINIMO_UNA_HORA)
-    }
+    setSlot(day.id, slot, !selectedRef.current.has(key))
   }
 
   const handleStartEdit = () => {
@@ -367,15 +346,67 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
     })
   }
 
+  // R1 (segunda ronda): agrega todas las horas habilitadas de un día sin tocar los demás.
+  // El sábado queda de 7:00 a 19:00 porque de 19:00 a 21:00 está bloqueado.
+  const selectDay = (day) => {
+    if (!canEdit) return
+    dragMode.current = null
+    const next = new Set(selectedRef.current)
+    for (const slot of SLOTS) {
+      if (isBlockedSlot(day.id, slot)) continue
+      const key = slotKey(day.id, slot)
+      if (!isEditing && savedSlots.has(key)) continue
+      next.add(key)
+    }
+    replaceSelection(next)
+    setNotice(null)
+  }
+
   const clearSelection = () => {
     dragMode.current = null
+    // R4 (segunda ronda): si ya hay disponibilidad registrada, se pide confirmación
+    // y, al aceptar, se elimina lo guardado sin pulsar "Guardar".
+    if (hasSavedSchedule) {
+      setDialog({ type: 'confirm', action: 'clear', title: 'Eliminar disponibilidad', message: MENSAJE_CONFIRMAR_LIMPIAR })
+      return
+    }
     replaceSelection(new Set())
     setNotice({
       type: 'success',
-      text: isEditing
-        ? 'Se desmarcaron todas las casillas de la tabla. Pulsa "Guardar cambios" para confirmar o "Cancelar edición" para revertir.'
-        : 'Se limpiaron los intervalos nuevos que aún no se han guardado.',
+      text: 'Se limpiaron los intervalos nuevos que aún no se han guardado.',
     })
+  }
+
+  // Elimina la disponibilidad registrada con el PUT existente y una lista vacía.
+  const clearSavedAvailability = async () => {
+    setSaving(true)
+    setNotice(null)
+    try {
+      if (isAdminMode) {
+        await actualizarDisponibilidadDocente(docenteId, [])
+      } else {
+        await actualizarDisponibilidad([])
+      }
+      replaceSelection(new Set())
+      setIsEditing(false)
+      await loadAvailability({ showLoading: false })
+      setSaving(false)
+      setDialog(null)
+      if (isAdminMode) {
+        onSaved?.(`Se eliminó la disponibilidad de ${docenteNombre || 'el docente'}.`)
+        return
+      }
+      setNotice({ type: 'success', text: 'Se eliminó el registro de disponibilidad horaria.' })
+    } catch (error) {
+      setSaving(false)
+      setDialog(null)
+      setNotice({
+        type: 'error',
+        text: error.message
+          ? `No se pudo eliminar la disponibilidad: ${error.message}`
+          : 'No se pudo eliminar la disponibilidad.',
+      })
+    }
   }
 
   // Paso 1: valida y pide confirmación. El guardado real está en saveAvailability.
@@ -385,11 +416,13 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
       setNotice({ type: 'info', text: 'Marca al menos un intervalo antes de guardar.' })
       return
     }
-    if (shortIntervalKeys(selectedSlots).length) {
+    // R3 (segunda ronda): el mínimo de 1 hora se valida solo aquí, al guardar.
+    // No se guarda y la selección queda intacta.
+    if (shortIntervalKeys(selectedSlots).length > 0) {
       setDialog(DIALOGO_MINIMO_UNA_HORA)
       return
     }
-    setDialog({ type: 'confirm', title: 'Confirmar disponibilidad', message: MENSAJE_CONFIRMAR_GUARDADO })
+    setDialog({ type: 'confirm', action: 'save', title: 'Confirmar disponibilidad', message: MENSAJE_CONFIRMAR_GUARDADO })
   }
 
   const showSavedDialog = (adminMessage) => {
@@ -473,6 +506,10 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
 
   const handleDialogAccept = () => {
     if (!dialog) return
+    if (dialog.type === 'confirm' && dialog.action === 'clear') {
+      clearSavedAvailability()
+      return
+    }
     if (dialog.type === 'confirm') {
       saveAvailability()
       return
@@ -592,7 +629,7 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
         <>
           <div className="availability-instructions">
             <span className="availability-info-icon"><Info size={18} /></span>
-            <div><strong>¿Cómo funciona?</strong><span>Cada casilla representa 30 minutos. Haz clic o arrastra para seleccionar un intervalo continuo; las casillas consecutivas del mismo día se agrupan en un solo horario. Cada intervalo debe durar <strong>mínimo 1 hora</strong> (2 casillas seguidas); no se puede registrar un bloque de 30 minutos. Con <strong>“Seleccionar todo”</strong> marcas de una vez todos los horarios habilitados. Los sábados de 7:00 p. m. a 9:00 p. m. no están habilitados. Al guardar tu horario la tabla se bloquea; si necesitas modificar casillas marcadas o no marcadas, pulsa el botón <strong>“Editar”</strong> en el resumen inferior.</span></div>
+            <div><strong>¿Cómo funciona?</strong><span>Cada casilla representa 30 minutos. Haz clic o arrastra para seleccionar un intervalo continuo; las casillas consecutivas del mismo día se agrupan en un solo horario. Puedes marcar y desmarcar libremente; al guardar se comprueba que cada intervalo dure <strong>mínimo 1 hora</strong> (2 casillas seguidas), porque no se puede registrar un bloque de 30 minutos. Con el botón <strong>“Seleccionar todo”</strong> de cada día marcas todas las horas habilitadas de ese día, y con el <strong>“Seleccionar todo”</strong> de abajo marcas toda la semana. Los sábados de 7:00 p. m. a 9:00 p. m. no están habilitados. Al guardar tu horario la tabla se bloquea; si necesitas modificar casillas marcadas o no marcadas, pulsa el botón <strong>“Editar”</strong> en el resumen inferior. En modo edición, <strong>“Limpiar selección”</strong> elimina el registro guardado, previa confirmación.</span></div>
           </div>
 
           <div className="availability-card">
@@ -603,7 +640,11 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
 
             <div className="availability-table-scroll">
               <table className="availability-table">
-                <thead><tr><th className="availability-time-heading" scope="col">HORA</th>{DAYS.map((day) => <th key={day.id} scope="col"><span className="availability-day-short">{day.short}</span><span className="availability-day-name">{day.label}</span></th>)}</tr></thead>
+                <thead><tr><th className="availability-time-heading" scope="col">HORA</th>{DAYS.map((day) => <th key={day.id} scope="col"><span className="availability-day-short">{day.short}</span><span className="availability-day-name">{day.label}</span>{canEdit && (
+                  <button type="button" className="availability-day-select-button" onClick={() => selectDay(day)} disabled={saving} aria-label={`Seleccionar todo el ${day.label.toLowerCase()}`} title={`Seleccionar todo el ${day.label.toLowerCase()}`}>
+                    <span className="availability-day-select-long">Seleccionar todo</span><span className="availability-day-select-short" aria-hidden="true">Todo</span>
+                  </button>
+                )}</th>)}</tr></thead>
                 <tbody>{SLOTS.map((slot) => {
                   const isHourStart = slot % 2 === 0
                   return <tr key={slot} className={isHourStart ? 'availability-hour-start' : 'availability-half-hour-row'}>
@@ -644,7 +685,7 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
                   <button type="button" className="availability-clear-button availability-select-all-button" onClick={handleSelectAll} disabled={saving}>
                     <CheckCheck size={17} /> Seleccionar todo
                   </button>
-                  <button type="button" className="availability-clear-button" onClick={clearSelection} disabled={!selectedSlots.size || saving}>
+                  <button type="button" className="availability-clear-button" onClick={clearSelection} disabled={(!selectedSlots.size && !hasSavedSchedule) || saving}>
                     <Eraser size={17} /> Limpiar selección
                   </button>
                   <button type="button" className="availability-set-button" onClick={handleEstablish} disabled={saving}>
