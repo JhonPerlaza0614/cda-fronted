@@ -11,6 +11,7 @@ import {
     Star,
     Shield,
     Phone,
+    Smartphone,
     Pencil
 } from 'lucide-react'
 import { getMiPerfil, getMiPerfilCoordinador } from '../../services/docenteService'
@@ -306,6 +307,7 @@ export default function MiPerfilView({ user, onShowToast }) {
                             </Row>
                             <Row icon={<Mail size={15} />} label="Correo personal">{docente.correo_personal || '—'}</Row>
                             <Row icon={<Phone size={15} />} label="Teléfono">{docente.telefono || '—'}</Row>
+                            <Row icon={<Smartphone size={15} />} label="Celular">{docente.celular || '—'}</Row>
                             <Row icon={<Briefcase size={15} />} label="Tipo de docente">
                                 {TIPO_DOCENTE_LABEL[docente.tipo_docente] || docente.tipo_docente}
                             </Row>
