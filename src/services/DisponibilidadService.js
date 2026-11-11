@@ -98,3 +98,12 @@ export function actualizarDisponibilidadDocente(docenteId, intervalos) {
     body: JSON.stringify(intervalos),
   })
 }
+
+export async function consultarDisponibilidadesPeriodo(periodoId) {
+  try {
+    return await request(`/disponibilidades/periodo/${periodoId}`)
+  } catch (error) {
+    console.warn('Error al consultar disponibilidades del período:', error)
+    return {}
+  }
+}

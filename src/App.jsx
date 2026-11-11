@@ -9,6 +9,7 @@ import BitacoraView from './components/bitacora/BitacoraView'
 import PlantillaView from './components/plantilla/PlantillaView'
 import PeriodosView from './components/periodos/PeriodosView'
 import ProgramacionCohortesView from './components/programacion/ProgramacionCohortesView'
+import AsignacionDocenteView from './components/asignacion/AsignacionDocenteView'
 import DedicatedInProgressView from './components/layout/DedicatedInProgressView'
 import MiPerfilView from './components/perfil/MiPerfilView'
 import DisponibilidadView from './components/disponibilidad/DisponibilidadView'
@@ -280,8 +281,21 @@ export default function App({ user, onLogout }) {
               />
             )}
 
-            {/* Banco de Asignaturas */}
-            {activeTab === 'asignaturas' && (
+            {/* Asignación y Designación Docente */}
+            {activeTab === 'asignacion_docente' && (
+              <AsignacionDocenteView
+                user={user}
+                isAdmin={isAdmin}
+                isCoordinador={isCoordinador}
+                coordinadorPerfil={coordinadorPerfil}
+                programas={isCoordinador ? programasParaPensum : programas}
+                pensumList={pensumList}
+                onShowToast={showToast}
+              />
+            )}
+
+            {/* Banco de Asignaturas: solo administrador */}
+            {isAdmin && activeTab === 'asignaturas' && (
               <AsignaturasView
                 asignaturas={asignaturas}
                 programas={programas}
