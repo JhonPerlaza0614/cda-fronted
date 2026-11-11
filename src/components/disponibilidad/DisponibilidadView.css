@@ -859,3 +859,41 @@
   border-color: #b9c5dc;
   background: #f7f9fd;
 }
+/* Prueba de usabilidad (2026-11-10), HU-007 y HU-051 */
+
+/* Sábado de 7:00 p. m. a 9:00 p. m.: casillas no habilitadas. */
+.availability-slot.is-blocked,
+.availability-slot.is-blocked:hover {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-color: #e5e7eb;
+  border-style: solid;
+  background: repeating-linear-gradient(135deg, #f3f4f6 0 4px, #e5e7eb 4px 8px);
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.availability-select-all-button {
+  border-color: #c7d2fe;
+  color: #3b58d2;
+}
+
+.availability-dialog {
+  max-width: 440px;
+}
+
+.availability-dialog .modal-body p {
+  margin: 0;
+  font-size: 15px;
+}
+
+.availability-legend-blocked {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  margin-left: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 3px;
+  background: repeating-linear-gradient(135deg, #f3f4f6 0 2px, #e5e7eb 2px 4px);
+}
