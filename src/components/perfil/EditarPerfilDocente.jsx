@@ -3,18 +3,22 @@ import { AlertTriangle } from 'lucide-react'
 import { updateMiContacto } from '../../services/docenteService'
 import { getFacultades } from '../../services/academicService'
 
-// HU-015: el docente edita su facultad, correo personal y teléfono desde "Mi perfil".
+// HU-015: el docente edita su facultad, correo personal, teléfono y celular desde "Mi perfil".
 // Nombres, apellidos y correo institucional son de solo lectura.
 
 const MSG_SIN_CAMBIOS = 'No hay cambios para guardar'
 const MSG_ACTUALIZADO = 'Perfil actualizado'
 const MSG_ERROR_GUARDAR = 'No se pudo guardar. Intente de nuevo'
+// Celular (2026-11-10): opcional, distinto del teléfono, de 7 a 10 dígitos.
+const MSG_CELULAR_INVALIDO = 'Por favor complete este campo correctamente'
 
 const CORREO_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/
 const TELEFONO_REGEX = /^[0-9]{7,10}$/
+const CELULAR_REGEX = /^[0-9]{7,10}$/
+const CAMPOS_NUMERICOS = new Set(['telefono', 'celular'])
 
 // Mismas reglas que el backend (docs/contratos/HU-015.md)
-function validar({ correoPersonal, telefono }) {
+function validar({ correoPersonal, telefono, celular }) {
     const errores = {}
     const correo = correoPersonal.trim()
     if (correo) {
@@ -29,6 +33,10 @@ function validar({ correoPersonal, telefono }) {
     const tel = telefono.trim()
     if (tel && !TELEFONO_REGEX.test(tel)) {
         errores.telefono = 'El teléfono solo admite de 7 a 10 dígitos'
+    }
+    const cel = celular.trim()
+    if (cel && !CELULAR_REGEX.test(cel)) {
+        errores.celular = MSG_CELULAR_INVALIDO
     }
     return errores
 }
@@ -74,6 +82,7 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
     const [original, setOriginal] = useState({
         correoPersonal: normalizar(docente.correo_personal),
         telefono: normalizar(docente.telefono),
+        celular: normalizar(docente.celular),
         idFacultad: docente.id_facultad != null ? String(docente.id_facultad) : ''
     })
     const [form, setForm] = useState(original)
@@ -114,10 +123,11 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
     const hayCambios =
         normalizar(form.correoPersonal).toLowerCase() !== original.correoPersonal.toLowerCase() ||
         normalizar(form.telefono) !== original.telefono ||
+        normalizar(form.celular) !== original.celular ||
         String(form.idFacultad || '') !== String(original.idFacultad || '')
 
     const handleChange = (campo) => (e) => {
-        const valor = campo === 'telefono' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value
+        const valor = CAMPOS_NUMERICOS.has(campo) ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value
         setForm((prev) => ({ ...prev, [campo]: valor }))
         setErrores((prev) => ({ ...prev, [campo]: undefined }))
     }
@@ -140,6 +150,7 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
             const actualizado = await updateMiContacto({
                 correo_personal: normalizar(form.correoPersonal) || null,
                 telefono: normalizar(form.telefono) || null,
+                celular: normalizar(form.celular) || null,
                 id_facultad: form.idFacultad ? parseInt(form.idFacultad, 10) : null
             })
             setConfirmacion(null)
@@ -153,6 +164,7 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
                 setErrores({
                     correoPersonal: erroresBackend.correoPersonal || erroresBackend.correo_personal,
                     telefono: erroresBackend.telefono,
+                    celular: erroresBackend.celular,
                     idFacultad: erroresBackend.idFacultad || erroresBackend.id_facultad
                 })
             } else if (err.status === 400 && err.message === MSG_SIN_CAMBIOS) {
@@ -251,6 +263,25 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
                     disabled={procesando}
                 />
                 {errores.telefono && <span className="field-error">{errores.telefono}</span>}
+            </div>
+            <div className="form-group">
+                <label htmlFor="perfil-celular">Celular (opcional)</label>
+                <input
+                    id="perfil-celular"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    maxLength={10}
+                    value={form.celular}
+                    onChange={handleChange('celular')}
+                    aria-invalid={Boolean(errores.celular)}
+                    aria-describedby={errores.celular ? 'perfil-celular-error' : 'perfil-celular-ayuda'}
+                    className={errores.celular ? 'input-error' : undefined}
+                    disabled={procesando}
+                />
+                {errores.celular
+                    ? <span id="perfil-celular-error" className="field-error">{errores.celular}</span>
+                    : <span id="perfil-celular-ayuda" className="form-hint">Solo números, de 7 a 10 dígitos. Puedes dejarlo vacío.</span>}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>

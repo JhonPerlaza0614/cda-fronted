@@ -85,7 +85,7 @@ async function errorDe(res) {
 // GET /api/docentes/me (HU-022). El backend identifica al docente por el token de sesión.
 export const getMiPerfil = () => request('/docentes/me')
 
-// PUT /api/docentes/me/contacto (HU-015): correo personal y teléfono
+// PUT /api/docentes/me/contacto (HU-015): correo personal, teléfono, celular y facultad
 export const updateMiContacto = (payload) =>
     request('/docentes/me/contacto', { method: 'PUT', body: JSON.stringify(payload) })
 
