@@ -38,12 +38,14 @@ export default function ProgramasView({
       })
       .catch(err => console.warn('Error al cargar facultades:', err))
 
+    // La lista de coordinadores es solo del administrador (GET /api/coordinadores responde 403 al coordinador)
+    if (!canAssignCoordinator) return
     getCoordinadores()
       .then(data => {
         if (data && Array.isArray(data)) setCoordinadoresList(data)
       })
       .catch(err => console.warn('Error al cargar coordinadores:', err))
-  }, [])
+  }, [canAssignCoordinator])
 
   // Form state
   const [formData, setFormData] = useState({
@@ -147,7 +149,7 @@ export default function ProgramasView({
     setIsModalOpen(true)
 
     // Si la lista aún no estaba cargada en memoria, consultar el endpoint
-    if (coordinadoresList.length === 0) {
+    if (canAssignCoordinator && coordinadoresList.length === 0) {
       setLoadingCoordinadores(true)
       try {
         const data = await getCoordinadores()
