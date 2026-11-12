@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, Edit2, Trash2, RotateCcw, Library, BookOpen, AlertTriangle, Award, Sparkles, Building2 } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, RotateCcw, Library, BookOpen, AlertTriangle, Award, Sparkles, Building2, Clock } from 'lucide-react'
 import { createAsignatura, updateAsignatura, cambiarEstadoAsignatura, getFacultades } from '../../services/academicService'
 
-export default function AsignaturasView({ 
-  asignaturas, 
-  programas, 
-  pensumList, 
-  onRefresh, 
-  onShowToast 
+export default function AsignaturasView({
+  asignaturas,
+  programas,
+  pensumList,
+  onRefresh,
+  onShowToast
 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -40,7 +40,8 @@ export default function AsignaturasView({
     is_elective: false,
     es_complementaria: false,
     es_basica: false,
-    id_facultad: ''
+    id_facultad: '',
+    horas_semanales: ''
   })
 
   // Filtered courses
@@ -66,7 +67,7 @@ export default function AsignaturasView({
   const handleOpenCreateModal = async (isElectivePreset = false) => {
     setEditingAsignatura(null)
     await loadFacultadesFromDb()
-    
+
     setFormData({
       code_course: '',
       name_course: '',
@@ -74,7 +75,8 @@ export default function AsignaturasView({
       is_elective: isElectivePreset,
       es_complementaria: false,
       es_basica: false,
-      id_facultad: ''
+      id_facultad: '',
+      horas_semanales: ''
     })
     setIsModalOpen(true)
   }
@@ -90,7 +92,8 @@ export default function AsignaturasView({
       is_elective: Boolean(asig.is_elective || asig.name_course?.toLowerCase().includes('electiv')),
       es_complementaria: Boolean(asig.es_complementaria),
       es_basica: Boolean(asig.es_basica),
-      id_facultad: asig.id_facultad ? String(asig.id_facultad) : ''
+      id_facultad: asig.id_facultad ? String(asig.id_facultad) : '',
+      horas_semanales: asig.horas_semanales ? String(asig.horas_semanales) : ''
     })
     setIsModalOpen(true)
   }
@@ -158,6 +161,16 @@ export default function AsignaturasView({
     const creditsParsed = parseInt(formData.credits, 10)
     const creditsNum = isNaN(creditsParsed) || creditsParsed < 0 ? 0 : creditsParsed
 
+    const horasTxt = String(formData.horas_semanales ?? '').trim()
+    let horasNum = null
+    if (horasTxt !== '') {
+      horasNum = Number(horasTxt)
+      if (!Number.isInteger(horasNum) || horasNum < 1 || horasNum > 20) {
+        onShowToast('Las horas semanales deben ser un número entero entre 1 y 20', 'error')
+        return
+      }
+    }
+
     setSubmitting(true)
     try {
       if (editingAsignatura) {
@@ -167,7 +180,8 @@ export default function AsignaturasView({
           is_elective: formData.is_elective,
           es_complementaria: formData.es_complementaria,
           es_basica: formData.es_basica,
-          id_facultad: formData.id_facultad
+          id_facultad: formData.id_facultad,
+          horas_semanales: horasNum
         })
         onShowToast('Asignatura actualizada exitosamente', 'success')
       } else {
@@ -178,7 +192,8 @@ export default function AsignaturasView({
           is_elective: formData.is_elective,
           es_complementaria: formData.es_complementaria,
           es_basica: formData.es_basica,
-          id_facultad: formData.id_facultad
+          id_facultad: formData.id_facultad,
+          horas_semanales: horasNum
         })
         onShowToast(formData.is_elective ? 'Electiva registrada exitosamente' : 'Asignatura registrada exitosamente', 'success')
       }
@@ -266,8 +281,8 @@ export default function AsignaturasView({
           <Library size={48} className="empty-icon" />
           <h3>No se encontraron asignaturas</h3>
           <p>
-            {searchTerm 
-              ? 'No hay materias que coincidan con la búsqueda.' 
+            {searchTerm
+              ? 'No hay materias que coincidan con la búsqueda.'
               : 'Aún no hay asignaturas registradas en el catálogo. Crea una para comenzar.'}
           </p>
           {!searchTerm && (
@@ -347,6 +362,13 @@ export default function AsignaturasView({
                   )}
                 </div>
 
+                <div className="course-credits-meta" style={{ marginBottom: '0.5rem' }} title="Horas semanales para la carga docente">
+                  <Clock size={14} className="text-primary" />
+                  {asig.horas_semanales
+                    ? <><strong>{asig.horas_semanales}</strong> h/semana</>
+                    : <span style={{ opacity: 0.7 }}>Sin horas definidas</span>}
+                </div>
+
                 <div className="item-card-actions">
                   <span className="course-credits-meta">
                     <Award size={14} className="text-primary" />
@@ -409,7 +431,7 @@ export default function AsignaturasView({
                   </div>
 
                   <div className="setting-row" style={{ marginTop: '0.5rem', opacity: formData.is_elective ? 1 : 0.5 }}>
-                    <label 
+                    <label
                       className="checkbox-setting-label"
                       style={{ cursor: formData.is_elective ? 'pointer' : 'not-allowed' }}
                       title={!formData.is_elective ? 'Solo se puede activar si "Es Electiva" está marcada' : ''}
@@ -436,7 +458,7 @@ export default function AsignaturasView({
                   </div>
 
                   <div className="setting-row" style={{ marginTop: '0.5rem', opacity: (!formData.is_elective && !formData.es_complementaria) ? 1 : 0.5 }}>
-                    <label 
+                    <label
                       className="checkbox-setting-label"
                       style={{ cursor: (!formData.is_elective && !formData.es_complementaria) ? 'pointer' : 'not-allowed' }}
                       title={(formData.is_elective || formData.es_complementaria) ? 'Solo se puede activar si NO es electiva ni complementaria' : ''}
@@ -560,6 +582,22 @@ export default function AsignaturasView({
                   />
                   <small className="form-hint">
                     Muestra '?' si los créditos están vacíos o sin definir aún.
+                  </small>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="horas_semanales">Horas semanales</label>
+                  <input
+                    id="horas_semanales"
+                    type="number"
+                    min="1"
+                    max="20"
+                    placeholder="Ej. 4"
+                    value={formData.horas_semanales}
+                    onChange={(e) => setFormData({ ...formData, horas_semanales: e.target.value })}
+                  />
+                  <small className="form-hint">
+                    Se usa para la carga académica del docente (máximo 20 h). Sin horas definidas no se puede asignar docente a esta asignatura.
                   </small>
                 </div>
               </div>

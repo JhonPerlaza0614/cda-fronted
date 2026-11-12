@@ -113,6 +113,14 @@ export async function deleteMiFoto() {
     if (!res.ok) throw await errorDe(res)
 }
 
+// GET /api/carga/docentes/{id}?periodoId= (carga horaria de un docente en un período)
+export const getCargaDocente = (docenteId, periodoId) =>
+    request(`/carga/docentes/${docenteId}?periodoId=${periodoId}`)
+
+// GET /api/carga/docentes?periodoId= (totales de todos los docentes en un período)
+export const getCargaPorPeriodo = (periodoId) =>
+    request(`/carga/docentes?periodoId=${periodoId}`)
+
 // GET /api/coordinadores/me?correo=...
 export const getMiPerfilCoordinador = (correo) =>
     request(`/coordinadores/me?correo=${encodeURIComponent(correo)}`)

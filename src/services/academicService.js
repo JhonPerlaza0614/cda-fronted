@@ -226,7 +226,8 @@ export async function createAsignatura(asignatura) {
     es_complementaria: Boolean(asignatura.es_complementaria),
     es_basica: Boolean(asignatura.es_basica),
     facultad: asignatura.facultad ? asignatura.facultad.trim() : null,
-    id_facultad: asignatura.id_facultad ? parseInt(asignatura.id_facultad, 10) : null
+    id_facultad: asignatura.id_facultad ? parseInt(asignatura.id_facultad, 10) : null,
+    horas_semanales: Number.isInteger(asignatura.horas_semanales) ? asignatura.horas_semanales : null
   }
 
   // Las escrituras deben pasar siempre por el backend para que se apliquen
@@ -250,6 +251,9 @@ export async function updateAsignatura(code_course, changes) {
   if (changes.id_facultad !== undefined) {
     const facId = parseInt(changes.id_facultad, 10)
     payload.id_facultad = !isNaN(facId) ? facId : null
+  }
+  if (changes.horas_semanales !== undefined && changes.horas_semanales !== null) {
+    payload.horas_semanales = changes.horas_semanales
   }
   if (changes.facultad !== undefined) payload.facultad = changes.facultad ? changes.facultad.trim() : null
 
@@ -561,23 +565,23 @@ export async function getPensumHistory(code_program) {
       .order('fecha_desactivacion', { ascending: false })
     if (error) throw error
     const grouped = new Map()
-    ;(data || []).forEach(item => {
-      const current = grouped.get(item.version) || {
-        version: item.version,
-        fechaDesactivacion: item.fecha_desactivacion,
-        totalAsignaturas: 0,
-        numero_resolucion: item.numero_resolucion || null,
-        numero_semestres: item.numero_semestres || null,
-        editada: Boolean(item.editada),
-        fecha_edicion: item.fecha_edicion || null
-      }
-      current.totalAsignaturas += 1
-      if (item.editada) current.editada = true
-      if (item.fecha_edicion && (!current.fecha_edicion || item.fecha_edicion > current.fecha_edicion)) {
-        current.fecha_edicion = item.fecha_edicion
-      }
-      grouped.set(item.version, current)
-    })
+      ; (data || []).forEach(item => {
+        const current = grouped.get(item.version) || {
+          version: item.version,
+          fechaDesactivacion: item.fecha_desactivacion,
+          totalAsignaturas: 0,
+          numero_resolucion: item.numero_resolucion || null,
+          numero_semestres: item.numero_semestres || null,
+          editada: Boolean(item.editada),
+          fecha_edicion: item.fecha_edicion || null
+        }
+        current.totalAsignaturas += 1
+        if (item.editada) current.editada = true
+        if (item.fecha_edicion && (!current.fecha_edicion || item.fecha_edicion > current.fecha_edicion)) {
+          current.fecha_edicion = item.fecha_edicion
+        }
+        grouped.set(item.version, current)
+      })
     return [...grouped.values()]
   }
 }
