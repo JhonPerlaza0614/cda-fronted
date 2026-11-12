@@ -95,15 +95,20 @@ export async function reactivarCurso(cursoId, justificacion) {
 }
 
 /** Designa o desasigna un docente a un curso programado existente. */
-export async function asignarDocenteACurso(cursoId, idDocente) {
+export async function asignarDocenteACurso(cursoId, idDocente, reemplazarDocente = false) {
   return await requestBackend(`/programacion/cursos/${cursoId}/docente`, {
     method: 'PATCH',
-    body: JSON.stringify({ idDocente: idDocente ? Number(idDocente) : null })
+    body: JSON.stringify({
+      idDocente: idDocente ? Number(idDocente) : null,
+      reemplazarDocente: Boolean(reemplazarDocente)
+    })
   })
 }
 
 /** Designa o desasigna un docente a una materia asegurando el curso programado. */
-export async function asignarDocentePorMateria({ periodoId, codeProgram, codeCourse, semestre, idDocente }) {
+export async function asignarDocentePorMateria({
+  periodoId, codeProgram, codeCourse, semestre, idDocente, reemplazarDocente = false
+}) {
   return await requestBackend('/programacion/asignar-docente', {
     method: 'POST',
     body: JSON.stringify({
@@ -111,7 +116,8 @@ export async function asignarDocentePorMateria({ periodoId, codeProgram, codeCou
       codeProgram,
       codeCourse,
       semestre: Number(semestre),
-      idDocente: idDocente ? Number(idDocente) : null
+      idDocente: idDocente ? Number(idDocente) : null,
+      reemplazarDocente: Boolean(reemplazarDocente)
     })
   })
 }

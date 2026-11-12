@@ -128,6 +128,7 @@ CREATE TABLE public.docentes (
   updated_at timestamp without time zone NOT NULL DEFAULT now(),
   correo_personal character varying,
   id_facultad integer,
+  celular character varying CHECK (celular IS NULL OR celular::text ~ '^[0-9]{7,10}$'::text),
   CONSTRAINT docentes_pkey PRIMARY KEY (id),
   CONSTRAINT fk_docentes_programa FOREIGN KEY (code_program) REFERENCES public.programas(code_program),
   CONSTRAINT docentes_id_facultad_fkey FOREIGN KEY (id_facultad) REFERENCES public.Facultad(id)
@@ -202,10 +203,8 @@ CREATE TABLE public.periodos (
   plazo_docentes_inicio timestamp with time zone,
   CONSTRAINT periodos_pkey PRIMARY KEY (id)
 );
-
-
 CREATE TABLE public.cohortes_periodo (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  id bigint NOT NULL DEFAULT nextval('cohortes_periodo_id_seq'::regclass),
   periodo_id bigint NOT NULL,
   code_program character varying NOT NULL,
   semestre integer NOT NULL CHECK (semestre >= 1 AND semestre <= 20),
@@ -216,12 +215,10 @@ CREATE TABLE public.cohortes_periodo (
   updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT cohortes_periodo_pkey PRIMARY KEY (id),
   CONSTRAINT fk_cohortes_periodo FOREIGN KEY (periodo_id) REFERENCES public.periodos_academicos(id),
-  CONSTRAINT fk_cohortes_programa FOREIGN KEY (code_program) REFERENCES public.programas(code_program),
-  CONSTRAINT uq_cohorte_programa_periodo_semestre_jornada UNIQUE (periodo_id, code_program, semestre, jornada)
+  CONSTRAINT fk_cohortes_programa FOREIGN KEY (code_program) REFERENCES public.programas(code_program)
 );
-
 CREATE TABLE public.cursos_programacion (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  id bigint NOT NULL DEFAULT nextval('cursos_programacion_id_seq'::regclass),
   periodo_id bigint NOT NULL,
   code_program character varying NOT NULL,
   code_course character varying NOT NULL,
@@ -235,10 +232,60 @@ CREATE TABLE public.cursos_programacion (
   estado character varying NOT NULL DEFAULT 'PROGRAMADO'::character varying CHECK (estado::text = ANY (ARRAY['PROGRAMADO'::character varying, 'ASIGNADO'::character varying, 'EXCLUIDO'::character varying]::text[])),
   created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  justificacion_exclusion character varying,
+  excluido_por character varying,
+  fecha_exclusion timestamp with time zone,
   CONSTRAINT cursos_programacion_pkey PRIMARY KEY (id),
   CONSTRAINT fk_cursos_periodo FOREIGN KEY (periodo_id) REFERENCES public.periodos_academicos(id),
   CONSTRAINT fk_cursos_programa FOREIGN KEY (code_program) REFERENCES public.programas(code_program),
   CONSTRAINT fk_cursos_asignatura FOREIGN KEY (code_course) REFERENCES public.asignaturas(code_course),
-  CONSTRAINT fk_cursos_docente FOREIGN KEY (id_docente) REFERENCES public.docentes(id),
-  CONSTRAINT uq_curso_periodo_programa_materia_jornada UNIQUE (periodo_id, code_program, code_course, jornada)
+  CONSTRAINT fk_cursos_docente FOREIGN KEY (id_docente) REFERENCES public.docentes(id)
+);
+CREATE TABLE public.docente_asignatura (
+  id bigint NOT NULL DEFAULT nextval('docente_asignatura_id_seq'::regclass),
+  docente_id bigint NOT NULL,
+  code_course character varying NOT NULL,
+  periodo_id bigint,
+  origen character varying NOT NULL DEFAULT 'MANUAL'::character varying CHECK (origen::text = ANY (ARRAY['MANUAL'::character varying, 'PROGRAMACION'::character varying]::text[])),
+  activo boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  desactivado_at timestamp with time zone,
+  id_facultad integer NOT NULL,
+  CONSTRAINT docente_asignatura_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_docente_asignatura_docente FOREIGN KEY (docente_id) REFERENCES public.docentes(id),
+  CONSTRAINT fk_docente_asignatura_asignatura FOREIGN KEY (code_course) REFERENCES public.asignaturas(code_course),
+  CONSTRAINT fk_docente_asignatura_periodo FOREIGN KEY (periodo_id) REFERENCES public.periodos_academicos(id),
+  CONSTRAINT fk_docente_asignatura_facultad FOREIGN KEY (id_facultad) REFERENCES public.Facultad(id)
+);
+CREATE TABLE public.bitacora (
+  id bigint NOT NULL DEFAULT nextval('bitacora_id_seq'::regclass),
+  fecha timestamp with time zone NOT NULL DEFAULT now(),
+  usuario_correo character varying,
+  usuario_rol character varying CHECK (usuario_rol IS NULL OR (usuario_rol::text = ANY (ARRAY['ADMIN'::character varying, 'COORDINADOR'::character varying, 'DOCENTE'::character varying]::text[]))),
+  operador_nombre character varying,
+  accion character varying NOT NULL,
+  entidad character varying NOT NULL,
+  entidad_id character varying,
+  periodo_id bigint,
+  valor_anterior jsonb,
+  valor_nuevo jsonb,
+  resultado character varying CHECK (resultado IS NULL OR (resultado::text = ANY (ARRAY['ACEPTADO'::character varying, 'RECHAZADO'::character varying]::text[]))),
+  motivo character varying,
+  CONSTRAINT bitacora_pkey PRIMARY KEY (id),
+  CONSTRAINT bitacora_periodo_id_fkey FOREIGN KEY (periodo_id) REFERENCES public.periodos_academicos(id)
+);
+CREATE TABLE public.evaluaciones_docentes (
+  id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
+  docente_id bigint NOT NULL,
+  code_course character varying NOT NULL,
+  periodo_id bigint NOT NULL,
+  calificacion numeric(4,2) NOT NULL CHECK (calificacion >= 0 AND calificacion <= 5),
+  created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT evaluaciones_docentes_pkey PRIMARY KEY (id),
+  CONSTRAINT uq_evaluacion_docente_asignatura_periodo UNIQUE (docente_id, code_course, periodo_id),
+  CONSTRAINT fk_evaluacion_docente FOREIGN KEY (docente_id) REFERENCES public.docentes(id),
+  CONSTRAINT fk_evaluacion_asignatura FOREIGN KEY (code_course) REFERENCES public.asignaturas(code_course),
+  CONSTRAINT fk_evaluacion_periodo FOREIGN KEY (periodo_id) REFERENCES public.periodos_academicos(id)
 );

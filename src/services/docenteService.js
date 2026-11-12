@@ -1,6 +1,7 @@
 // Servicio de Docentes (HU-026 y HU-022)
 // Misma URL base que usa el login (ya incluye /api) y mismo token de sesión.
 import { getAuthToken, notifySessionExpired } from './authService'
+import { supabase } from '../supabase'
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api').replace(/\/+$/, '')
 
@@ -48,6 +49,48 @@ async function request(path, options = {}) {
 
 // GET /api/docentes
 export const getDocentes = () => request('/docentes')
+
+// Última evaluación registrada en el período anterior para una asignatura.
+export async function getEvaluacionesDocentes(periodoId, codeCourse) {
+    try {
+        return await request(`/docentes/evaluaciones?periodoId=${encodeURIComponent(periodoId)}&codeCourse=${encodeURIComponent(codeCourse)}`)
+    } catch (err) {
+        console.warn('Backend no disponible para evaluaciones docentes, fallback Supabase:', err.message)
+        const { data: periodos, error: periodosError } = await supabase
+            .from('periodos_academicos')
+            .select('id, nombre, fecha_inicio_semestre')
+            .order('fecha_inicio_semestre', { ascending: false })
+        if (periodosError) throw periodosError
+        const actual = (periodos || []).find(p => String(p.id) === String(periodoId))
+        const anterior = (periodos || []).find(p => actual
+            && p.fecha_inicio_semestre < actual.fecha_inicio_semestre)
+        if (!anterior) return []
+
+        const { data, error } = await supabase
+            .from('evaluaciones_docentes')
+            .select('docente_id, code_course, periodo_id, calificacion')
+            .eq('periodo_id', anterior.id)
+            .eq('code_course', codeCourse)
+        if (error) throw error
+        return (data || []).map(evaluacion => ({
+            ...evaluacion,
+            periodo_nombre: anterior.nombre
+        }))
+    }
+}
+
+export const getEvaluacionesPorDocente = (docenteId, periodoId) =>
+    request(`/docentes/${docenteId}/evaluaciones?periodoId=${encodeURIComponent(periodoId)}`)
+
+export const guardarEvaluacionDocente = (docenteId, periodoId, codeCourse, calificacion) =>
+    request(`/docentes/${docenteId}/evaluacion`, {
+        method: 'PUT',
+        body: JSON.stringify({
+            periodoId: Number(periodoId),
+            codeCourse,
+            calificacion: Number(calificacion),
+        }),
+    })
 
 // POST /api/docentes
 export const createDocente = (payload) =>

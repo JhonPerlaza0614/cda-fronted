@@ -318,6 +318,7 @@ export default function App({ user, onLogout }) {
               <PlantillaView
                 programas={programas}
                 onShowToast={showToast}
+                isAdmin={isAdmin}
                 onRegistrarDisponibilidad={isAdmin ? handleRegistrarDisponibilidad : undefined}
               />
             )}

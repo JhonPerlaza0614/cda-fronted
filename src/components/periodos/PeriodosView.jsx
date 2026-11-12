@@ -84,7 +84,12 @@ function PeriodoForm({ initialValue, onCancel, onSaved, onShowToast }) {
       const saved = isEditing
         ? await updatePeriodo(initialValue.id, toPayload(form))
         : await createPeriodo(toPayload(form))
-      onShowToast(isEditing ? 'Período académico actualizado' : 'Período académico creado', 'success')
+      onShowToast(
+        isEditing
+          ? 'Período académico actualizado'
+          : 'Período académico creado. Recuerde renovar las calificaciones docentes.',
+        'success',
+      )
       onSaved(saved)
     } catch (error) {
       onShowToast(error.message || (isEditing ? 'No se pudo actualizar el período' : 'No se pudo crear el período'), 'error')
@@ -329,7 +334,24 @@ export default function PeriodosView({ user, onShowToast }) {
         <>
           <h3 className="periodo-seccion-titulo">Período vigente</h3>
           {vigente ? (
-            <PeriodoCard {...propsTarjeta(vigente)} />
+            <>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.6rem',
+                marginBottom: '0.8rem',
+                padding: '0.75rem 1rem',
+                border: '1px solid #f59e0b',
+                borderRadius: '8px',
+                background: '#fffbeb',
+                color: '#92400e',
+                fontSize: '0.88rem',
+              }}>
+                <strong>Recordatorio:</strong>
+                <span>renueve la calificación docente para este período.</span>
+              </div>
+              <PeriodoCard {...propsTarjeta(vigente)} />
+            </>
           ) : (
             <div className="periodo-vacio">No hay período vigente</div>
           )}
