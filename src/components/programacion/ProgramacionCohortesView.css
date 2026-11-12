@@ -717,6 +717,13 @@
   color: #92400e;
 }
 
+.pc-alert-info {
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  align-items: center;
+}
+
 .pc-alert-warning p {
   margin: 0.25rem 0 0.5rem 0;
 }
@@ -919,9 +926,75 @@
   z-index: 1100;
 }
 
+/* HU-059: cupos de estudiantes */
+.pc-cupos-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 90px;
+}
+
+.pc-input-cupos {
+  width: 80px;
+  padding: 0.4rem 0.5rem;
+  text-align: right;
+}
+
+.pc-input-cupos:disabled {
+  background-color: #f1f5f9;
+  color: #475569;
+  cursor: not-allowed;
+}
+
+.pc-acciones-grupo {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.pc-input-error {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+.pc-cupos-error {
+  color: #b91c1c;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  max-width: 150px;
+}
+
+.pc-cupos-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.6rem;
+}
+
+.pc-cupos-actions-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 @media (max-width: 720px) {
   .pc-table-compacta th:nth-child(2),
   .pc-table-compacta td:nth-child(2) {
     display: none;
+  }
+
+  .pc-cupos-actions-bar {
+    align-items: stretch;
+  }
+
+  .pc-cupos-actions-buttons {
+    justify-content: flex-end;
   }
 }

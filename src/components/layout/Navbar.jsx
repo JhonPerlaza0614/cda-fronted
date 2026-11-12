@@ -15,6 +15,7 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
   const canSeePlantilla = isAdmin
   const canSeeAsociaciones = isAdmin
   const canSeePeriodos = isAdmin
+  const canSeeProgramacion = isAdmin || isCoordinador
   const canSeeBitacora = isAdmin
 
   const rolLabel = rol === 1
@@ -174,14 +175,14 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               </button>
             )}
 
-            {canSeePeriodos && (
+            {canSeeProgramacion && (
               <button
                 className={`nav-tab-btn ${activeTab === 'programacion_cohortes' ? 'active' : ''}`}
                 onClick={() => setActiveTab('programacion_cohortes')}
-                title="Programación y Cohortes"
+                title={isCoordinador ? 'Cupos de estudiantes' : 'Programación y Cohortes'}
               >
                 <CalendarCheck size={18} />
-                <span>Programación y Cohortes</span>
+                <span>{isCoordinador ? 'Cupos de estudiantes' : 'Programación y Cohortes'}</span>
               </button>
             )}
 
