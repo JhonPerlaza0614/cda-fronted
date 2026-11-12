@@ -110,33 +110,47 @@
   min-width: 280px;
 }
 
-/* Barra de Semestres (donde escojan un semestre) */
-/* HU-016: semestres a la izquierda y filtros a la derecha; en pantallas angostas los filtros pasan debajo */
-.asig-doc-semestres-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem 1rem;
-  margin-bottom: 1.5rem;
-}
-
+/* Barra de Semestres (donde escojan un semestre), de ancho completo */
 .asig-doc-semestres-bar {
   display: flex;
   gap: 0.5rem;
   overflow-x: auto;
   padding-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
   scrollbar-width: thin;
-  flex: 1 1 auto;
-  min-width: 0;
   max-width: 100%;
 }
 
-.asig-doc-filtros {
+/* HU-016: barra de filtros propia, entre la cabecera y la tarjeta del programa.
+   Alineados a la derecha: Jornada primero y Docentes después; en pantallas angostas, uno debajo
+   del otro y también a la derecha. */
+.asig-doc-filtros-bar {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: var(--radius-md, 12px);
+  padding: 0.85rem 1.25rem;
+  margin-bottom: 1.5rem;
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 0.75rem 1.5rem;
+}
+
+/* HU-016: con «Ambas» puede haber dos tarjetas de programa, una debajo de la otra */
+.asig-doc-programas {
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
-  margin-left: auto;
-  padding-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.asig-doc-programas .asig-doc-program-bar {
+  margin-bottom: 0;
+}
+
+.asig-doc-sin-jornada {
+  margin-bottom: 1.5rem;
 }
 
 .asig-doc-filtro {
@@ -198,13 +212,14 @@
 }
 
 @media (max-width: 720px) {
-  .asig-doc-semestres-row {
+  .asig-doc-filtros-bar {
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-end;
   }
 
-  .asig-doc-filtros {
-    margin-left: 0;
+  .asig-doc-filtros-bar .asig-doc-program-select {
+    min-width: 0;
+    width: 100%;
   }
 
   .asig-doc-segmentado {

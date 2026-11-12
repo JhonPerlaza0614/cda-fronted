@@ -289,6 +289,7 @@ export default function App({ user, onLogout }) {
                 isCoordinador={isCoordinador}
                 coordinadorPerfil={coordinadorPerfil}
                 programas={isCoordinador ? programasParaPensum : programas}
+                programasTodos={programas}
                 pensumList={pensumList}
                 onShowToast={showToast}
               />
