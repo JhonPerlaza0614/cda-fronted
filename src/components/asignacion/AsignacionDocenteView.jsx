@@ -74,10 +74,12 @@ function filtrarMaterias(materias, { jornada, docentes }) {
   })
 }
 
-/** Texto del grupo: codigoCurso si existe, si no el número de grupo (HU-046). */
+/**
+ * Texto del grupo: solo el número de grupo asignado por HU-046 (ej. «53»), sin el código de
+ * la asignatura (no «204133C-53») ni la palabra «Grupo», igual que en «Cursos Programados» (2026-11-06).
+ */
 function textoGrupo(materia) {
-  if (materia.codigoCurso) return materia.codigoCurso
-  if (materia.grupo != null) return `Grupo ${materia.grupo}`
+  if (materia.grupo != null) return String(materia.grupo)
   return 'Sin grupo'
 }
 
@@ -291,7 +293,6 @@ export default function AsignacionDocenteView({
         semestre: c.semestre,
         // El grupo lo asigna HU-046; no se inventa un número.
         grupo: c.grupo ?? null,
-        codigoCurso: c.codigoCurso || null,
         jornada,
         idDocente: c.idDocente,
         nombreDocente: c.nombreDocente,
@@ -316,7 +317,6 @@ export default function AsignacionDocenteView({
         credits: p.credits,
         semestre: p.semestre,
         grupo: null,
-        codigoCurso: null,
         jornada: jornadaPrograma,
         idDocente: null,
         nombreDocente: null,
