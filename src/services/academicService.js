@@ -811,6 +811,10 @@ export async function getCoordinadores() {
   try {
     return await requestBackend('/coordinadores')
   } catch (err) {
+    // Si el backend respondió (401, 403, 500…), no se consulta Supabase: un «sin permiso»
+    // no debe convertirse en una consulta directa a la base. Solo se usa el respaldo
+    // cuando el backend no está disponible (error de red, sin status).
+    if (err?.status) throw err
     console.warn('Backend no disponible para coordinadores, fallback Supabase:', err.message)
     const { data, error } = await supabase
       .from('coordinadores')
