@@ -155,16 +155,36 @@ export function logout() {
   }
 }
 
-// Interceptor global para interceptar respuestas 401 de cualquier solicitud y redirigir al login
+/**
+ * Indica si la URL apunta a la API del backend (BACKEND_URL). Funciona con una URL absoluta
+ * (http://localhost:8080/api) o relativa (/<subdominio>/api en SIA).
+ */
+function esPeticionAlBackend(url) {
+  try {
+    const base = window.location.href
+    const destino = new URL(url, base)
+    const api = new URL(BACKEND_URL, base)
+    const rutaApi = api.pathname.replace(/\/+$/, '')
+    return destino.origin === api.origin
+      && (destino.pathname === rutaApi || destino.pathname.startsWith(`${rutaApi}/`))
+  } catch {
+    return false
+  }
+}
+
+// Interceptor global: un 401 de la API del backend cierra la sesión y lleva al login.
+// Solo cuenta el backend: un 401 de otro servicio (por ejemplo, el respaldo directo a Supabase,
+// que responde 401 cuando la clave pública no tiene permiso sobre una tabla) no significa que
+// el token de la aplicación haya vencido, y antes cerraba la sesión del coordinador en «Programas».
 if (typeof window !== 'undefined' && window.fetch && !window.__cdaAuthInterceptorInstalled) {
   window.__cdaAuthInterceptorInstalled = true
   const originalFetch = window.fetch
   window.fetch = async function (...args) {
     const response = await originalFetch.apply(this, args)
     if (response.status === 401) {
-      const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '')
-      // No disparar si la petición proviene del propio flujo de autenticación
-      if (!url.includes('/auth/')) {
+      const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || String(args[0] || ''))
+      // No disparar en el propio flujo de autenticación ni en servicios externos
+      if (esPeticionAlBackend(url) && !url.includes('/auth/')) {
         notifySessionExpired('Tu sesión ha expirado o ya no es válida. Inicia sesión de nuevo.')
       }
     }
