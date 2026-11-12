@@ -196,9 +196,9 @@ export default function MiPerfilView({ user, onShowToast }) {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
-                    <Row icon={<UserCircle size={15} />} label="Nombre">{user.nombre || '—'}</Row>
-                    <Row icon={<UserCircle size={15} />} label="Apellido">{user.apellido || '—'}</Row>
-                    <Row icon={<Mail size={15} />} label="Correo">{user.email || '—'}</Row>
+                    <Row icon={<UserCircle size={15} />} label="Nombres">{user.nombre || '—'}</Row>
+                    <Row icon={<UserCircle size={15} />} label="Apellidos">{user.apellido || '—'}</Row>
+                    <Row icon={<Mail size={15} />} label="Correo Institucional">{user.email || '—'}</Row>
                     <Row icon={<Shield size={15} />} label="Rol">{rolNombre}</Row>
                 </div>
             </div>

@@ -21,7 +21,6 @@ import { getPeriodos, getFacultades } from '../../services/academicService'
 import {
   getProgramacion,
   asignarDocenteACurso,
-  asignarDocentePorMateria
 } from '../../services/programacionService'
 import { consultarDisponibilidadesPeriodo } from '../../services/DisponibilidadService'
 import './AsignacionDocenteView.css'
@@ -436,8 +435,7 @@ export default function AsignacionDocenteView({
     [pensumList]
   )
 
-  // Materias de cada semestre: por cada programa visible, sus cursos programados y las asignaturas
-  // de su malla que aún no tienen curso.
+    // Materias de cada semestre: por cada programa visible, solo sus cursos programados.
   const materiasPorSemestre = useMemo(() => {
     const porSemestre = {}
     for (let s = 1; s <= totalSemestres; s++) porSemestre[s] = []
@@ -446,17 +444,15 @@ export default function AsignacionDocenteView({
       porSemestre[semestre].push(item)
     }
 
+    // Solo cursos ya generados en cursos_programacion: el backend no asigna docente
+    // a materias de la malla sin curso. La clave es el id del curso: con «Ambas» una misma
+    // asignatura puede aparecer en dos programas o en dos jornadas y no se pisan.
     programasVisibles.forEach(prog => {
       const codeProgram = prog.code_program
-      const codigosConCurso = new Set()
-
-      // 1. Cursos de cursos_programacion. La clave es el id del curso: con «Ambas» una misma
-      //    asignatura puede aparecer en dos programas o en dos jornadas y no se pisan.
       cursosProgramados
         .filter(c => c.codeProgram === codeProgram)
         .forEach(c => {
           const jornada = normalizarJornada(c.jornada)
-          codigosConCurso.add(c.codeCourse)
           agregar(Number(c.semestre), {
             clave: c.id != null ? `curso-${c.id}` : `${codeProgram}|${c.codeCourse}|${jornada}|${c.grupo ?? ''}`,
             id: c.id,
@@ -474,33 +470,10 @@ export default function AsignacionDocenteView({
             existeEnProgramacion: true,
           })
         })
-
-      // 2. Asignaturas de la malla sin curso (por ejemplo, la malla cambió después de generar).
-      //    Toman la jornada del programa; con AMBAS aparecen con cualquier filtro.
-      const jornadaPrograma = normalizarJornada(prog.jornada)
-      mallaDe(codeProgram).forEach(p => {
-        if (codigosConCurso.has(p.code_course)) return
-        const semestre = Number(p.semestre)
-        agregar(semestre, {
-          clave: `malla-${codeProgram}-${p.code_course}-${semestre}`,
-          id: null,
-          codeProgram,
-          codeCourse: p.code_course,
-          nameCourse: p.name_course,
-          credits: p.credits,
-          semestre: p.semestre,
-          grupo: null,
-          jornada: jornadaPrograma,
-          idDocente: null,
-          nombreDocente: null,
-          estado: 'PROGRAMADO',
-          existeEnProgramacion: false,
-        })
-      })
     })
 
     return porSemestre
-  }, [cursosProgramados, programasVisibles, mallaDe, totalSemestres])
+  }, [cursosProgramados, programasVisibles, totalSemestres])
 
   // Materias del semestre escogido, con los filtros aplicados
   const materiasDelSemestre = useMemo(
@@ -645,20 +618,7 @@ export default function AsignacionDocenteView({
     setAsignandoId(docente.id)
 
     try {
-      if (materiaParaDesignar.id) {
-        // Curso ya programado
-        await asignarDocenteACurso(materiaParaDesignar.id, docente.id, Boolean(reemplazando))
-      } else {
-        // Materia de pensum que asegura el curso programado
-        await asignarDocentePorMateria({
-          periodoId: periodoActivo.id,
-          codeProgram: materiaParaDesignar.codeProgram,
-          codeCourse: materiaParaDesignar.codeCourse,
-          semestre: selectedSemestre,
-          idDocente: docente.id,
-          reemplazarDocente: Boolean(reemplazando)
-        })
-      }
+      await asignarDocenteACurso(materiaParaDesignar.id, docente.id, Boolean(reemplazando))
 
       onShowToast?.(`Docente ${docente.nombres} ${docente.apellidos} asignado correctamente a ${materiaParaDesignar.nameCourse}`, 'success')
       const programaDelCurso = materiaParaDesignar.codeProgram
@@ -889,7 +849,6 @@ export default function AsignacionDocenteView({
                   {subtitulo}
                 </span>
               </button>
-            )
           })}
         </div>
       )}

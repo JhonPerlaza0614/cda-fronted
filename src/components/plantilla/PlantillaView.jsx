@@ -35,7 +35,11 @@ import {
   getFacultades
 } from '../../services/academicService'
 
-export default function PlantillaView({ programas = [], onShowToast, onRegistrarDisponibilidad, isAdmin = false }) {
+
+import { getCargaPorPeriodo } from '../../services/docenteService'
+import CargaDocente, { CargaBarra } from '../cargaDocente/CargaDocente'
+
+export default function PlantillaView({ programas = [], onShowToast, onRegistrarDisponibilidad }) {
   // --- Estados de datos ---
   const [coordinadores, setCoordinadores] = useState([])
   const [docentes, setDocentes] = useState([])
@@ -43,6 +47,12 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
   const [tiposContratoList, setTiposContratoList] = useState([])
   const [facultadesList, setFacultadesList] = useState([])
   const [loading, setLoading] = useState(true)
+
+  // --- Carga horaria por período ---
+  const [periodos, setPeriodos] = useState([])
+  const [periodoId, setPeriodoId] = useState('')
+  const [cargaPorDocente, setCargaPorDocente] = useState({}) // docente_id -> resumen
+  const [limiteCarga, setLimiteCarga] = useState(20)
 
   // --- Filtros y Navegación ---
   const [activeSubTab, setActiveSubTab] = useState('todos') // 'todos' | 'docentes' | 'coordinadores'
@@ -87,6 +97,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
     numero_documento: '',
     correo_institucional: '',
     telefono: '',
+    celular: '',
     tipo_docente: 'NOMBRADO',
     categoria: 'AUXILIAR',
     id_facultad: '',
@@ -131,6 +142,41 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
     loadAllData()
   }, [loadAllData])
 
+  // Períodos: el vigente queda seleccionado por defecto
+  useEffect(() => {
+    let cancelado = false
+    getPeriodos()
+      .then(lista => {
+        if (cancelado) return
+        setPeriodos(lista)
+        const inicial = lista.find(p => p.vigente) || lista[0]
+        if (inicial) setPeriodoId(String(inicial.id))
+      })
+      .catch(err => console.warn('No se pudieron cargar los períodos:', err))
+    return () => { cancelado = true }
+  }, [])
+
+  // Horas de todos los docentes en el período elegido (una sola llamada)
+  useEffect(() => {
+    if (!periodoId) {
+      setCargaPorDocente({})
+      return undefined
+    }
+    let cancelado = false
+    getCargaPorPeriodo(periodoId)
+      .then(filas => {
+        if (cancelado) return
+        const mapa = {}
+        filas.forEach(f => { mapa[f.docente_id] = f })
+        setCargaPorDocente(mapa)
+        if (filas[0]) setLimiteCarga(filas[0].limite)
+      })
+      .catch(err => {
+        if (!cancelado && onShowToast) onShowToast('No se pudo cargar la carga horaria: ' + err.message, 'error')
+      })
+    return () => { cancelado = true }
+  }, [periodoId, onShowToast])
+
   // --- Normalizar y Unificar Lista de Perfiles ---
   const unifiedList = useMemo(() => {
     const coordsUnified = coordinadores.map(c => ({
@@ -166,6 +212,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
       correoInstitucional: d.correo_institucional,
       correoPersonal: null,
       telefono: d.telefono,
+      celular: d.celular,
       codeProgram: d.code_program,
       idFacultad: d.id_facultad,
       nombreFacultad:
@@ -261,8 +308,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
 
       if (onShowToast) {
         onShowToast(
-          `${profile.tipoRol === 'COORDINADOR' ? 'Coordinador' : 'Docente'} marcado como ${
-            nuevoEstado ? 'Activo' : 'Inactivo'
+          `${profile.tipoRol === 'COORDINADOR' ? 'Coordinador' : 'Docente'} marcado como ${nuevoEstado ? 'Activo' : 'Inactivo'
           }`,
           'success'
         )
@@ -423,6 +469,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
       numero_documento: '',
       correo_institucional: '',
       telefono: '',
+      celular: '',
       tipo_docente: 'NOMBRADO',
       categoria: 'AUXILIAR',
       id_facultad: facultadesList[0]?.id ? String(facultadesList[0].id) : '',
@@ -443,6 +490,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         numero_documento: docenteFormData.numero_documento.trim(),
         correo_institucional: docenteFormData.correo_institucional.trim().toLowerCase(),
         telefono: docenteFormData.telefono.trim() || null,
+        celular: docenteFormData.celular.trim() || null,
         tipo_docente: docenteFormData.tipo_docente,
         categoria: docenteFormData.categoria,
         id_facultad: docenteFormData.id_facultad ? parseInt(docenteFormData.id_facultad, 10) : null,
@@ -903,6 +951,31 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
           </select>
         </div>
 
+        {/* Período para la carga horaria */}
+        <div style={{ flex: '0 1 200px' }}>
+          <select
+            value={periodoId}
+            onChange={(e) => setPeriodoId(e.target.value)}
+            title="Período para la carga horaria de los docentes"
+            style={{
+              width: '100%',
+              padding: '0.55rem 0.75rem',
+              backgroundColor: '#111827',
+              border: '1px solid #374151',
+              borderRadius: '6px',
+              color: '#f9fafb',
+              fontSize: '0.9rem',
+            }}
+          >
+            {periodos.length === 0 && <option value="">Sin períodos</option>}
+            {periodos.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.nombre}{p.vigente ? ' (vigente)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Reset filtros */}
         {(searchTerm || filterPrograma || filterEstado !== 'todos' || filterCategoria) && (
           <button
@@ -1147,6 +1220,16 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                       </span>
                     </div>
 
+                    {!isCoord && periodoId && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ color: '#9ca3af', flexShrink: 0 }}>Carga:</span>
+                        <CargaBarra
+                          total={cargaPorDocente[profile.rawId]?.total_horas ?? 0}
+                          limite={cargaPorDocente[profile.rawId]?.limite ?? limiteCarga}
+                        />
+                      </div>
+                    )}
+
                     {/* Correo institucional */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
                       <Mail size={14} style={{ color: '#9ca3af', flexShrink: 0 }} />
@@ -1179,69 +1262,68 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                  <button
-                    className="btn-secondary"
-                    onClick={() => setSelectedProfile(profile)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.4rem 0.75rem',
-                      fontSize: '0.82rem',
-                      backgroundColor: '#374151',
-                      color: '#f9fafb',
-                      border: '1px solid #4b5563',
-                    }}
-                  >
-                    <Eye size={14} />
-                    <span>Ver Perfil</span>
-                  </button>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => setSelectedProfile(profile)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        padding: '0.4rem 0.75rem',
+                        fontSize: '0.82rem',
+                        backgroundColor: '#374151',
+                        color: '#f9fafb',
+                        border: '1px solid #4b5563',
+                      }}
+                    >
+                      <Eye size={14} />
+                      <span>Ver Perfil</span>
+                    </button>
 
-                  {/* Acciones de disponibilidad para perfiles docentes. */}
-                  {!isCoord && (onRegistrarDisponibilidad || isAdmin) && (
-                    <div style={{ position: 'relative' }}>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        disabled={!profile.activo}
-                        aria-haspopup="menu"
-                        aria-expanded={openActionsId === profile.id}
-                        onClick={() => setOpenActionsId(current => current === profile.id ? null : profile.id)}
-                        title={profile.activo ? 'Más acciones para este docente' : 'El docente debe estar activo para registrar disponibilidad'}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.4rem',
-                          padding: '0.4rem 0.75rem',
-                          fontSize: '0.82rem',
-                          backgroundColor: '#374151',
-                          color: profile.activo ? '#f9fafb' : '#9ca3af',
-                          border: '1px solid #4b5563',
-                          opacity: profile.activo ? 1 : 0.55,
-                          cursor: profile.activo ? 'pointer' : 'not-allowed',
-                        }}
-                      >
-                        <span>Acciones</span>
-                        <ChevronDown size={14} />
-                      </button>
-
-                      {openActionsId === profile.id && profile.activo && (
-                        <div
-                          role="menu"
+                    {/* Acciones de disponibilidad para perfiles docentes. */}
+                    {!isCoord && onRegistrarDisponibilidad && (
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          disabled={!profile.activo}
+                          aria-haspopup="menu"
+                          aria-expanded={openActionsId === profile.id}
+                          onClick={() => setOpenActionsId(current => current === profile.id ? null : profile.id)}
+                          title={profile.activo ? 'Más acciones para este docente' : 'El docente debe estar activo para registrar disponibilidad'}
                           style={{
-                            position: 'absolute',
-                            top: 'calc(100% + 6px)',
-                            right: 0,
-                            zIndex: 30,
-                            minWidth: '205px',
-                            padding: '0.35rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            padding: '0.4rem 0.75rem',
+                            fontSize: '0.82rem',
+                            backgroundColor: '#374151',
+                            color: profile.activo ? '#f9fafb' : '#9ca3af',
                             border: '1px solid #4b5563',
-                            borderRadius: '8px',
-                            backgroundColor: '#111827',
-                            boxShadow: '0 12px 24px rgba(0,0,0,0.28)',
+                            opacity: profile.activo ? 1 : 0.55,
+                            cursor: profile.activo ? 'pointer' : 'not-allowed',
                           }}
                         >
-                          {onRegistrarDisponibilidad && (
+                          <span>Acciones</span>
+                          <ChevronDown size={14} />
+                        </button>
+
+                        {openActionsId === profile.id && profile.activo && (
+                          <div
+                            role="menu"
+                            style={{
+                              position: 'absolute',
+                              top: 'calc(100% + 6px)',
+                              right: 0,
+                              zIndex: 30,
+                              minWidth: '205px',
+                              padding: '0.35rem',
+                              border: '1px solid #4b5563',
+                              borderRadius: '8px',
+                              backgroundColor: '#111827',
+                              boxShadow: '0 12px 24px rgba(0,0,0,0.28)',
+                            }}
+                          >
                             <button
                               type="button"
                               role="menuitem"
@@ -1269,37 +1351,10 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                               <CalendarPlus size={15} />
                               <span>Registrar disponibilidad</span>
                             </button>
-                          )}
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => handleOpenEvaluation(profile)}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.55rem',
-                                width: '100%',
-                                padding: '0.6rem 0.65rem',
-                                border: 0,
-                                borderRadius: '6px',
-                                background: 'transparent',
-                                color: '#fbbf24',
-                                textAlign: 'left',
-                                fontSize: '0.82rem',
-                                cursor: 'pointer',
-                              }}
-                              onMouseEnter={(event) => { event.currentTarget.style.backgroundColor = '#1f2937' }}
-                              onMouseLeave={(event) => { event.currentTarget.style.backgroundColor = 'transparent' }}
-                            >
-                              <Star size={15} />
-                              <span>Registrar calificación docente</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Acciones adicionales si es Coordinador */}
@@ -1634,8 +1689,41 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                       </a>
                     </div>
                   )}
+
+                  {selectedProfile.celular && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Phone size={16} style={{ color: '#9ca3af' }} />
+                      <span style={{ color: '#9ca3af' }}>Celular:</span>
+                      <a
+                        href={`tel:${selectedProfile.celular}`}
+                        style={{ color: '#93c5fd', textDecoration: 'none' }}
+                      >
+                        {selectedProfile.celular}
+                      </a>
+                    </div>
+                  )}
+
                 </div>
               </div>
+
+              {selectedProfile.tipoRol === 'DOCENTE' && (
+                <div>
+                  <h4
+                    style={{
+                      fontSize: '0.85rem',
+                      color: '#9ca3af',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      marginBottom: '0.6rem',
+                      borderBottom: '1px solid #374151',
+                      paddingBottom: '0.35rem',
+                    }}
+                  >
+                    Carga horaria
+                  </h4>
+                  <CargaDocente docenteId={selectedProfile.rawId} periodoId={periodoId} />
+                </div>
+              )}
 
               {/* Sección 4: Evaluación Docente (Solo para Docentes) */}
               {selectedProfile.tipoRol === 'DOCENTE' && (
@@ -1982,12 +2070,37 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                 <div className="form-group">
                   <label style={{ color: '#e5e7eb' }}>Teléfono</label>
                   <input
-                    type="text"
-                    placeholder="Ej. +57 312 987 6543"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="Ej. 6021234567"
                     value={docenteFormData.telefono}
-                    onChange={(e) => setDocenteFormData({ ...docenteFormData, telefono: e.target.value })}
+                    onChange={(e) => setDocenteFormData({
+                      ...docenteFormData,
+                      telefono: e.target.value.replace(/\D/g, '').slice(0, 10)
+                    })}
                     style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
                   />
+                </div>
+
+                {/* Celular */}
+                <div className="form-group">
+                  <label style={{ color: '#e5e7eb' }}>Celular</label>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="Ej. 3129876543"
+                    value={docenteFormData.celular}
+                    onChange={(e) => setDocenteFormData({
+                      ...docenteFormData,
+                      celular: e.target.value.replace(/\D/g, '').slice(0, 10)
+                    })}
+                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
+                  />
+                  <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
+                    Opcional. De 7 a 10 dígitos, sin espacios ni +57.
+                  </small>
                 </div>
 
                 {/* Tipo de Docente y Categoría */}
