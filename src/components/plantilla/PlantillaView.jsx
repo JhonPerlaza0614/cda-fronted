@@ -35,7 +35,7 @@ import {
   getFacultades
 } from '../../services/academicService'
 
-import { getPeriodos } from '../../services/periodosService'
+
 import { getCargaPorPeriodo } from '../../services/docenteService'
 import CargaDocente, { CargaBarra } from '../cargaDocente/CargaDocente'
 
