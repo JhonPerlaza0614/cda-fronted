@@ -19,6 +19,8 @@ import {
   ChevronDown,
   CalendarPlus
 } from 'lucide-react'
+import { getEvaluacionesPorDocente, guardarEvaluacionDocente } from '../../services/docenteService'
+import { getPeriodos, ESTADOS_PERIODO } from '../../services/periodosService'
 import {
   getCoordinadores,
   createCoordinador,
@@ -67,6 +69,11 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
   const [isDocenteModalOpen, setIsDocenteModalOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [openActionsId, setOpenActionsId] = useState(null)
+  const [evaluationProfile, setEvaluationProfile] = useState(null)
+  const [evaluationPeriod, setEvaluationPeriod] = useState(null)
+  const [evaluationCourses, setEvaluationCourses] = useState([])
+  const [evaluationLoading, setEvaluationLoading] = useState(false)
+  const [evaluationSaving, setEvaluationSaving] = useState(false)
 
   // Formulario de Coordinador
   const [coordFormData, setCoordFormData] = useState({
@@ -93,8 +100,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
     tipo_docente: 'NOMBRADO',
     categoria: 'AUXILIAR',
     id_facultad: '',
-    evaluacion_periodo: '',
-    evaluacion_valor: '',
   })
 
   // --- Carga inicial y recarga ---
@@ -217,8 +222,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
       categoria: d.categoria || 'No asignada',
       tipoContrato: d.tipo_docente || 'No asignado',
       activo: d.estado !== false,
-      evaluacionPeriodo: d.evaluacion_periodo,
-      evaluacionValor: d.evaluacion_valor,
       createdAt: d.created_at,
       rawObject: d,
     }))
@@ -311,6 +314,57 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
     } catch (err) {
       console.error('Error al alternar estado:', err)
       if (onShowToast) onShowToast('No se pudo actualizar el estado: ' + err.message, 'error')
+    }
+  }
+
+  const handleOpenEvaluation = async (profile) => {
+    setOpenActionsId(null)
+    setEvaluationProfile(profile)
+    setEvaluationCourses([])
+    setEvaluationLoading(true)
+    try {
+      const periodos = await getPeriodos()
+      const vigente = periodos.find(periodo => periodo.estado === ESTADOS_PERIODO.VIGENTE)
+      if (!vigente) throw new Error('No hay un período académico vigente')
+      setEvaluationPeriod(vigente)
+      const cursos = await getEvaluacionesPorDocente(profile.rawId, vigente.id)
+      setEvaluationCourses(Array.isArray(cursos)
+        ? cursos.map(curso => ({ ...curso, calificacion: curso.calificacion ?? '' }))
+        : [])
+    } catch (error) {
+      setEvaluationProfile(null)
+      onShowToast?.(error.message || 'No fue posible cargar la calificación docente', 'error')
+    } finally {
+      setEvaluationLoading(false)
+    }
+  }
+
+  const handleSaveEvaluation = async (event) => {
+    event.preventDefault()
+    if (!evaluationProfile || !evaluationPeriod || evaluationCourses.length === 0) {
+      onShowToast?.('El docente no tiene asignaturas del período anterior para calificar', 'error')
+      return
+    }
+    setEvaluationSaving(true)
+    try {
+      for (const curso of evaluationCourses) {
+        const value = Number(curso.calificacion)
+        if (!Number.isFinite(value) || value < 0 || value > 5) {
+          throw new Error(`La calificación de ${curso.nombre_asignatura} debe estar entre 0 y 5`)
+        }
+        await guardarEvaluacionDocente(
+          evaluationProfile.rawId,
+          evaluationPeriod.id,
+          curso.code_course,
+          value,
+        )
+      }
+      onShowToast?.(`Calificación guardada para ${evaluationProfile.nombre}`, 'success')
+      setEvaluationProfile(null)
+    } catch (error) {
+      onShowToast?.(error.message || 'No fue posible guardar la calificación', 'error')
+    } finally {
+      setEvaluationSaving(false)
     }
   }
 
@@ -416,8 +470,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
       tipo_docente: 'NOMBRADO',
       categoria: 'AUXILIAR',
       id_facultad: facultadesList[0]?.id ? String(facultadesList[0].id) : '',
-      evaluacion_periodo: '',
-      evaluacion_valor: '',
     })
     setIsDocenteModalOpen(true)
   }
@@ -438,8 +490,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         tipo_docente: docenteFormData.tipo_docente,
         categoria: docenteFormData.categoria,
         id_facultad: docenteFormData.id_facultad ? parseInt(docenteFormData.id_facultad, 10) : null,
-        evaluacion_periodo: docenteFormData.evaluacion_periodo.trim() || null,
-        evaluacion_valor: docenteFormData.evaluacion_valor ? parseFloat(docenteFormData.evaluacion_valor) : null,
       }
 
       const created = await createDocente(payload)
@@ -1328,6 +1378,92 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         </div>
       )}
 
+      {evaluationProfile && (
+        <div className="modal-backdrop" onClick={() => !evaluationSaving && setEvaluationProfile(null)}>
+          <div
+            className="modal-card"
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              maxWidth: '480px',
+              backgroundColor: '#1f2937',
+              border: '1px solid #374151',
+              color: '#f9fafb',
+              borderRadius: '12px',
+            }}
+          >
+            <div className="modal-header" style={{ borderBottom: '1px solid #374151' }}>
+              <div>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Star size={19} color="#fbbf24" fill="#fbbf24" />
+                  Calificación docente
+                </h3>
+                <p style={{ margin: '0.35rem 0 0', color: '#9ca3af', fontSize: '0.85rem' }}>
+                  {evaluationProfile.nombre}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => setEvaluationProfile(null)}
+                disabled={evaluationSaving}
+                aria-label="Cerrar"
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEvaluation}>
+              <div className="modal-body" style={{ padding: '1.25rem 1.5rem' }}>
+                {evaluationLoading ? (
+                  <p style={{ color: '#9ca3af' }}>Cargando información de evaluación...</p>
+                ) : (
+                  <>
+                    <p style={{ color: '#d1d5db', fontSize: '0.88rem', marginTop: 0 }}>
+                      La calificación se guardará para las asignaturas dictadas en el período anterior
+                      al período vigente.
+                    </p>
+                    <p style={{ color: '#e5e7eb', fontWeight: 600 }}>
+                      Período vigente: <span style={{ fontWeight: 400 }}>{evaluationPeriod?.nombre || 'Sin período'}</span>
+                    </p>
+                    {evaluationCourses.length === 0 ? (
+                      <p style={{ color: '#fca5a5' }}>No hay asignaturas dictadas en el período anterior.</p>
+                    ) : evaluationCourses.map((curso, index) => (
+                      <label key={curso.code_course} style={{ display: 'grid', gap: '0.4rem', color: '#e5e7eb', fontWeight: 600, marginTop: index ? '0.8rem' : 0 }}>
+                        {curso.code_course} - {curso.nombre_asignatura}
+                        <input
+                          type="number"
+                          min="0"
+                          max="5"
+                          step="0.01"
+                          required
+                          value={curso.calificacion}
+                          onChange={(event) => setEvaluationCourses(current => current.map(item =>
+                            item.code_course === curso.code_course
+                              ? { ...item, calificacion: event.target.value }
+                              : item
+                          ))}
+                          placeholder="Ej. 4.50"
+                        />
+                      </label>
+                    ))}
+                  </>
+                )}
+              </div>
+              {!evaluationLoading && (
+                <div className="modal-footer" style={{ borderTop: '1px solid #374151' }}>
+                  <button type="button" className="btn-secondary" onClick={() => setEvaluationProfile(null)} disabled={evaluationSaving}>
+                    Cancelar
+                  </button>
+                  <button type="submit" className="btn-primary" disabled={evaluationSaving || !evaluationPeriod}>
+                    {evaluationSaving ? 'Guardando...' : 'Guardar calificación'}
+                  </button>
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* 7. MODAL DE PERFIL COMPLETO (CONSULTA DETALLADA)                         */}
       {/* ========================================================================= */}
@@ -1587,38 +1723,9 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                   >
                     Evaluación Docente Registrada
                   </h4>
-                  {selectedProfile.evaluacionPeriodo ? (
-                    <div
-                      style={{
-                        backgroundColor: '#111827',
-                        border: '1px solid #374151',
-                        borderRadius: '8px',
-                        padding: '0.85rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <div>
-                        <span style={{ color: '#9ca3af', fontSize: '0.8rem', display: 'block' }}>Período Académico</span>
-                        <strong style={{ color: '#f3f4f6' }}>{selectedProfile.evaluacionPeriodo}</strong>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ color: '#9ca3af', fontSize: '0.8rem', display: 'block' }}>Calificación</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#fbbf24' }}>
-                          <Star size={18} fill="#fbbf24" />
-                          <strong style={{ fontSize: '1.25rem' }}>
-                            {selectedProfile.evaluacionValor ? Number(selectedProfile.evaluacionValor).toFixed(2) : 'N/A'}
-                          </strong>
-                          <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>/ 5.0</span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <p style={{ color: '#9ca3af', fontSize: '0.85rem', margin: 0, fontStyle: 'italic' }}>
-                      No registra evaluaciones docentes en el periodo actual.
-                    </p>
-                  )}
+                  <p style={{ color: '#9ca3af', fontSize: '0.85rem', margin: 0, fontStyle: 'italic' }}>
+                    Las calificaciones se administran por asignatura desde el menú Acciones.
+                  </p>
                 </div>
               )}
             </div>

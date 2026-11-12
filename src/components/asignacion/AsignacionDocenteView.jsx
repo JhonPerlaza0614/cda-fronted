@@ -16,7 +16,7 @@ import {
   UserPlus,
   Building2
 } from 'lucide-react'
-import { getDocentes } from '../../services/docenteService'
+import { getDocentes, getEvaluacionesDocentes } from '../../services/docenteService'
 import { getPeriodos, getFacultades } from '../../services/academicService'
 import {
   getProgramacion,
@@ -61,6 +61,7 @@ export default function AsignacionDocenteView({
   const [cursosProgramados, setCursosProgramados] = useState([])
   const [docentesList, setDocentesList] = useState([])
   const [disponibilidadesMap, setDisponibilidadesMap] = useState({}) // { docenteId: [items] }
+  const [evaluacionesMap, setEvaluacionesMap] = useState({}) // { docenteId: evaluation }
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -288,11 +289,36 @@ export default function AsignacionDocenteView({
     setMateriaParaDesignar(materia)
     setBusquedaDocente('')
     setSoloDelPrograma(true) // Siempre inicia enfocado a los docentes del programa
+    setEvaluacionesMap({})
+    if (periodoActivo?.id && materia?.codeCourse) {
+      getEvaluacionesDocentes(periodoActivo.id, materia.codeCourse)
+        .then(evaluaciones => {
+          const mapa = {}
+          const lista = Array.isArray(evaluaciones) ? evaluaciones : []
+          lista.forEach(evaluacion => {
+            mapa[String(evaluacion.docente_id ?? evaluacion.docenteId)] = evaluacion
+          })
+          setEvaluacionesMap(mapa)
+        })
+        .catch(err => {
+          console.error('Error al cargar evaluaciones docentes:', err)
+          onShowToast?.('No fue posible cargar las calificaciones docentes', 'error')
+        })
+    }
   }
 
   // Ejecutar asignación de docente
   const handleConfirmarDesignacion = async (docente) => {
     if (!materiaParaDesignar || !periodoActivo?.id) return
+    const reemplazando = materiaParaDesignar.idDocente
+      && Number(materiaParaDesignar.idDocente) !== Number(docente.id)
+    if (reemplazando) {
+      const confirmar = window.confirm(
+        `La materia ya tiene asignado a ${materiaParaDesignar.nombreDocente || 'otro docente'}. ` +
+        '¿Desea desactivarlo y asignar al nuevo docente?'
+      )
+      if (!confirmar) return
+    }
     setAsignandoId(docente.id)
 
     try {
@@ -680,6 +706,7 @@ export default function AsignacionDocenteView({
                     const esElActual = materiaParaDesignar.idDocente === docente.id
                     const horarios = formatearHorariosDocente(docente.id)
                     const estaAsignando = asignandoId === docente.id
+                    const evaluacion = evaluacionesMap[String(docente.id)]
 
                     return (
                       <div
@@ -718,6 +745,14 @@ export default function AsignacionDocenteView({
 
                           {/* Horario de disponibilidad desplegado */}
                           <div>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '0.45rem' }}>
+                              Calificación docente de {evaluacion?.periodo_nombre || evaluacion?.periodoNombre || 'período anterior'}:{' '}
+                              <strong style={{ color: evaluacion ? '#0f766e' : '#64748b' }}>
+                                {evaluacion
+                                  ? `${Number(evaluacion.calificacion).toFixed(2)} / 5.00`
+                                  : 'Sin registro'}
+                              </strong>
+                            </div>
                             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <Clock size={12} style={{ color: '#2563eb' }} />
                               <span>Horario de disponibilidad en el período:</span>
