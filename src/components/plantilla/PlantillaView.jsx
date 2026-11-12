@@ -97,6 +97,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
     numero_documento: '',
     correo_institucional: '',
     telefono: '',
+    celular: '',
     tipo_docente: 'NOMBRADO',
     categoria: 'AUXILIAR',
     id_facultad: '',
@@ -211,6 +212,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
       correoInstitucional: d.correo_institucional,
       correoPersonal: null,
       telefono: d.telefono,
+      celular: d.celular,
       codeProgram: d.code_program,
       idFacultad: d.id_facultad,
       nombreFacultad:
@@ -467,6 +469,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
       numero_documento: '',
       correo_institucional: '',
       telefono: '',
+      celular: '',
       tipo_docente: 'NOMBRADO',
       categoria: 'AUXILIAR',
       id_facultad: facultadesList[0]?.id ? String(facultadesList[0].id) : '',
@@ -487,6 +490,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         numero_documento: docenteFormData.numero_documento.trim(),
         correo_institucional: docenteFormData.correo_institucional.trim().toLowerCase(),
         telefono: docenteFormData.telefono.trim() || null,
+        celular: docenteFormData.celular.trim() || null,
         tipo_docente: docenteFormData.tipo_docente,
         categoria: docenteFormData.categoria,
         id_facultad: docenteFormData.id_facultad ? parseInt(docenteFormData.id_facultad, 10) : null,
@@ -1685,6 +1689,20 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                       </a>
                     </div>
                   )}
+
+                  {selectedProfile.celular && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Phone size={16} style={{ color: '#9ca3af' }} />
+                      <span style={{ color: '#9ca3af' }}>Celular:</span>
+                      <a
+                        href={`tel:${selectedProfile.celular}`}
+                        style={{ color: '#93c5fd', textDecoration: 'none' }}
+                      >
+                        {selectedProfile.celular}
+                      </a>
+                    </div>
+                  )}
+
                 </div>
               </div>
 
@@ -2052,12 +2070,37 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                 <div className="form-group">
                   <label style={{ color: '#e5e7eb' }}>Teléfono</label>
                   <input
-                    type="text"
-                    placeholder="Ej. +57 312 987 6543"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="Ej. 6021234567"
                     value={docenteFormData.telefono}
-                    onChange={(e) => setDocenteFormData({ ...docenteFormData, telefono: e.target.value })}
+                    onChange={(e) => setDocenteFormData({
+                      ...docenteFormData,
+                      telefono: e.target.value.replace(/\D/g, '').slice(0, 10)
+                    })}
                     style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
                   />
+                </div>
+
+                {/* Celular */}
+                <div className="form-group">
+                  <label style={{ color: '#e5e7eb' }}>Celular</label>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="Ej. 3129876543"
+                    value={docenteFormData.celular}
+                    onChange={(e) => setDocenteFormData({
+                      ...docenteFormData,
+                      celular: e.target.value.replace(/\D/g, '').slice(0, 10)
+                    })}
+                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
+                  />
+                  <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
+                    Opcional. De 7 a 10 dígitos, sin espacios ni +57.
+                  </small>
                 </div>
 
                 {/* Tipo de Docente y Categoría */}
