@@ -111,13 +111,153 @@
 }
 
 /* Barra de Semestres (donde escojan un semestre) */
+/* HU-016: semestres a la izquierda y filtros a la derecha; en pantallas angostas los filtros pasan debajo */
+.asig-doc-semestres-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
 .asig-doc-semestres-bar {
   display: flex;
   gap: 0.5rem;
   overflow-x: auto;
   padding-bottom: 0.5rem;
-  margin-bottom: 1.5rem;
   scrollbar-width: thin;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.asig-doc-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-left: auto;
+  padding-bottom: 0.5rem;
+}
+
+.asig-doc-filtro {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.asig-doc-filtro-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.asig-doc-segmentado {
+  display: inline-flex;
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.asig-doc-segmento {
+  background: transparent;
+  border: none;
+  border-right: 1.5px solid #e2e8f0;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease-in-out, color 0.15s ease-in-out;
+}
+
+.asig-doc-segmento:last-child {
+  border-right: none;
+}
+
+.asig-doc-segmento:hover {
+  background: #f8fafc;
+}
+
+.asig-doc-segmento.active {
+  background: #c8102e;
+  color: #ffffff;
+}
+
+.asig-doc-segmento:focus-visible {
+  outline: 2px solid #c8102e;
+  outline-offset: -2px;
+}
+
+.asig-doc-semestre-sub.atenuado {
+  opacity: 0.55;
+  font-style: italic;
+}
+
+@media (max-width: 720px) {
+  .asig-doc-semestres-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .asig-doc-filtros {
+    margin-left: 0;
+  }
+
+  .asig-doc-segmentado {
+    flex-wrap: wrap;
+  }
+}
+
+/* HU-016: estados vacíos, error y aviso de solo consulta */
+.asig-doc-estado-vacio {
+  background: #ffffff;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 3rem 2rem;
+  text-align: center;
+  color: #64748b;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.asig-doc-estado-vacio h3 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 1.05rem;
+}
+
+.asig-doc-estado-icono {
+  color: #94a3b8;
+}
+
+.asig-doc-estado-icono.error {
+  color: #c8102e;
+}
+
+.asig-doc-aviso-consulta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #fff7ed;
+  border: 1.5px solid #fdba74;
+  color: #9a3412;
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.asig-doc-badge-pendiente {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 
 .asig-doc-semestre-btn {
