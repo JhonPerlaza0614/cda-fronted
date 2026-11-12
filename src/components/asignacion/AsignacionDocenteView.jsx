@@ -849,6 +849,7 @@ export default function AsignacionDocenteView({
                   {subtitulo}
                 </span>
               </button>
+            )
           })}
         </div>
       )}
