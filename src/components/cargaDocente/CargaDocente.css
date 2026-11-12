@@ -1,0 +1,83 @@
+.carga-docente {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.carga-barra {
+    min-width: 120px;
+}
+
+.carga-barra-texto {
+    font-size: 0.85rem;
+    margin-bottom: 0.2rem;
+}
+
+.carga-barra-pista {
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.25);
+    overflow: hidden;
+}
+
+.carga-barra-relleno {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.25s ease;
+}
+
+.carga-normal {
+    background: #10b981;
+}
+
+.carga-alto {
+    background: #f59e0b;
+}
+
+.carga-lleno {
+    background: #ef4444;
+}
+
+.carga-resumen,
+.carga-otros,
+.carga-vacio {
+    margin: 0;
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+.carga-error {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #ef4444;
+}
+
+.carga-aviso {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #f59e0b;
+}
+
+.carga-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.carga-tabla th,
+.carga-tabla td {
+    text-align: left;
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.carga-codigo {
+    opacity: 0.65;
+}
+
+.carga-sin-horas {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: #f59e0b;
+}

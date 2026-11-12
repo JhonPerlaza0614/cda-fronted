@@ -21,7 +21,6 @@ import { getPeriodos, getFacultades } from '../../services/academicService'
 import {
   getProgramacion,
   asignarDocenteACurso,
-  asignarDocentePorMateria
 } from '../../services/programacionService'
 import { consultarDisponibilidadesPeriodo } from '../../services/DisponibilidadService'
 import './AsignacionDocenteView.css'
@@ -100,7 +99,7 @@ export default function AsignacionDocenteView({
       .then(data => {
         if (Array.isArray(data)) setFacultadesList(data)
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [onShowToast])
 
   // Cargar lista de docentes
@@ -149,6 +148,15 @@ export default function AsignacionDocenteView({
     cargarDatosProgramacion()
   }, [cargarDatosProgramacion])
 
+  useEffect(() => {
+    if (cursosProgramados.length === 0) return
+    const hay = cursosProgramados.some(c => Number(c.semestre) === Number(selectedSemestre))
+    if (!hay) {
+      setSelectedSemestre(Math.min(...cursosProgramados.map(c => Number(c.semestre))))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cursosProgramados])
+
   // Programa actual
   const programaActual = useMemo(() => {
     return programas.find(p => p.code_program === selectedProgramCode) || null
@@ -170,21 +178,11 @@ export default function AsignacionDocenteView({
     return pensumList.filter(item => item.code_program === selectedProgramCode && item.activo !== false)
   }, [pensumList, selectedProgramCode])
 
-  // Cursos / Materias desplegadas para el semestre escogido
+  // Solo cursos que ya fueron generados en la programación del período
   const materiasDelSemestre = useMemo(() => {
-    // 1. Cursos que ya existen en cursos_programacion para este semestre
-    const cursosDelSem = cursosProgramados.filter(c => Number(c.semestre) === Number(selectedSemestre))
-
-    // 2. Asignaturas de la malla pensum para este semestre
-    const pensumDelSem = materiasPensumPrograma.filter(p => Number(p.semestre) === Number(selectedSemestre))
-
-    // Cruzar para asegurar que se muestren todas las materias del semestre
-    const items = []
-    const cursosMap = new Map()
-
-    cursosDelSem.forEach(c => {
-      cursosMap.set(c.codeCourse, c)
-      items.push({
+    return cursosProgramados
+      .filter(c => Number(c.semestre) === Number(selectedSemestre))
+      .map(c => ({
         id: c.id,
         codeCourse: c.codeCourse,
         nameCourse: c.nombreAsignatura || c.name_course,
@@ -195,31 +193,8 @@ export default function AsignacionDocenteView({
         idDocente: c.idDocente,
         nombreDocente: c.nombreDocente,
         estado: c.idDocente ? 'ASIGNADO' : 'PROGRAMADO',
-        existeEnProgramacion: true,
-      })
-    })
-
-    // Si hay materias en el pensum que no se generaron aún en cursos_programacion, agregarlas para permitir designación
-    pensumDelSem.forEach(p => {
-      if (!cursosMap.has(p.code_course)) {
-        items.push({
-          id: null,
-          codeCourse: p.code_course,
-          nameCourse: p.name_course,
-          credits: p.credits,
-          semestre: p.semestre,
-          grupo: 50,
-          jornada: programaActual?.jornada || 'DIURNA',
-          idDocente: null,
-          nombreDocente: null,
-          estado: 'PROGRAMADO',
-          existeEnProgramacion: false,
-        })
-      }
-    })
-
-    return items
-  }, [cursosProgramados, materiasPensumPrograma, selectedSemestre, programaActual])
+      }))
+  }, [cursosProgramados, selectedSemestre])
 
   // Formato legible de horario de un docente
   const formatearHorariosDocente = useCallback((docenteId) => {
@@ -347,20 +322,7 @@ export default function AsignacionDocenteView({
     setAsignandoId(docente.id)
 
     try {
-      if (materiaParaDesignar.id) {
-        // Curso ya programado
-        await asignarDocenteACurso(materiaParaDesignar.id, docente.id, Boolean(reemplazando))
-      } else {
-        // Materia de pensum que asegura el curso programado
-        await asignarDocentePorMateria({
-          periodoId: periodoActivo.id,
-          codeProgram: selectedProgramCode,
-          codeCourse: materiaParaDesignar.codeCourse,
-          semestre: selectedSemestre,
-          idDocente: docente.id,
-          reemplazarDocente: Boolean(reemplazando)
-        })
-      }
+      await asignarDocenteACurso(materiaParaDesignar.id, docente.id)
 
       onShowToast?.(`Docente ${docente.nombres} ${docente.apellidos} asignado correctamente a ${materiaParaDesignar.nameCourse}`, 'success')
       setMateriaParaDesignar(null)
@@ -389,20 +351,14 @@ export default function AsignacionDocenteView({
     }
   }
 
-  // Conteo de asignaciones por semestre para los botones superiores
   const resumenPorSemestre = useMemo(() => {
     const mapa = {}
     for (let s = 1; s <= totalSemestres; s++) {
-      const mats = materiasPensumPrograma.filter(p => Number(p.semestre) === s)
       const cursos = cursosProgramados.filter(c => Number(c.semestre) === s)
-      const asignados = cursos.filter(c => c.idDocente).length
-      mapa[s] = {
-        total: Math.max(mats.length, cursos.length),
-        asignados
-      }
+      mapa[s] = { total: cursos.length, asignados: cursos.filter(c => c.idDocente).length }
     }
     return mapa
-  }, [totalSemestres, materiasPensumPrograma, cursosProgramados])
+  }, [totalSemestres, cursosProgramados])
 
   return (
     <div className="asig-doc-container">
@@ -476,7 +432,7 @@ export default function AsignacionDocenteView({
         </div>
 
         <div style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 500 }}>
-          Duración: <strong>{totalSemestres} semestres</strong> · Total materias en malla: <strong>{materiasPensumPrograma.length}</strong>
+          Duración: <strong>{totalSemestres} semestres</strong> · Cursos programados: <strong>{cursosProgramados.length}</strong>
         </div>
       </div>
 
