@@ -49,9 +49,7 @@ const EMPTY_FORM = {
     telefono: '',
     tipo_docente: '',
     categoria: '',
-    code_program: '',
-    evaluacion_periodo: '',
-    evaluacion_valor: ''
+    code_program: ''
 }
 
 const SOLO_LETRAS = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/
@@ -92,14 +90,6 @@ function validate(f) {
     if (!f.categoria) e.categoria = 'La categoría es obligatoria'
     if (!f.code_program) e.code_program = 'El programa de adscripción es obligatorio'
 
-    if (f.evaluacion_periodo.length > 10) e.evaluacion_periodo = 'El periodo no puede exceder 10 caracteres'
-    if (f.evaluacion_valor !== '' && Number.isNaN(Number(f.evaluacion_valor))) {
-        e.evaluacion_valor = 'El valor debe ser numérico'
-    }
-    if (f.evaluacion_valor !== '' && !f.evaluacion_periodo.trim()) {
-        e.evaluacion_periodo = 'El periodo es obligatorio si hay un valor de evaluación'
-    }
-
     return e
 }
 
@@ -115,9 +105,7 @@ function buildPayload(f) {
         telefono: opt(f.telefono),
         tipo_docente: f.tipo_docente,
         categoria: f.categoria,
-        code_program: f.code_program,
-        evaluacion_periodo: opt(f.evaluacion_periodo),
-        evaluacion_valor: f.evaluacion_valor === '' ? null : Number(f.evaluacion_valor)
+        code_program: f.code_program
     }
 }
 
@@ -630,25 +618,6 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                     </select>
                                 </Field>
 
-                                <Field label="Evaluación - Periodo" error={errors.evaluacion_periodo}>
-                                    <input
-                                        type="text"
-                                        maxLength={10}
-                                        placeholder="Ej. 2025-1"
-                                        value={formData.evaluacion_periodo}
-                                        onChange={(e) => update('evaluacion_periodo', e.target.value)}
-                                    />
-                                </Field>
-
-                                <Field label="Evaluación - Valor" error={errors.evaluacion_valor}>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="Ej. 4.5"
-                                        value={formData.evaluacion_valor}
-                                        onChange={(e) => update('evaluacion_valor', e.target.value)}
-                                    />
-                                </Field>
                             </div>
 
                             <div className="modal-footer">
