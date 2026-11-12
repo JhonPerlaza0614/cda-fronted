@@ -15,17 +15,22 @@ import {
 } from 'lucide-react'
 import { getPeriodos, getProgramas, getPensumByProgram } from '../../services/academicService'
 import { getCohortes, guardarCohortes, getPropuestaCohortes } from '../../services/cohortesService'
-import { generarProgramacion, getProgramacion, getResumenProgramacion } from '../../services/programacionService'
+import { generarProgramacion, getProgramacion, getResumenProgramacion, getCuposConfig } from '../../services/programacionService'
 import CursosProgramadosPanel from './CursosProgramadosPanel'
 import './ProgramacionCohortesView.css'
 
-export default function ProgramacionCohortesView({ onShowToast }) {
+export default function ProgramacionCohortesView({ onShowToast, user, coordinadorPerfil }) {
+  const rol = Number(user?.rol ?? 1)
+  const isAdmin = rol === 1
+  const isCoordinador = rol === 2
+  const coordCode = coordinadorPerfil?.code_program || ''
+
   const [periodos, setPeriodos] = useState([])
   const [selectedPeriodoId, setSelectedPeriodoId] = useState('')
   const [programas, setProgramas] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
 
-  const [activeTab, setActiveTab] = useState('cohortes') // 'cohortes' | 'generacion' | 'cursos'
+  const [activeTab, setActiveTab] = useState(isCoordinador ? 'cursos' : 'cohortes') // 'cohortes' | 'generacion' | 'cursos'
   const [loading, setLoading] = useState(false)
   const [savingCohortes, setSavingCohortes] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -34,6 +39,9 @@ export default function ProgramacionCohortesView({ onShowToast }) {
   const [allCohortes, setAllCohortes] = useState([])
   const [resumen, setResumen] = useState(null)
   const [cursos, setCursos] = useState([])
+  // HU-059: máximo de cupos y plazo de edición para el usuario de la sesión.
+  const [cuposConfig, setCuposConfig] = useState(null)
+  const [cuposConfigCargando, setCuposConfigCargando] = useState(true)
 
   // Estado para edición de cohortes del programa seleccionado
   // Array de { semestre: number, jornada: 'DIURNA'|'NOCTURNA', numeroResolucion: string, activo: boolean, confirmada: boolean }
@@ -62,14 +70,21 @@ export default function ProgramacionCohortesView({ onShowToast }) {
           getProgramas()
         ])
         setPeriodos(periodosData || [])
-        setProgramas(programasData || [])
+
+        // El coordinador solo trabaja con su programa.
+        const programasVisibles = isCoordinador
+          ? (programasData || []).filter(p => p.code_program === coordCode)
+          : (programasData || [])
+        setProgramas(programasVisibles)
 
         // Seleccionar periodo vigente por defecto
         const vigente = periodosData?.find(p => p.vigente)
         if (vigente) {
           setSelectedPeriodoId(String(vigente.id))
         }
-        if (programasData?.length > 0) {
+        if (isCoordinador) {
+          if (coordCode) setSelectedProgramCode(coordCode)
+        } else if (programasData?.length > 0) {
           setSelectedProgramCode(programasData[0].code_program)
         }
       } catch (err) {
@@ -79,7 +94,7 @@ export default function ProgramacionCohortesView({ onShowToast }) {
       }
     }
     loadInitial()
-  }, [onShowToast])
+  }, [onShowToast, isCoordinador, coordCode])
 
   const selectedPeriodo = useMemo(() => {
     return periodos.find(p => String(p.id) === String(selectedPeriodoId))
@@ -93,25 +108,41 @@ export default function ProgramacionCohortesView({ onShowToast }) {
     return programas.find(p => p.code_program === selectedProgramCode)
   }, [programas, selectedProgramCode])
 
+  const cursosVisibles = useMemo(() => {
+    if (!isCoordinador || !coordCode) return cursos
+    return cursos.filter(c => c.codeProgram === coordCode)
+  }, [cursos, isCoordinador, coordCode])
+
   // 2. Cargar cohortes, resumen y cursos cuando cambia el periodo
   const loadPeriodoData = useCallback(async () => {
-    if (!selectedPeriodoId) return
+    if (!selectedPeriodoId) {
+      setCuposConfigCargando(false)
+      return
+    }
     setLoading(true)
+    setCuposConfigCargando(true)
+    setCuposConfig(null)
     try {
-      const [cohortesData, resumenData, cursosData] = await Promise.all([
+      const [cohortesData, resumenData, cursosData, cuposData] = await Promise.all([
         getCohortes(selectedPeriodoId).catch(() => []),
         getResumenProgramacion(selectedPeriodoId).catch(() => null),
-        getProgramacion(selectedPeriodoId).catch(() => [])
+        getProgramacion(
+          selectedPeriodoId,
+          isCoordinador && coordCode ? { codeProgram: coordCode } : {}
+        ).catch(() => []),
+        getCuposConfig(selectedPeriodoId).catch(() => null)
       ])
       setAllCohortes(cohortesData || [])
       setResumen(resumenData)
       setCursos(cursosData || [])
+      setCuposConfig(cuposData)
     } catch (err) {
       onShowToast?.(err.message || 'Error al cargar datos del período', 'error')
     } finally {
       setLoading(false)
+      setCuposConfigCargando(false)
     }
-  }, [selectedPeriodoId, onShowToast])
+  }, [selectedPeriodoId, onShowToast, isCoordinador, coordCode])
 
   useEffect(() => {
     loadPeriodoData()
@@ -297,9 +328,13 @@ export default function ProgramacionCohortesView({ onShowToast }) {
       {/* 1. Header con Selección de Período */}
       <div className="pc-header">
         <div>
-          <h2 className="pc-title">Oferta de Cohortes y Programación Académica</h2>
+          <h2 className="pc-title">
+            {isCoordinador ? 'Cupos de estudiantes' : 'Oferta de Cohortes y Programación Académica'}
+          </h2>
           <p className="pc-subtitle">
-            Configure las cohortes activas por programa y genere automáticamente la oferta de cursos a partir de las mallas curriculares.
+            {isCoordinador
+              ? 'Registre el número de cupos de estudiantes de cada materia y grupo de su programa.'
+              : 'Configure las cohortes activas por programa y genere automáticamente la oferta de cursos a partir de las mallas curriculares.'}
           </p>
         </div>
 
@@ -323,32 +358,36 @@ export default function ProgramacionCohortesView({ onShowToast }) {
 
       {/* 2. Barra de Pestañas */}
       <div className="pc-tabs-nav">
-        <button
-          className={`pc-tab-btn ${activeTab === 'cohortes' ? 'active' : ''}`}
-          onClick={() => setActiveTab('cohortes')}
-        >
-          <Layers size={18} />
-          <span>1. Oferta de Cohortes por Programa</span>
-        </button>
+        {!isCoordinador && (
+          <button
+            className={`pc-tab-btn ${activeTab === 'cohortes' ? 'active' : ''}`}
+            onClick={() => setActiveTab('cohortes')}
+          >
+            <Layers size={18} />
+            <span>1. Oferta de Cohortes por Programa</span>
+          </button>
+        )}
 
-        <button
-          className={`pc-tab-btn ${activeTab === 'generacion' ? 'active' : ''}`}
-          onClick={() => setActiveTab('generacion')}
-        >
-          <Sparkles size={18} />
-          <span>2. Generar Programación</span>
-          {resumen && resumen.totalCursos > 0 && (
-            <span className="pc-tab-counter">{resumen.totalCursos}</span>
-          )}
-        </button>
+        {!isCoordinador && (
+          <button
+            className={`pc-tab-btn ${activeTab === 'generacion' ? 'active' : ''}`}
+            onClick={() => setActiveTab('generacion')}
+          >
+            <Sparkles size={18} />
+            <span>2. Generar Programación</span>
+            {resumen && resumen.totalCursos > 0 && (
+              <span className="pc-tab-counter">{resumen.totalCursos}</span>
+            )}
+          </button>
+        )}
 
         <button
           className={`pc-tab-btn ${activeTab === 'cursos' ? 'active' : ''}`}
           onClick={() => setActiveTab('cursos')}
         >
           <BookOpen size={18} />
-          <span>3. Cursos Programados</span>
-          <span className="pc-tab-counter">{cursos.length}</span>
+          <span>{isCoordinador ? 'Cupos de estudiantes' : '3. Cursos Programados'}</span>
+          <span className="pc-tab-counter">{cursosVisibles.length}</span>
         </button>
       </div>
 
@@ -600,10 +639,17 @@ export default function ProgramacionCohortesView({ onShowToast }) {
       {activeTab === 'cursos' && (
         <div className="pc-tab-content">
           <CursosProgramadosPanel
-            cursos={cursos}
+            cursos={cursosVisibles}
             programas={programas}
             onCambio={loadPeriodoData}
             onShowToast={onShowToast}
+            periodoId={selectedPeriodoId}
+            maxCupos={cuposConfig?.maxPorGrupo ?? 60}
+            puedeEditarCupos={cuposConfig?.puedeEditar ?? isAdmin}
+            plazoAbierto={cuposConfig?.plazoAbierto ?? false}
+            cargandoCuposConfig={cuposConfigCargando}
+            cargandoCupos={loading || cuposConfigCargando}
+            puedeAjustarProgramacion={isAdmin}
           />
         </div>
       )}

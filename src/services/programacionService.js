@@ -38,6 +38,7 @@ export async function getProgramacion(periodoId, { codeProgram = '', codeCourse 
       jornada: c.jornada,
       numeroResolucion: c.numero_resolucion,
       grupo: c.grupo,
+      cupos: c.cupos ?? null,
       idDocente: c.id_docente,
       estado: c.estado
     }))
@@ -91,6 +92,27 @@ export async function reactivarCurso(cursoId, justificacion) {
   return requestBackend(`/programacion/cursos/${cursoId}/reactivar`, {
     method: 'PATCH',
     body: JSON.stringify({ justificacion }),
+  })
+}
+
+// HU-059: cupos de estudiantes por curso/grupo.
+
+/** Máximo de cupos y si el plazo de edición está abierto para el usuario. */
+export async function getCuposConfig(periodoId) {
+  return requestBackend(`/programacion/cupos/config?periodoId=${periodoId}`)
+}
+
+/** Guarda los cupos de los cursos activos. No hay respaldo Supabase para escrituras. */
+export async function actualizarCupos(periodoId, cursos) {
+  return requestBackend('/programacion/cupos', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      periodoId: Number(periodoId),
+      cursos: (cursos || []).map((c) => ({
+        cursoId: Number(c.cursoId),
+        cupos: Number(c.cupos)
+      }))
+    })
   })
 }
 

@@ -1,17 +1,38 @@
-import React, { useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, Ban, Filter, RefreshCw, RotateCcw, Search, UserX } from 'lucide-react'
-import { excluirCurso, getVistaPreviaExclusion, reactivarCurso } from '../../services/programacionService'
+import React, { useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, ArrowRight, Ban, Check, Filter, Pencil, RefreshCw, RotateCcw, Search, UserX } from 'lucide-react'
+import {
+  actualizarCupos,
+  excluirCurso,
+  getVistaPreviaExclusion,
+  reactivarCurso
+} from '../../services/programacionService'
 import { formatearFechaHora } from '../../utils/formatoFechas'
 
 const MAX_JUSTIFICACION = 500
 const MSG_JUSTIFICACION_OBLIGATORIA = 'La justificación es obligatoria'
+const MSG_CUPO_INVALIDO = 'Debe ingresar un número de cupos válido'
+const MSG_CUPOS_GUARDADOS = 'Cupos de estudiantes registrados correctamente'
+const MSG_ERROR_CUPOS = 'No se pudo registrar la información de cupos. Intente de nuevo'
+const MSG_PLAZO_CERRADO = 'El plazo de edición ya cerró'
 
 /**
  * HU-047: submódulo 3 «Cursos Programados».
  * Consolida los cursos del periodo con filtros, resalta los que requieren revisión y permite excluir
  * (con vista previa de grupos) o reactivar un curso. No hay forma de agregar cursos (criterio 3).
  */
-export default function CursosProgramadosPanel({ cursos, programas, onCambio, onShowToast }) {
+export default function CursosProgramadosPanel({
+  cursos,
+  programas,
+  onCambio,
+  onShowToast,
+  periodoId,
+  maxCupos = 60,
+  puedeEditarCupos = true,
+  plazoAbierto = true,
+  cargandoCuposConfig = false,
+  cargandoCupos = false,
+  puedeAjustarProgramacion = true
+}) {
   const [busqueda, setBusqueda] = useState('')
   const [filtroPrograma, setFiltroPrograma] = useState('')
   const [filtroAsignatura, setFiltroAsignatura] = useState('')
@@ -24,6 +45,87 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
   const [cargandoAjuste, setCargandoAjuste] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [confirmarDocente, setConfirmarDocente] = useState(false)
+
+  // HU-059: edición de cupos
+  const [cuposEditados, setCuposEditados] = useState({})
+  const [erroresCupos, setErroresCupos] = useState({})
+  const [filaEditando, setFilaEditando] = useState(null)
+  const [guardandoCupos, setGuardandoCupos] = useState(false)
+
+  // Sincroniza el formulario con los cupos persistidos cuando el padre recarga los cursos.
+  useEffect(() => {
+    const siguiente = {}
+    for (const c of cursos) {
+      siguiente[c.id] = c.cupos != null ? String(c.cupos) : ''
+    }
+    setCuposEditados(siguiente)
+    setErroresCupos({})
+    setFilaEditando(null)
+  }, [cursos])
+
+  const valorCupo = (curso) => {
+    const valor = cuposEditados[curso.id]
+    if (valor !== undefined) return valor
+    return curso.cupos != null ? String(curso.cupos) : ''
+  }
+
+  const validarFilaCupos = (curso) => {
+    const raw = String(valorCupo(curso)).trim()
+    if (raw === '') {
+      setErroresCupos((prev) => ({ ...prev, [curso.id]: MSG_CUPO_INVALIDO }))
+      return null
+    }
+    const numero = Number(raw)
+    if (!Number.isInteger(numero) || numero <= 0) {
+      setErroresCupos((prev) => ({ ...prev, [curso.id]: MSG_CUPO_INVALIDO }))
+      return null
+    }
+    if (numero > maxCupos) {
+      setErroresCupos((prev) => ({
+        ...prev,
+        [curso.id]: `El número de cupos no puede superar el máximo permitido (${maxCupos})`
+      }))
+      return null
+    }
+    setErroresCupos((prev) => {
+      if (!prev[curso.id]) return prev
+      const siguiente = { ...prev }
+      delete siguiente[curso.id]
+      return siguiente
+    })
+    return numero
+  }
+
+  const guardarFilaCupos = async (curso) => {
+    if (!periodoId || guardandoCupos) return
+    const numero = validarFilaCupos(curso)
+    if (numero == null) return
+    if (numero === curso.cupos) {
+      setFilaEditando(null)
+      return
+    }
+    setGuardandoCupos(true)
+    try {
+      await actualizarCupos(periodoId, [{ cursoId: curso.id, cupos: numero }])
+      onShowToast?.(MSG_CUPOS_GUARDADOS, 'success')
+      setFilaEditando(null)
+      await onCambio?.()
+    } catch (err) {
+      onShowToast?.(err.message || MSG_ERROR_CUPOS, 'error')
+    } finally {
+      setGuardandoCupos(false)
+    }
+  }
+
+  const toggleFilaCupos = (curso) => {
+    if (!puedeEditarCupos || guardandoCupos) return
+    if (filaEditando != null && filaEditando !== curso.id) return
+    if (filaEditando === curso.id) {
+      guardarFilaCupos(curso)
+      return
+    }
+    setFilaEditando(curso.id)
+  }
 
   const asignaturas = useMemo(() => {
     const mapa = new Map()
@@ -129,6 +231,20 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
     }
   }
 
+  // ------------------------------------------------------------------ HU-059
+
+  const cambiarCupo = (cursoId, value) => {
+    if (!puedeEditarCupos) return
+    if (value !== '' && !/^\d*$/.test(value)) return
+    setCuposEditados((prev) => ({ ...prev, [cursoId]: value }))
+    setErroresCupos((prev) => {
+      if (!prev[cursoId]) return prev
+      const siguiente = { ...prev }
+      delete siguiente[cursoId]
+      return siguiente
+    })
+  }
+
   return (
     <div className="pc-panel">
       <div className="pc-filters-bar">
@@ -186,6 +302,20 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
         </div>
       </div>
 
+      {!cargandoCuposConfig && !puedeEditarCupos && !plazoAbierto && (
+        <div className="pc-alert pc-alert-warning" role="status">
+          <AlertTriangle size={18} />
+          <span>{MSG_PLAZO_CERRADO}</span>
+        </div>
+      )}
+
+      {cargandoCupos && (
+        <div className="pc-alert pc-alert-info" role="status" aria-live="polite">
+          <RefreshCw size={18} className="pc-spin" />
+          <span>Cargando cupos por curso</span>
+        </div>
+      )}
+
       {(totalRevision > 0 || totalExcluidos > 0) && (
         <div className="pc-ajuste-resumen">
           {totalRevision > 0 && (
@@ -213,17 +343,20 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
               <th>Programa</th>
               <th>Resolución</th>
               <th>Docente</th>
+              <th>Cupos</th>
               <th>Estado</th>
-              <th>Acciones</th>
+              {(puedeAjustarProgramacion || puedeEditarCupos) && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
             {filtrados.length === 0 ? (
               <tr>
-                <td colSpan={10} className="pc-empty-cell">
-                  {cursos.length === 0
-                    ? 'No hay cursos para mostrar. Vaya a la pestaña "Generar Programación" si aún no ha generado la oferta.'
-                    : 'Sin resultados'}
+                <td colSpan={(puedeAjustarProgramacion || puedeEditarCupos) ? 11 : 10} className="pc-empty-cell">
+                  {cargandoCupos
+                    ? null
+                    : cursos.length === 0
+                      ? 'No hay cursos para mostrar. Vaya a la pestaña "Generar Programación" si aún no ha generado la oferta.'
+                      : 'Sin resultados'}
                 </td>
               </tr>
             ) : (
@@ -276,6 +409,29 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
                     </td>
                     <td>
                       {excluido ? (
+                        <span className="pc-text-muted" aria-label="No aplica">—</span>
+                      ) : puedeEditarCupos ? (
+                        <div className="pc-cupos-cell">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            className={`pc-input pc-input-cupos ${erroresCupos[curso.id] ? 'pc-input-error' : ''}`}
+                            value={valorCupo(curso)}
+                            onChange={(e) => cambiarCupo(curso.id, e.target.value)}
+                            disabled={guardandoCupos || filaEditando !== curso.id}
+                            aria-label={`Cupos de ${curso.nombreAsignatura} grupo ${curso.grupo ?? ''}`}
+                          />
+                          {erroresCupos[curso.id] && (
+                            <span className="pc-cupos-error" role="alert">{erroresCupos[curso.id]}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span>{curso.cupos != null ? curso.cupos : <span className="pc-text-muted">—</span>}</span>
+                      )}
+                    </td>
+                    <td>
+                      {excluido ? (
                         <span className="pc-badge pc-badge-excluido">Excluido</span>
                       ) : curso.requiereRevision ? (
                         <span className="pc-badge pc-badge-revision" title={curso.motivoRevision}>Requiere revisión</span>
@@ -285,27 +441,49 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
                         </span>
                       )}
                     </td>
-                    <td>
-                      {excluido ? (
-                        <button
-                          type="button"
-                          className="pc-btn pc-btn-secondary pc-btn-sm"
-                          onClick={() => abrirReactivacion(curso)}
-                        >
-                          <RotateCcw size={14} />
-                          <span>Reactivar</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="pc-btn pc-btn-danger-outline pc-btn-sm"
-                          onClick={() => abrirExclusion(curso)}
-                        >
-                          <Ban size={14} />
-                          <span>Excluir</span>
-                        </button>
-                      )}
-                    </td>
+                    {(puedeAjustarProgramacion || puedeEditarCupos) && (
+                      <td>
+                        <div className="pc-acciones-grupo">
+                          {puedeEditarCupos && !excluido && (
+                            <button
+                              type="button"
+                              className={`pc-btn pc-btn-sm ${filaEditando === curso.id ? 'pc-btn-primary' : 'pc-btn-secondary'}`}
+                              onClick={() => toggleFilaCupos(curso)}
+                              disabled={guardandoCupos || (filaEditando != null && filaEditando !== curso.id)}
+                              title={filaEditando === curso.id ? 'Guardar cupos de este grupo' : 'Editar cupos'}
+                            >
+                              {guardandoCupos && filaEditando === curso.id
+                                ? <RefreshCw size={14} className="pc-spin" />
+                                : filaEditando === curso.id
+                                  ? <Check size={14} />
+                                  : <Pencil size={14} />}
+                              <span>{guardandoCupos && filaEditando === curso.id ? 'Guardando…' : filaEditando === curso.id ? 'Listo' : 'Editar'}</span>
+                            </button>
+                          )}
+                          {puedeAjustarProgramacion && (
+                            excluido ? (
+                              <button
+                                type="button"
+                                className="pc-btn pc-btn-secondary pc-btn-sm"
+                                onClick={() => abrirReactivacion(curso)}
+                              >
+                                <RotateCcw size={14} />
+                                <span>Reactivar</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="pc-btn pc-btn-danger-outline pc-btn-sm"
+                                onClick={() => abrirExclusion(curso)}
+                              >
+                                <Ban size={14} />
+                                <span>Excluir</span>
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 )
               })
@@ -313,6 +491,14 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
           </tbody>
         </table>
       </div>
+
+      {puedeEditarCupos && (
+        <div className="pc-cupos-actions-bar">
+          <span className="pc-text-muted">
+            Máximo permitido: {maxCupos} cupos por grupo. Use el lápiz de cada fila y luego «Listo» para guardar ese grupo.
+          </span>
+        </div>
+      )}
 
       {ajuste && (
         <div className="pc-modal-backdrop">
@@ -483,6 +669,7 @@ export default function CursosProgramadosPanel({ cursos, programas, onCambio, on
           )}
         </div>
       )}
+
     </div>
   )
 }

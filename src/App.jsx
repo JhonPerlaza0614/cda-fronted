@@ -237,8 +237,12 @@ export default function App({ user, onLogout }) {
             )}
 
             {/* Oferta de Cohortes y Programación Académica (HU-042, HU-043, HU-045) */}
-            {isAdmin && activeTab === 'programacion_cohortes' && (
-              <ProgramacionCohortesView onShowToast={showToast} />
+            {(isAdmin || isCoordinador) && activeTab === 'programacion_cohortes' && (
+              <ProgramacionCohortesView
+                onShowToast={showToast}
+                user={user}
+                coordinadorPerfil={coordinadorPerfil}
+              />
             )}
 
             {/* Malla Curricular */}
