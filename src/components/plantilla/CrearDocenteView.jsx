@@ -7,6 +7,7 @@ import {
     Search,
     Mail,
     Phone,
+    Smartphone,
     IdCard,
     BookOpen,
     CheckCircle2,
@@ -47,6 +48,7 @@ const EMPTY_FORM = {
     numero_documento: '',
     correo_institucional: '',
     telefono: '',
+    celular: '',
     tipo_docente: '',
     categoria: '',
     code_program: ''
@@ -80,6 +82,13 @@ function validate(f) {
     else if (f.numero_documento.length > 11) e.numero_documento = 'El número de documento no puede exceder 11 caracteres'
     else if (!SOLO_NUMEROS.test(f.numero_documento)) e.numero_documento = 'El número de documento solo puede contener números'
 
+    if (f.telefono.trim() && !/^[0-9]{7,10}$/.test(f.telefono.trim())) {
+        e.telefono = 'El teléfono solo admite de 7 a 10 dígitos'
+    }
+    if (f.celular.trim() && !/^[0-9]{7,10}$/.test(f.celular.trim())) {
+        e.celular = 'El celular solo admite de 7 a 10 dígitos'
+    }
+
     if (!f.correo_institucional.trim()) e.correo_institucional = 'El correo institucional es obligatorio'
     else if (f.correo_institucional.length > 50) e.correo_institucional = 'El correo no puede exceder 50 caracteres'
     else if (!CORREO_UNIVALLE.test(f.correo_institucional.trim())) e.correo_institucional = 'El correo debe tener dominio @correounivalle.edu.co'
@@ -103,6 +112,7 @@ function buildPayload(f) {
         numero_documento: f.numero_documento.trim(),
         correo_institucional: f.correo_institucional.trim().toLowerCase(),
         telefono: opt(f.telefono),
+        celular: opt(f.celular),
         tipo_docente: f.tipo_docente,
         categoria: f.categoria,
         code_program: f.code_program
@@ -496,6 +506,12 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                         <span>{d.telefono}</span>
                                     </div>
                                 )}
+                                {d.celular && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <Smartphone size={14} style={{ color: '#71717a', flexShrink: 0 }} />
+                                        <span>{d.celular}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}
@@ -579,9 +595,19 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                     <input
                                         type="text"
                                         maxLength={20}
-                                        placeholder="Ej. 3001234567"
+                                        placeholder="Ej. 6023212100"
                                         value={formData.telefono}
                                         onChange={(e) => update('telefono', e.target.value)}
+                                    />
+                                </Field>
+
+                                <Field label="Celular" error={errors.celular}>
+                                    <input
+                                        type="text"
+                                        maxLength={20}
+                                        placeholder="Ej. 3001234567"
+                                        value={formData.celular}
+                                        onChange={(e) => update('celular', e.target.value)}
                                     />
                                 </Field>
 
