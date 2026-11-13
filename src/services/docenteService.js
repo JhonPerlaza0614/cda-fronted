@@ -187,6 +187,9 @@ export const getCargaDocente = (docenteId, periodoId) =>
 export const getCargaPorPeriodo = (periodoId) =>
     request(`/carga/docentes?periodoId=${periodoId}`)
 
+// GET /api/carga/mis-cursos (el docente autenticado, período vigente)
+export const getMisCursos = () => request('/carga/mis-cursos')
+
 // GET /api/coordinadores/me?correo=...
 export const getMiPerfilCoordinador = (correo) =>
     request(`/coordinadores/me?correo=${encodeURIComponent(correo)}`)

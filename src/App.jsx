@@ -13,6 +13,7 @@ import AsignacionDocenteView from './components/asignacion/AsignacionDocenteView
 import DedicatedInProgressView from './components/layout/DedicatedInProgressView'
 import MiPerfilView from './components/perfil/MiPerfilView'
 import DisponibilidadView from './components/disponibilidad/DisponibilidadView'
+import MisCursosView from './components/misCursos/MisCursosView'
 import SqlSetupModal from './components/layout/SqlSetupModal'
 import Toast from './components/layout/Toast'
 import {
@@ -220,6 +221,9 @@ export default function App({ user, onLogout }) {
             {/* Disponibilidad docente: visible únicamente para el rol docente */}
             {isDocente && activeTab === 'disponibilidad' && <DisponibilidadView />}
 
+            {/* Mis cursos asignados: solo el rol docente */}
+            {isDocente && activeTab === 'mis_cursos' && <MisCursosView onShowToast={showToast} />}
+
             {/* Registro administrativo: usa docentes.id del perfil seleccionado en Plantilla. */}
             {isAdmin && activeTab === 'disponibilidad_admin' && docenteDisponibilidadSeleccionado && (
               <DisponibilidadView
@@ -251,7 +255,7 @@ export default function App({ user, onLogout }) {
                 programas={programasParaPensum}
                 asignaturas={asignaturas}
                 selectedProgramCode={isCoordinador ? (coordinadorProgramCode || '') : selectedProgramCode}
-                setSelectedProgramCode={isCoordinador ? () => {} : setSelectedProgramCode}
+                setSelectedProgramCode={isCoordinador ? () => { } : setSelectedProgramCode}
                 pensumList={pensumList}
                 onRefresh={() => loadData(true)}
                 onShowToast={showToast}
