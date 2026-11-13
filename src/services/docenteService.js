@@ -1,4 +1,4 @@
-// Servicio de Docentes (HU-026 y HU-022)
+// Servicio para funciones de Docentes (HU-026 y HU-022)
 // Misma URL base que usa el login (ya incluye /api) y mismo token de sesión.
 import { getAuthToken, notifySessionExpired } from './authService'
 import { supabase } from '../supabase'
@@ -50,7 +50,7 @@ async function request(path, options = {}) {
 // GET /api/docentes
 export const getDocentes = () => request('/docentes')
 
-// Última evaluación registrada en el período anterior para una asignatura.
+// Última evaluación registrada por docente para una asignatura antes del período activo.
 export async function getEvaluacionesDocentes(periodoId, codeCourse) {
     try {
         return await request(`/docentes/evaluaciones?periodoId=${encodeURIComponent(periodoId)}&codeCourse=${encodeURIComponent(codeCourse)}`)
@@ -61,21 +61,44 @@ export async function getEvaluacionesDocentes(periodoId, codeCourse) {
             .select('id, nombre, fecha_inicio_semestre')
             .order('fecha_inicio_semestre', { ascending: false })
         if (periodosError) throw periodosError
-        const actual = (periodos || []).find(p => String(p.id) === String(periodoId))
-        const anterior = (periodos || []).find(p => actual
-            && p.fecha_inicio_semestre < actual.fecha_inicio_semestre)
-        if (!anterior) return []
 
+        const actual = (periodos || []).find(p => String(p.id) === String(periodoId))
+        if (!actual) return []
+        const anteriores = (periodos || []).filter(
+            p => p.fecha_inicio_semestre < actual.fecha_inicio_semestre
+        )
+        if (anteriores.length === 0) return []
+
+        const periodoPorId = new Map(anteriores.map(p => [String(p.id), p]))
         const { data, error } = await supabase
             .from('evaluaciones_docentes')
-            .select('docente_id, code_course, periodo_id, calificacion')
-            .eq('periodo_id', anterior.id)
+            .select('id, docente_id, code_course, periodo_id, calificacion, updated_at')
+            .in('periodo_id', anteriores.map(p => p.id))
             .eq('code_course', codeCourse)
         if (error) throw error
-        return (data || []).map(evaluacion => ({
-            ...evaluacion,
-            periodo_nombre: anterior.nombre
-        }))
+
+        // Igual que el backend: prioriza el período más reciente y conserva una fila por docente.
+        const prioridadPeriodo = new Map(anteriores.map((p, index) => [String(p.id), index]))
+        const ordenadas = [...(data || [])].sort((a, b) => {
+            const periodoDiff = (prioridadPeriodo.get(String(a.periodo_id)) ?? Number.MAX_SAFE_INTEGER)
+                - (prioridadPeriodo.get(String(b.periodo_id)) ?? Number.MAX_SAFE_INTEGER)
+            if (periodoDiff !== 0) return periodoDiff
+            const fechaDiff = new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
+            if (fechaDiff !== 0) return fechaDiff
+            return Number(b.id || 0) - Number(a.id || 0)
+        })
+
+        const ultimaPorDocente = new Map()
+        ordenadas.forEach(evaluacion => {
+            const key = String(evaluacion.docente_id)
+            if (!ultimaPorDocente.has(key)) {
+                ultimaPorDocente.set(key, {
+                    ...evaluacion,
+                    periodo_nombre: periodoPorId.get(String(evaluacion.periodo_id))?.nombre || null
+                })
+            }
+        })
+        return Array.from(ultimaPorDocente.values())
     }
 }
 

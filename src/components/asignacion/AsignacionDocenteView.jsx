@@ -16,7 +16,7 @@ import {
   UserPlus,
   Building2
 } from 'lucide-react'
-import { getDocentes, getEvaluacionesDocentes } from '../../services/docenteService'
+import { getDocentes, getEvaluacionesDocentes, getCargaPorPeriodo } from '../../services/docenteService'
 import { getPeriodos, getFacultades } from '../../services/academicService'
 import {
   getProgramacion,
@@ -166,6 +166,19 @@ const jornadaInicialDe = (programa) =>
 
 const consultaJornada = (filtro) => (filtro === 'AMBAS' ? '' : filtro)
 
+// Disponibilidad expresada en horas (incluye franjas de media hora).
+function horasRegistradas(franjas) {
+  if (!Array.isArray(franjas)) return 0
+  return franjas.reduce((total, f) => {
+    const inicio = String(f.horaInicio || '').split(':').map(Number)
+    const fin = String(f.horaFin || '').split(':').map(Number)
+    if (inicio.length < 2 || fin.length < 2) return total
+    const minutos = (fin[0] * 60 + fin[1]) - (inicio[0] * 60 + inicio[1])
+    return total + Math.max(0, minutos) / 60
+  }, 0)
+}
+
+
 export default function AsignacionDocenteView({
   user,
   isAdmin = false,
@@ -196,6 +209,8 @@ export default function AsignacionDocenteView({
   const [cursosPorPrograma, setCursosPorPrograma] = useState({}) // { codeProgram: [cursos, incluidos excluidos] }
   const [docentesList, setDocentesList] = useState([])
   const [disponibilidadesMap, setDisponibilidadesMap] = useState({}) // { docenteId: [items] }
+  const [cargaPorDocente, setCargaPorDocente] = useState({})
+  const [cargaDisponible, setCargaDisponible] = useState(false)
   const [evaluacionesMap, setEvaluacionesMap] = useState({}) // { docenteId: evaluation }
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -212,7 +227,6 @@ export default function AsignacionDocenteView({
   const [materiaParaDesignar, setMateriaParaDesignar] = useState(null)
   const [busquedaDocente, setBusquedaDocente] = useState('')
   const [soloDelPrograma, setSoloDelPrograma] = useState(true) // Por defecto solo docentes del programa/facultad
-  const [soloConDisponibilidad, setSoloConDisponibilidad] = useState(false)
   const [asignandoId, setAsignandoId] = useState(null)
 
   // Sincronizar código de programa cuando se carga el perfil del coordinador
@@ -327,6 +341,8 @@ export default function AsignacionDocenteView({
     const codigos = codigosVisibles ? codigosVisibles.split('|') : []
     if (!periodoActivo?.id || codigos.length === 0) {
       setCursosPorPrograma({})
+      setCargaPorDocente({})
+      setCargaDisponible(false)
       setLoading(false)
       setRefreshing(false)
       return
@@ -337,10 +353,11 @@ export default function AsignacionDocenteView({
 
     try {
       // HU-016 criterio 7: el error de la programación no se oculta; la disponibilidad sí puede faltar.
-      const [listas, disps] = await Promise.all([
+      const [listas, disps, cargas] = await Promise.all([
         Promise.all(codigos.map(codeProgram =>
           getProgramacion(periodoActivo.id, { codeProgram, jornada: consultaJornada(filtroJornada) }))),
-        consultarDisponibilidadesPeriodo(periodoActivo.id).catch(() => ({}))
+        consultarDisponibilidadesPeriodo(periodoActivo.id).catch(() => ({})),
+        getCargaPorPeriodo(periodoActivo.id).catch(() => null)
       ])
       if (seq !== cargaSeq.current) return // llegó tarde: el usuario ya cambió de jornada
 
@@ -350,6 +367,9 @@ export default function AsignacionDocenteView({
       })
       setCursosPorPrograma(mapa)
       setDisponibilidadesMap(disps || {})
+      setCargaPorDocente(Array.isArray(cargas)
+        ? Object.fromEntries(cargas.map(c => [String(c.docente_id), c])) : {})
+      setCargaDisponible(Array.isArray(cargas))
       setErrorCarga(false)
     } catch (err) {
       if (seq !== cargaSeq.current) return
@@ -369,12 +389,18 @@ export default function AsignacionDocenteView({
     const seq = cargaSeq.current
     setRefreshing(true)
     try {
-      const lista = await getProgramacion(periodoActivo.id, {
-        codeProgram,
-        jornada: consultaJornada(filtroJornada)
-      })
+      const [lista, cargas] = await Promise.all([
+        getProgramacion(periodoActivo.id, {
+          codeProgram,
+          jornada: consultaJornada(filtroJornada)
+        }),
+        getCargaPorPeriodo(periodoActivo.id).catch(() => null)
+      ])
       if (seq !== cargaSeq.current) return
       setCursosPorPrograma(prev => ({ ...prev, [codeProgram]: Array.isArray(lista) ? lista : [] }))
+      setCargaPorDocente(Array.isArray(cargas)
+        ? Object.fromEntries(cargas.map(c => [String(c.docente_id), c])) : {})
+      setCargaDisponible(Array.isArray(cargas))
     } catch (err) {
       if (seq !== cargaSeq.current) return
       console.error('Error al recargar los cursos del programa:', err)
@@ -418,8 +444,8 @@ export default function AsignacionDocenteView({
     [programasVisibles, filtroJornada]
   )
 
-  // HU-016 criterio 3: el coordinador asigna solo con su plazo abierto; el administrador conserva
-  // el comportamiento actual. Pendiente: el backend aún no valida este plazo.
+  // HU-016 criterio 3: el coordinador asigna solo con su plazo abierto; el backend vuelve a validar
+  // la ventana en cada operación para impedir que se omita la restricción desde una petición directa.
   const puedeAsignar = isAdmin || (isCoordinador && plazoCoordinadorAbierto(periodoActivo))
   const soloConsultaCoordinador = isCoordinador && !isAdmin && !puedeAsignar
 
@@ -460,6 +486,7 @@ export default function AsignacionDocenteView({
             codeCourse: c.codeCourse,
             nameCourse: c.nombreAsignatura || c.name_course,
             credits: c.credits,
+            horasSemanales: c.horasSemanales,
             semestre: c.semestre,
             // El grupo lo asigna HU-046; no se inventa un número.
             grupo: c.grupo ?? null,
@@ -512,6 +539,28 @@ export default function AsignacionDocenteView({
     }))
   }, [disponibilidadesMap])
 
+  // La carga del API incluye TODOS los programas; si el curso ya pertenece al mismo
+  // docente, se excluyen sus horas para no contarlas dos veces al volver a guardar.
+  const capacidadDocente = useCallback((docenteId) => {
+    const registradas = horasRegistradas(disponibilidadesMap[docenteId])
+    const carga = cargaPorDocente[String(docenteId)]
+    const asignadas = Number(carga?.total_horas || 0)
+    const limite = Number(carga?.limite ?? 20)
+    const esActual = materiaParaDesignar?.idDocente != null &&
+      Number(materiaParaDesignar.idDocente) === Number(docenteId)
+    const propias = esActual ? Number(materiaParaDesignar.horasSemanales || 0) : 0
+    const ocupadasSinEsteCurso = Math.max(0, asignadas - propias)
+    const restantes = Math.max(0, Math.min(registradas, limite) - ocupadasSinEsteCurso)
+    const requeridas = materiaParaDesignar?.horasSemanales == null
+      ? NaN : Number(materiaParaDesignar.horasSemanales)
+    const valido = cargaDisponible && Number.isFinite(requeridas) && requeridas >= 0 &&
+      Array.isArray(disponibilidadesMap[docenteId]) &&
+      disponibilidadesMap[docenteId].length > 0 && restantes >= requeridas &&
+      (ocupadasSinEsteCurso + requeridas <= limite) &&
+      Number(carga?.cursos_sin_horas || 0) === 0
+    return { registradas, asignadas, restantes, requeridas, valido }
+  }, [disponibilidadesMap, cargaPorDocente, cargaDisponible, materiaParaDesignar])
+
   // Filtrado de docentes para el modal de asignación: solo relacionados al programa por defecto
   const docentesFiltrados = useMemo(() => {
     let lista = docentesList
@@ -555,13 +604,16 @@ export default function AsignacionDocenteView({
       })
     }
 
-    // 2. Filtro por disponibilidad horaria
-    if (soloConDisponibilidad) {
-      lista = lista.filter(d => {
-        const disps = disponibilidadesMap[d.id]
-        return disps && disps.length > 0
-      })
-    }
+    // 2. HU-013: se muestran docentes con franjas; la capacidad se valida al designar.
+    // en el período activo. Se conserva en la lista al docente ya asignado para
+    // mostrar su información, aunque sus franjas del período estén vacías.
+    lista = lista.filter(d => {
+      const disps = disponibilidadesMap[d.id]
+      const tieneDisponibilidad = Array.isArray(disps) && disps.length > 0
+      const yaEstaAsignado = materiaParaDesignar?.idDocente != null
+        && Number(materiaParaDesignar.idDocente) === Number(d.id)
+      return tieneDisponibilidad || yaEstaAsignado
+    })
 
     // 3. Filtro por texto de búsqueda
     if (busquedaDocente.trim()) {
@@ -577,7 +629,7 @@ export default function AsignacionDocenteView({
     }
 
     return lista
-  }, [docentesList, soloDelPrograma, programaModal, facultadModal, materiaParaDesignar, soloConDisponibilidad, disponibilidadesMap, busquedaDocente])
+  }, [docentesList, soloDelPrograma, programaModal, facultadModal, materiaParaDesignar, disponibilidadesMap, busquedaDocente])
 
   // Abrir modal de asignación
   const handleAbrirDesignacion = (materia) => {
@@ -605,6 +657,10 @@ export default function AsignacionDocenteView({
 
   // Ejecutar asignación de docente
   const handleConfirmarDesignacion = async (docente) => {
+    if (!capacidadDocente(docente.id).valido) {
+      onShowToast?.('Este docente no tiene suficientes horas semanales restantes para la materia', 'error')
+      return
+    }
     if (!materiaParaDesignar || !periodoActivo?.id || !puedeAsignar) return
     const reemplazando = materiaParaDesignar.idDocente
       && Number(materiaParaDesignar.idDocente) !== Number(docente.id)
@@ -641,6 +697,7 @@ export default function AsignacionDocenteView({
     try {
       await asignarDocenteACurso(materia.id, null)
       onShowToast?.(`Docente desasignado de ${materia.nameCourse}`, 'info')
+      if (materiaParaDesignar?.id === materia.id) setMateriaParaDesignar(null)
       await recargarCursosDePrograma(materia.codeProgram)
     } catch (err) {
       console.error('Error al desasignar docente:', err)
@@ -996,7 +1053,7 @@ export default function AsignacionDocenteView({
                           style={{ flex: 1 }}
                         >
                           <UserPlus size={14} />
-                          <span>Cambiar Docente</span>
+                          <span>Editar docente</span>
                         </button>
                         <button
                           type="button"
@@ -1035,7 +1092,7 @@ export default function AsignacionDocenteView({
           <div className="asig-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="asig-modal-header">
               <div>
-                <h3 className="asig-modal-title">Designar Docente a la Materia</h3>
+                <h3 className="asig-modal-title">{materiaParaDesignar.idDocente ? 'Editar docente asignado' : 'Designar docente a la materia'}</h3>
                 <div className="asig-modal-target">
                   <strong>{materiaParaDesignar.codeCourse} - {materiaParaDesignar.nameCourse}</strong> ({textoGrupo(materiaParaDesignar)} · Jornada {ETIQUETA_JORNADA[materiaParaDesignar.jornada] || materiaParaDesignar.jornada} · Semestre {selectedSemestre})
                 </div>
@@ -1094,16 +1151,11 @@ export default function AsignacionDocenteView({
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.82rem', color: '#475569', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={soloConDisponibilidad}
-                    onChange={(e) => setSoloConDisponibilidad(e.target.checked)}
-                  />
-                  <span>Solo con disponibilidad horaria registrada</span>
-                </label>
+                <span style={{ fontSize: '0.8rem', color: '#475569' }}>
+                  Para asignar, las horas disponibles restantes deben cubrir las horas semanales de la materia. No se comparan días ni horarios de clase. La misma regla aplica a tu perfil docente como coordinador.
+                </span>
                 <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                  {docentesFiltrados.length} {docentesFiltrados.length === 1 ? 'docente disponible' : 'docentes disponibles'}
+                  {docentesFiltrados.filter(d => capacidadDocente(d.id).valido).length} docentes elegibles
                 </span>
               </div>
 
@@ -1127,10 +1179,14 @@ export default function AsignacionDocenteView({
                   </div>
                 ) : (
                   docentesFiltrados.map((docente) => {
-                    const esElActual = materiaParaDesignar.idDocente === docente.id
+                    const esElActual = materiaParaDesignar.idDocente != null && Number(materiaParaDesignar.idDocente) === Number(docente.id)
+                    const correoUsuario = String(user?.email || '').trim().toLowerCase()
+                    const correoDocente = String(docente.correoInstitucional || '').trim().toLowerCase()
+                    const esElCoordinador = isCoordinador && correoUsuario !== '' && correoDocente === correoUsuario
                     const horarios = formatearHorariosDocente(docente.id)
                     const estaAsignando = asignandoId === docente.id
                     const evaluacion = evaluacionesMap[String(docente.id)]
+                    const capacidad = capacidadDocente(docente.id)
 
                     return (
                       <div
@@ -1143,6 +1199,11 @@ export default function AsignacionDocenteView({
                             {esElActual && (
                               <span className="badge badge-success" style={{ marginLeft: '0.5rem', fontSize: '0.72rem' }}>
                                 Actualmente Designado
+                              </span>
+                            )}
+                            {esElCoordinador && (
+                              <span className="badge badge-neutral" style={{ marginLeft: '0.5rem', fontSize: '0.72rem' }}>
+                                Tu perfil docente
                               </span>
                             )}
                           </div>
@@ -1167,10 +1228,18 @@ export default function AsignacionDocenteView({
                             )}
                           </div>
 
+                          <div style={{ fontSize: '0.78rem', marginTop: '0.5rem', fontWeight: 600,
+                            color: capacidad.valido ? '#166534' : '#b45309' }}>
+                            {capacidad.registradas.toFixed(1)} h registradas · {capacidad.asignadas} h asignadas ·
+                            {' '}{capacidad.restantes.toFixed(1)} h restantes
+                            {' · '}{Number.isFinite(capacidad.requeridas) ? capacidad.requeridas : '?'} h requeridas
+                            {!cargaDisponible && ' · No se pudo consultar la carga docente'}
+                            {cargaDisponible && !capacidad.valido && ' · Horas insuficientes o datos incompletos'}
+                          </div>
                           {/* Horario de disponibilidad desplegado */}
                           <div>
                             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '0.45rem' }}>
-                              Calificación docente de {evaluacion?.periodo_nombre || evaluacion?.periodoNombre || 'período anterior'}:{' '}
+                              Última evaluación registrada ({evaluacion?.periodo_nombre || evaluacion?.periodoNombre || 'período anterior'}):{' '}
                               <strong style={{ color: evaluacion ? '#0f766e' : '#64748b' }}>
                                 {evaluacion
                                   ? `${Number(evaluacion.calificacion).toFixed(2)} / 5.00`
@@ -1202,10 +1271,10 @@ export default function AsignacionDocenteView({
                             type="button"
                             className={esElActual ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}
                             onClick={() => handleConfirmarDesignacion(docente)}
-                            disabled={estaAsignando || esElActual}
+                            disabled={estaAsignando || esElActual || !capacidad.valido}
                             style={{ minWidth: '100px', whiteSpace: 'nowrap' }}
                           >
-                            {estaAsignando ? 'Guardando...' : esElActual ? 'Asignado' : 'Designar'}
+                            {estaAsignando ? 'Guardando...' : esElActual ? 'Asignado' : esElCoordinador ? 'Asignarme' : 'Designar'}
                           </button>
                         </div>
                       </div>
@@ -1216,12 +1285,22 @@ export default function AsignacionDocenteView({
             </div>
 
             <div className="asig-modal-footer">
+              {materiaParaDesignar.idDocente && (
+                <button
+                  type="button"
+                  className="btn-danger btn-sm"
+                  onClick={() => handleDesasignarDocente(materiaParaDesignar)}
+                  disabled={Boolean(asignandoId)}
+                >
+                  Sin docente asignado
+                </button>
+              )}
               <button
                 type="button"
                 className="btn-secondary"
                 onClick={() => setMateriaParaDesignar(null)}
               >
-                Cerrar
+                Cancelar
               </button>
             </div>
           </div>
