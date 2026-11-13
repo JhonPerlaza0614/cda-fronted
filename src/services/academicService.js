@@ -48,6 +48,43 @@ export async function requestBackend(endpoint, options = {}) {
   return await response.json()
 }
 
+export async function requestBackendBlob(endpoint, options = {}) {
+  const url = `${BACKEND_URL}${endpoint}`
+  const token = getAuthToken()
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {}
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...authHeaders,
+      ...(options.headers || {})
+    }
+  })
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      notifySessionExpired('Tu sesión ha expirado o ya no es válida. Inicia sesión de nuevo.')
+    }
+    let errorMsg = `Error ${response.status}: ${response.statusText}`
+    try {
+      const errorBody = await response.json()
+      if (errorBody.message) errorMsg = errorBody.message
+    } catch {
+      errorMsg = `Error ${response.status}: ${response.statusText}`
+    }
+    const error = new Error(errorMsg)
+    error.status = response.status
+    throw error
+  }
+
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const utf8 = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+  const simple = disposition.match(/filename="?([^";]+)"?/i)
+  const filename = utf8 ? decodeURIComponent(utf8[1]) : (simple ? simple[1] : null)
+
+  return { blob: await response.blob(), filename }
+}
+
 function isBackendUnavailable(error) {
   return error instanceof TypeError || !error?.status
 }
