@@ -95,7 +95,7 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               <span>Inicio</span>
             </button>
 
-            
+
 
             {canSeeProgramas && (
               <button
@@ -199,17 +199,28 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
             )}
 
             {isDocente && (
-              <button
-                className={`nav-tab-btn ${activeTab === 'disponibilidad' ? 'active' : ''}`}
-                onClick={() => setActiveTab('disponibilidad')}
-                title="Disponibilidad"
-              >
-                <CalendarDays size={18} />
-                <span>Disponibilidad</span>
-              </button>
+              <>
+                <button
+                  className={`nav-tab-btn ${activeTab === 'disponibilidad' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('disponibilidad')}
+                  title="Disponibilidad"
+                >
+                  <CalendarDays size={18} />
+                  <span>Disponibilidad</span>
+                </button>
+
+                <button
+                  className={`nav-tab-btn ${activeTab === 'mis_cursos' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('mis_cursos')}
+                  title="Mis cursos asignados"
+                >
+                  <BookOpen size={18} />
+                  <span>Mis cursos</span>
+                </button>
+              </>
             )}
 
-            
+
           </nav>
         </div>
       </div>
