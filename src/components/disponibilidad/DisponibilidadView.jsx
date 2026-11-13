@@ -211,17 +211,17 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
 
       const inicio = hayPeriodoActivo
         ? (periodoActivo?.plazoDocenteInicio ??
-           periodoActivo?.plazo_docente_inicio ??
-           response?.plazoDocenteInicio ??
-           response?.plazo_docente_inicio ??
-           null)
+          periodoActivo?.plazo_docente_inicio ??
+          response?.plazoDocenteInicio ??
+          response?.plazo_docente_inicio ??
+          null)
         : null
       const fin = hayPeriodoActivo
         ? (periodoActivo?.plazoDocenteFin ??
-           periodoActivo?.plazo_docente_fin ??
-           response?.plazoDocenteFin ??
-           response?.plazo_docente_fin ??
-           null)
+          periodoActivo?.plazo_docente_fin ??
+          response?.plazoDocenteFin ??
+          response?.plazo_docente_fin ??
+          null)
         : null
 
       setPlazoDocente({ inicio, fin })
@@ -231,7 +231,11 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
       }
 
       const horarios = Array.isArray(response?.horarios) ? response.horarios : []
-      setStatus({ estado: response?.estado, mensaje: response?.mensaje || 'No se recibió el estado del registro.' })
+      setStatus({
+        estado: response?.estado,
+        mensaje: response?.mensaje || 'No se recibió el estado del registro.',
+        accesoExtraordinarioFin: response?.accesoExtraordinarioFin ?? null,
+      })
       setSchedules(horarios)
       setSavedSlots(savedSlotsFromSchedules(horarios))
       replaceSelection(new Set())
@@ -524,7 +528,7 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
   const tienePlazoDefinido = Boolean(plazoDocente.inicio && plazoDocente.fin) && !noPeriod
   const plazoAbierto = useMemo(() => {
     if (!tienePlazoDefinido) return false
-    if (status?.estado) return status.estado === 'HABILITADO'
+    if (status?.estado) return status.estado === 'HABILITADO' && !status.accesoExtraordinarioFin
     const now = Date.now()
     const startMs = new Date(plazoDocente.inicio).getTime()
     const endMs = new Date(plazoDocente.fin).getTime()
@@ -538,6 +542,18 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
       </section>
     )
   }
+
+  const renderAccesoExtraordinario = () =>
+    status?.accesoExtraordinarioFin ? (
+      <div className="availability-notice info" role="status">
+        <span className="availability-notice-icon"><Info size={17} /></span>
+        <span>
+          Acceso extraordinario habilitado hasta{' '}
+          <strong>{formatearFechaHora(status.accesoExtraordinarioFin)}</strong>
+        </span>
+      </div>
+    ) : null
+
 
   const renderPlazoBanner = () => {
     if (!tienePlazoDefinido) {
@@ -622,6 +638,7 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
       </div>
 
       {renderPlazoBanner()}
+      {renderAccesoExtraordinario()}
 
       {notice && <div className={`availability-notice ${notice.type}`} role="status"><span className="availability-notice-icon">{notice.type === 'success' ? <Check size={17} /> : notice.type === 'error' ? <AlertCircle size={17} /> : <Info size={17} />}</span><span>{notice.text}</span><button type="button" aria-label="Cerrar aviso" onClick={() => setNotice(null)}>×</button></div>}
 

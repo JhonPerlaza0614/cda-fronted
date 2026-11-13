@@ -35,7 +35,7 @@ import {
   getFacultades
 } from '../../services/academicService'
 
-
+import AccesoExtraordinario from '../accesoExtraordinario/AccesoExtraordinario'
 import { getCargaPorPeriodo } from '../../services/docenteService'
 import CargaDocente, { CargaBarra } from '../cargaDocente/CargaDocente'
 
@@ -1722,6 +1722,12 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                     Carga horaria
                   </h4>
                   <CargaDocente docenteId={selectedProfile.rawId} periodoId={periodoId} />
+
+                  <AccesoExtraordinario
+                    docenteId={selectedProfile.rawId}
+                    docenteNombre={selectedProfile.nombre}
+                    onShowToast={onShowToast}
+                  />
                 </div>
               )}
 
