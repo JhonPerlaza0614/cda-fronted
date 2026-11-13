@@ -193,3 +193,19 @@ export const getMisCursos = () => request('/carga/mis-cursos')
 // GET /api/coordinadores/me?correo=...
 export const getMiPerfilCoordinador = (correo) =>
     request(`/coordinadores/me?correo=${encodeURIComponent(correo)}`)
+
+// Acceso extraordinario a la disponibilidad (solo admin)
+// GET devuelve el acceso vigente o null (204)
+export const getAccesoExtraordinario = (docenteId) =>
+    request(`/admin/docentes/${docenteId}/acceso-extraordinario`)
+
+// payload: { fecha_fin: ISO, motivo }
+export const habilitarAccesoExtraordinario = (docenteId, payload) =>
+    request(`/admin/docentes/${docenteId}/acceso-extraordinario`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+    })
+
+export const revocarAccesoExtraordinario = (docenteId) =>
+    request(`/admin/docentes/${docenteId}/acceso-extraordinario`, { method: 'DELETE' })
+
