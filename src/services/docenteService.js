@@ -1,16 +1,13 @@
-// Servicio de Docentes (HU-026 y HU-022)
+// Servicio para funciones de Docentes (HU-026 y HU-022)
 // Misma URL base que usa el login (ya incluye /api) y mismo token de sesión.
+import { getAuthToken, notifySessionExpired } from './authService'
+import { supabase } from '../supabase'
+
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080/api').replace(/\/+$/, '')
-const SESSION_KEY = 'cda.auth.session'
 
 function authHeaders() {
-    try {
-        const raw = window.sessionStorage.getItem(SESSION_KEY)
-        const token = raw ? JSON.parse(raw)?.token : null
-        return token ? { Authorization: `Bearer ${token}` } : {}
-    } catch {
-        return {}
-    }
+    const token = getAuthToken()
+    return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 // Error con status y cuerpo, para que la vista pueda distinguir 400 / 409 / 500
@@ -42,6 +39,9 @@ async function request(path, options = {}) {
     }
 
     if (!res.ok) {
+        if (res.status === 401) {
+            notifySessionExpired('Tu sesión ha expirado o ya no es válida. Inicia sesión de nuevo.')
+        }
         throw new ApiError(body?.message || `Error ${res.status}`, res.status, body)
     }
     return body
@@ -49,6 +49,71 @@ async function request(path, options = {}) {
 
 // GET /api/docentes
 export const getDocentes = () => request('/docentes')
+
+// Última evaluación registrada por docente para una asignatura antes del período activo.
+export async function getEvaluacionesDocentes(periodoId, codeCourse) {
+    try {
+        return await request(`/docentes/evaluaciones?periodoId=${encodeURIComponent(periodoId)}&codeCourse=${encodeURIComponent(codeCourse)}`)
+    } catch (err) {
+        console.warn('Backend no disponible para evaluaciones docentes, fallback Supabase:', err.message)
+        const { data: periodos, error: periodosError } = await supabase
+            .from('periodos_academicos')
+            .select('id, nombre, fecha_inicio_semestre')
+            .order('fecha_inicio_semestre', { ascending: false })
+        if (periodosError) throw periodosError
+
+        const actual = (periodos || []).find(p => String(p.id) === String(periodoId))
+        if (!actual) return []
+        const anteriores = (periodos || []).filter(
+            p => p.fecha_inicio_semestre < actual.fecha_inicio_semestre
+        )
+        if (anteriores.length === 0) return []
+
+        const periodoPorId = new Map(anteriores.map(p => [String(p.id), p]))
+        const { data, error } = await supabase
+            .from('evaluaciones_docentes')
+            .select('id, docente_id, code_course, periodo_id, calificacion, updated_at')
+            .in('periodo_id', anteriores.map(p => p.id))
+            .eq('code_course', codeCourse)
+        if (error) throw error
+
+        // Igual que el backend: prioriza el período más reciente y conserva una fila por docente.
+        const prioridadPeriodo = new Map(anteriores.map((p, index) => [String(p.id), index]))
+        const ordenadas = [...(data || [])].sort((a, b) => {
+            const periodoDiff = (prioridadPeriodo.get(String(a.periodo_id)) ?? Number.MAX_SAFE_INTEGER)
+                - (prioridadPeriodo.get(String(b.periodo_id)) ?? Number.MAX_SAFE_INTEGER)
+            if (periodoDiff !== 0) return periodoDiff
+            const fechaDiff = new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
+            if (fechaDiff !== 0) return fechaDiff
+            return Number(b.id || 0) - Number(a.id || 0)
+        })
+
+        const ultimaPorDocente = new Map()
+        ordenadas.forEach(evaluacion => {
+            const key = String(evaluacion.docente_id)
+            if (!ultimaPorDocente.has(key)) {
+                ultimaPorDocente.set(key, {
+                    ...evaluacion,
+                    periodo_nombre: periodoPorId.get(String(evaluacion.periodo_id))?.nombre || null
+                })
+            }
+        })
+        return Array.from(ultimaPorDocente.values())
+    }
+}
+
+export const getEvaluacionesPorDocente = (docenteId, periodoId) =>
+    request(`/docentes/${docenteId}/evaluaciones?periodoId=${encodeURIComponent(periodoId)}`)
+
+export const guardarEvaluacionDocente = (docenteId, periodoId, codeCourse, calificacion) =>
+    request(`/docentes/${docenteId}/evaluacion`, {
+        method: 'PUT',
+        body: JSON.stringify({
+            periodoId: Number(periodoId),
+            codeCourse,
+            calificacion: Number(calificacion),
+        }),
+    })
 
 // POST /api/docentes
 export const createDocente = (payload) =>
@@ -71,6 +136,9 @@ async function rawFetch(path, options = {}) {
 }
 
 async function errorDe(res) {
+    if (res.status === 401) {
+        notifySessionExpired('Tu sesión ha expirado o ya no es válida. Inicia sesión de nuevo.')
+    }
     let body = null
     try {
         body = await res.json()
@@ -83,7 +151,7 @@ async function errorDe(res) {
 // GET /api/docentes/me (HU-022). El backend identifica al docente por el token de sesión.
 export const getMiPerfil = () => request('/docentes/me')
 
-// PUT /api/docentes/me/contacto (HU-015): correo personal y teléfono
+// PUT /api/docentes/me/contacto (HU-015): correo personal, teléfono, celular y facultad
 export const updateMiContacto = (payload) =>
     request('/docentes/me/contacto', { method: 'PUT', body: JSON.stringify(payload) })
 
@@ -111,6 +179,33 @@ export async function deleteMiFoto() {
     if (!res.ok) throw await errorDe(res)
 }
 
+// GET /api/carga/docentes/{id}?periodoId= (carga horaria de un docente en un período)
+export const getCargaDocente = (docenteId, periodoId) =>
+    request(`/carga/docentes/${docenteId}?periodoId=${periodoId}`)
+
+// GET /api/carga/docentes?periodoId= (totales de todos los docentes en un período)
+export const getCargaPorPeriodo = (periodoId) =>
+    request(`/carga/docentes?periodoId=${periodoId}`)
+
+// GET /api/carga/mis-cursos (el docente autenticado, período vigente)
+export const getMisCursos = () => request('/carga/mis-cursos')
+
 // GET /api/coordinadores/me?correo=...
 export const getMiPerfilCoordinador = (correo) =>
     request(`/coordinadores/me?correo=${encodeURIComponent(correo)}`)
+
+// Acceso extraordinario a la disponibilidad (solo admin)
+// GET devuelve el acceso vigente o null (204)
+export const getAccesoExtraordinario = (docenteId) =>
+    request(`/admin/docentes/${docenteId}/acceso-extraordinario`)
+
+// payload: { fecha_fin: ISO, motivo }
+export const habilitarAccesoExtraordinario = (docenteId, payload) =>
+    request(`/admin/docentes/${docenteId}/acceso-extraordinario`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+    })
+
+export const revocarAccesoExtraordinario = (docenteId) =>
+    request(`/admin/docentes/${docenteId}/acceso-extraordinario`, { method: 'DELETE' })
+

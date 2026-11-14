@@ -4,18 +4,23 @@ import PensumView from './components/pensum/PensumView'
 import ProgramasView from './components/programas/ProgramasView'
 import ProgramasCoordinadoresView from './components/programas/ProgramasCoordinadoresView'
 import AsignaturasView from './components/asignaturas/AsignaturasView'
+import AsociacionesDocentesView from './components/asociaciones/AsociacionesDocentesView'
+import BitacoraView from './components/bitacora/BitacoraView'
 import PlantillaView from './components/plantilla/PlantillaView'
 import PeriodosView from './components/periodos/PeriodosView'
 import ProgramacionCohortesView from './components/programacion/ProgramacionCohortesView'
+import AsignacionDocenteView from './components/asignacion/AsignacionDocenteView'
 import DedicatedInProgressView from './components/layout/DedicatedInProgressView'
 import MiPerfilView from './components/perfil/MiPerfilView'
 import DisponibilidadView from './components/disponibilidad/DisponibilidadView'
+import MisCursosView from './components/misCursos/MisCursosView'
 import SqlSetupModal from './components/layout/SqlSetupModal'
 import Toast from './components/layout/Toast'
 import {
   getProgramas,
   getAsignaturas,
   getAllPensum,
+  getPeriodos,
   checkDatabaseHealth
 } from './services/academicService'
 import { getMiPerfilCoordinador } from './services/docenteService'
@@ -49,8 +54,11 @@ export default function App({ user, onLogout }) {
   const [pensumList, setPensumList] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
   const [coordinadorPerfil, setCoordinadorPerfil] = useState(null)
+  const [periodoActivo, setPeriodoActivo] = useState(null)
   // HU-037: programa a editar al llegar a «Programas» desde «Programas y coordinadores»
   const [programaCoordinadorCode, setProgramaCoordinadorCode] = useState(null)
+  // Docente seleccionado desde Plantilla para el registro administrativo de disponibilidad.
+  const [docenteDisponibilidadSeleccionado, setDocenteDisponibilidadSeleccionado] = useState(null)
 
   const [loading, setLoading] = useState(!isDocente)
   const [initialError, setInitialError] = useState(null)
@@ -82,13 +90,14 @@ export default function App({ user, onLogout }) {
       .catch(() => { if (seq === loadSeq.current) setIsConnected(false) })
 
     try {
-      const [progs, asigs, pensum, coordData] = await Promise.all([
+      const [progs, asigs, pensum, coordData, periodos] = await Promise.all([
         canSeeAcademicData ? getProgramas() : Promise.resolve([]),
         canSeeAcademicData ? getAsignaturas() : Promise.resolve([]),
         canSeeAcademicData ? getAllPensum() : Promise.resolve([]),
         isCoordinador && user?.email
           ? getMiPerfilCoordinador(user.email).catch(() => null)
-          : Promise.resolve(null)
+          : Promise.resolve(null),
+        canSeeAcademicData ? getPeriodos().catch(() => []) : Promise.resolve([])
       ])
       if (seq !== loadSeq.current) return
 
@@ -96,6 +105,8 @@ export default function App({ user, onLogout }) {
       setProgramas(progs)
       setAsignaturas(asigs)
       setPensumList(pensum.map(item => withCourseInfo(item, asigMap)))
+      const listaP = Array.isArray(periodos) ? periodos : []
+      setPeriodoActivo(listaP.find(p => p.vigente) || listaP[0] || null)
 
       if (isCoordinador) {
         setCoordinadorPerfil(coordData)
@@ -133,6 +144,26 @@ export default function App({ user, onLogout }) {
     setActiveTab('pensum')
   }
 
+  const handleRegistrarDisponibilidad = (docente) => {
+    if (!isAdmin || !docente?.id) return
+    setDocenteDisponibilidadSeleccionado({
+      id: Number(docente.id),
+      nombre: docente.nombre || 'Docente seleccionado',
+    })
+    setActiveTab('disponibilidad_admin')
+  }
+
+  const handleVolverAPlantilla = () => {
+    setDocenteDisponibilidadSeleccionado(null)
+    setActiveTab('plantilla')
+  }
+
+  const handleDisponibilidadGuardada = (message) => {
+    setDocenteDisponibilidadSeleccionado(null)
+    setActiveTab('plantilla')
+    showToast(message || 'Disponibilidad registrada correctamente.', 'success')
+  }
+
   const coordinadorProgramCode = coordinadorPerfil?.code_program || null
   const programasParaPensum = isCoordinador
     ? (coordinadorProgramCode ? programas.filter(p => p.code_program === coordinadorProgramCode) : [])
@@ -142,7 +173,7 @@ export default function App({ user, onLogout }) {
     <div className="app-layout">
       {/* Barra superior de navegación */}
       <Navbar
-        activeTab={activeTab}
+        activeTab={activeTab === 'disponibilidad_admin' ? 'plantilla' : activeTab}
         setActiveTab={setActiveTab}
         onOpenSqlModal={() => setIsSqlModalOpen(true)}
         isConnected={isConnected}
@@ -195,14 +226,32 @@ export default function App({ user, onLogout }) {
             {/* Disponibilidad docente: visible únicamente para el rol docente */}
             {isDocente && activeTab === 'disponibilidad' && <DisponibilidadView />}
 
+            {/* Mis cursos asignados: solo el rol docente */}
+            {isDocente && activeTab === 'mis_cursos' && <MisCursosView onShowToast={showToast} />}
+
+            {/* Registro administrativo: usa docentes.id del perfil seleccionado en Plantilla. */}
+            {isAdmin && activeTab === 'disponibilidad_admin' && docenteDisponibilidadSeleccionado && (
+              <DisponibilidadView
+                key={docenteDisponibilidadSeleccionado.id}
+                docenteId={docenteDisponibilidadSeleccionado.id}
+                docenteNombre={docenteDisponibilidadSeleccionado.nombre}
+                onBack={handleVolverAPlantilla}
+                onSaved={handleDisponibilidadGuardada}
+              />
+            )}
+
             {/* Períodos Académicos (Resolución de Calendario) */}
             {activeTab === 'periodos' && (
               <PeriodosView user={user} onShowToast={showToast} />
             )}
 
             {/* Oferta de Cohortes y Programación Académica (HU-042, HU-043, HU-045) */}
-            {isAdmin && activeTab === 'programacion_cohortes' && (
-              <ProgramacionCohortesView onShowToast={showToast} />
+            {(isAdmin || isCoordinador) && activeTab === 'programacion_cohortes' && (
+              <ProgramacionCohortesView
+                onShowToast={showToast}
+                user={user}
+                coordinadorPerfil={coordinadorPerfil}
+              />
             )}
 
             {/* Malla Curricular */}
@@ -211,7 +260,7 @@ export default function App({ user, onLogout }) {
                 programas={programasParaPensum}
                 asignaturas={asignaturas}
                 selectedProgramCode={isCoordinador ? (coordinadorProgramCode || '') : selectedProgramCode}
-                setSelectedProgramCode={isCoordinador ? () => {} : setSelectedProgramCode}
+                setSelectedProgramCode={isCoordinador ? () => { } : setSelectedProgramCode}
                 pensumList={pensumList}
                 onRefresh={() => loadData(true)}
                 onShowToast={showToast}
@@ -225,7 +274,7 @@ export default function App({ user, onLogout }) {
             {/* Programas */}
             {activeTab === 'programas' && (
               <ProgramasView
-                programas={programas}
+                programas={isCoordinador ? programasParaPensum : programas}
                 pensumList={pensumList}
                 onRefresh={() => loadData(true)}
                 onShowToast={showToast}
@@ -245,8 +294,23 @@ export default function App({ user, onLogout }) {
               />
             )}
 
-            {/* Banco de Asignaturas */}
-            {activeTab === 'asignaturas' && (
+            {/* Asignación y Designación Docente */}
+            {activeTab === 'asignacion_docente' && (
+              <AsignacionDocenteView
+                user={user}
+                isAdmin={isAdmin}
+                isCoordinador={isCoordinador}
+                coordinadorPerfil={coordinadorPerfil}
+                programas={isCoordinador ? programasParaPensum : programas}
+                programasTodos={programas}
+                pensumList={pensumList}
+                periodoActivoProp={periodoActivo}
+                onShowToast={showToast}
+              />
+            )}
+
+            {/* Banco de Asignaturas: solo administrador */}
+            {isAdmin && activeTab === 'asignaturas' && (
               <AsignaturasView
                 asignaturas={asignaturas}
                 programas={programas}
@@ -256,11 +320,21 @@ export default function App({ user, onLogout }) {
               />
             )}
 
+            {/* Asociaciones docentes (HU-049): solo administrador */}
+            {isAdmin && activeTab === 'asociaciones' && (
+              <AsociacionesDocentesView onShowToast={showToast} />
+            )}
+
+            {/* Bitácora (HU-058): solo administrador, solo lectura */}
+            {isAdmin && activeTab === 'bitacora' && <BitacoraView />}
+
             {/* Plantilla Administrativa */}
             {(activeTab === 'plantilla' || activeTab === 'coordinadores') && (
               <PlantillaView
                 programas={programas}
                 onShowToast={showToast}
+                isAdmin={isAdmin}
+                onRegistrarDisponibilidad={isAdmin ? handleRegistrarDisponibilidad : undefined}
               />
             )}
 

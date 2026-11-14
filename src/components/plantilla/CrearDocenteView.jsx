@@ -7,6 +7,7 @@ import {
     Search,
     Mail,
     Phone,
+    Smartphone,
     IdCard,
     BookOpen,
     CheckCircle2,
@@ -47,12 +48,10 @@ const EMPTY_FORM = {
     numero_documento: '',
     correo_institucional: '',
     telefono: '',
+    celular: '',
     tipo_docente: '',
     categoria: '',
-    code_program: '',
-    foto_url: '',
-    evaluacion_periodo: '',
-    evaluacion_valor: ''
+    code_program: ''
 }
 
 const SOLO_LETRAS = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/
@@ -83,6 +82,13 @@ function validate(f) {
     else if (f.numero_documento.length > 11) e.numero_documento = 'El número de documento no puede exceder 11 caracteres'
     else if (!SOLO_NUMEROS.test(f.numero_documento)) e.numero_documento = 'El número de documento solo puede contener números'
 
+    if (f.telefono.trim() && !/^[0-9]{7,10}$/.test(f.telefono.trim())) {
+        e.telefono = 'El teléfono solo admite de 7 a 10 dígitos'
+    }
+    if (f.celular.trim() && !/^[0-9]{7,10}$/.test(f.celular.trim())) {
+        e.celular = 'El celular solo admite de 7 a 10 dígitos'
+    }
+
     if (!f.correo_institucional.trim()) e.correo_institucional = 'El correo institucional es obligatorio'
     else if (f.correo_institucional.length > 50) e.correo_institucional = 'El correo no puede exceder 50 caracteres'
     else if (!CORREO_UNIVALLE.test(f.correo_institucional.trim())) e.correo_institucional = 'El correo debe tener dominio @correounivalle.edu.co'
@@ -92,23 +98,6 @@ function validate(f) {
     if (!f.tipo_docente) e.tipo_docente = 'El tipo de docente es obligatorio'
     if (!f.categoria) e.categoria = 'La categoría es obligatoria'
     if (!f.code_program) e.code_program = 'El programa de adscripción es obligatorio'
-
-    if (f.foto_url.trim()) {
-        try {
-            const u = new URL(f.foto_url.trim())
-            if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error()
-        } catch {
-            e.foto_url = 'Ingresa una URL válida (http o https)'
-        }
-    }
-
-    if (f.evaluacion_periodo.length > 10) e.evaluacion_periodo = 'El periodo no puede exceder 10 caracteres'
-    if (f.evaluacion_valor !== '' && Number.isNaN(Number(f.evaluacion_valor))) {
-        e.evaluacion_valor = 'El valor debe ser numérico'
-    }
-    if (f.evaluacion_valor !== '' && !f.evaluacion_periodo.trim()) {
-        e.evaluacion_periodo = 'El periodo es obligatorio si hay un valor de evaluación'
-    }
 
     return e
 }
@@ -123,12 +112,10 @@ function buildPayload(f) {
         numero_documento: f.numero_documento.trim(),
         correo_institucional: f.correo_institucional.trim().toLowerCase(),
         telefono: opt(f.telefono),
+        celular: opt(f.celular),
         tipo_docente: f.tipo_docente,
         categoria: f.categoria,
-        code_program: f.code_program,
-        foto_url: opt(f.foto_url),
-        evaluacion_periodo: opt(f.evaluacion_periodo),
-        evaluacion_valor: f.evaluacion_valor === '' ? null : Number(f.evaluacion_valor)
+        code_program: f.code_program
     }
 }
 
@@ -519,6 +506,12 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                         <span>{d.telefono}</span>
                                     </div>
                                 )}
+                                {d.celular && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <Smartphone size={14} style={{ color: '#71717a', flexShrink: 0 }} />
+                                        <span>{d.celular}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}
@@ -602,9 +595,19 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                     <input
                                         type="text"
                                         maxLength={20}
-                                        placeholder="Ej. 3001234567"
+                                        placeholder="Ej. 6023212100"
                                         value={formData.telefono}
                                         onChange={(e) => update('telefono', e.target.value)}
+                                    />
+                                </Field>
+
+                                <Field label="Celular" error={errors.celular}>
+                                    <input
+                                        type="text"
+                                        maxLength={20}
+                                        placeholder="Ej. 3001234567"
+                                        value={formData.celular}
+                                        onChange={(e) => update('celular', e.target.value)}
                                     />
                                 </Field>
 
@@ -641,34 +644,6 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                     </select>
                                 </Field>
 
-                                <Field label="Foto (URL)" error={errors.foto_url}>
-                                    <input
-                                        type="url"
-                                        placeholder="https://ejemplo.com/foto.jpg"
-                                        value={formData.foto_url}
-                                        onChange={(e) => update('foto_url', e.target.value)}
-                                    />
-                                </Field>
-
-                                <Field label="Evaluación - Periodo" error={errors.evaluacion_periodo}>
-                                    <input
-                                        type="text"
-                                        maxLength={10}
-                                        placeholder="Ej. 2025-1"
-                                        value={formData.evaluacion_periodo}
-                                        onChange={(e) => update('evaluacion_periodo', e.target.value)}
-                                    />
-                                </Field>
-
-                                <Field label="Evaluación - Valor" error={errors.evaluacion_valor}>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="Ej. 4.5"
-                                        value={formData.evaluacion_valor}
-                                        onChange={(e) => update('evaluacion_valor', e.target.value)}
-                                    />
-                                </Field>
                             </div>
 
                             <div className="modal-footer">

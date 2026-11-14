@@ -163,7 +163,7 @@ export default function DedicatedInProgressView({ user, coordinadorPerfil, onNav
                 <div className="preview-card" onClick={() => onNavigate?.('mi-perfil')} style={{ cursor: 'pointer' }}>
                   <div className="preview-card-icon">👤</div>
                   <h4>Mi Perfil Docente</h4>
-                  <p>Consulta tu categoría, tipo de vinculación y actualiza tus datos de contacto y foto.</p>
+                  <p>Consulta tu categoría, tipo de vinculación y actualiza tus datos de contacto.</p>
                 </div>
               </>
             )}

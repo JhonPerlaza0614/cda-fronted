@@ -1,5 +1,5 @@
 import React from 'react'
-import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Home, UserCircle, CalendarDays, UserCheck, CalendarCheck } from 'lucide-react'
+import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Home, UserCircle, CalendarDays, UserCheck, CalendarCheck, Link2, ScrollText } from 'lucide-react'
 
 export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout }) {
   const rol = Number(user?.rol ?? 1) // 1: Admin, 2: Coordinador, 3: Docente
@@ -8,10 +8,15 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
   const isDocente = rol === 3
 
   const canSeePensum = isAdmin || isCoordinador
-  const canSeeProgramas = isAdmin
-  const canSeeAsignaturas = isAdmin || isCoordinador
+  const canSeeProgramas = isAdmin || isCoordinador
+  const canSeeAsignaturas = isAdmin
+  const canSeeProgramasCoordinadores = isAdmin
+  const canSeeAsignacionDocente = isCoordinador || isAdmin
   const canSeePlantilla = isAdmin
+  const canSeeAsociaciones = isAdmin
   const canSeePeriodos = isAdmin
+  const canSeeProgramacion = isAdmin || isCoordinador
+  const canSeeBitacora = isAdmin
 
   const rolLabel = rol === 1
     ? 'Administrador'
@@ -40,9 +45,27 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
 
           <div className="navbar-actions">
             {user && (
-              <div className="navbar-user" title={user.email || ''}>
-                <span className="navbar-user-name">{user.nombre} {user.apellido}</span>
-                <span className="navbar-user-role">{rolLabel}</span>
+              <div className="navbar-user-group">
+                <button
+                  type="button"
+                  className={`navbar-user-card ${activeTab === 'mi-perfil' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('mi-perfil')}
+                  title="Ver Mi Perfil"
+                >
+                  <div className="navbar-user">
+                    <span className="navbar-user-name">{user.nombre} {user.apellido}</span>
+                    <span className="navbar-user-role">{rolLabel}</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className={`navbar-profile-btn ${activeTab === 'mi-perfil' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('mi-perfil')}
+                  title="Acceder a Mi Perfil"
+                >
+                  <UserCircle size={17} />
+                  <span>Mi perfil</span>
+                </button>
               </div>
             )}
             <div className={`status-pill ${isConnected ? 'online' : 'offline'}`} title="Estado de Conexión">
@@ -72,16 +95,7 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               <span>Inicio</span>
             </button>
 
-            {canSeePensum && (
-              <button
-                className={`nav-tab-btn ${activeTab === 'pensum' ? 'active' : ''}`}
-                onClick={() => setActiveTab('pensum')}
-                title="Malla Curricular"
-              >
-                <Layers size={18} />
-                <span>Malla Curricular</span>
-              </button>
-            )}
+
 
             {canSeeProgramas && (
               <button
@@ -94,8 +108,19 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               </button>
             )}
 
+            {canSeeAsignacionDocente && (
+              <button
+                className={`nav-tab-btn ${activeTab === 'asignacion_docente' ? 'active' : ''}`}
+                onClick={() => setActiveTab('asignacion_docente')}
+                title="Asignación y Designación Docente"
+              >
+                <CalendarCheck size={18} />
+                <span>Asignación Docente</span>
+              </button>
+            )}
+
             {/* HU-037 */}
-            {canSeeProgramas && (
+            {canSeeProgramasCoordinadores && (
               <button
                 className={`nav-tab-btn ${activeTab === 'programas_coordinadores' ? 'active' : ''}`}
                 onClick={() => setActiveTab('programas_coordinadores')}
@@ -128,6 +153,17 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               </button>
             )}
 
+            {canSeeAsociaciones && (
+              <button
+                className={`nav-tab-btn ${activeTab === 'asociaciones' ? 'active' : ''}`}
+                onClick={() => setActiveTab('asociaciones')}
+                title="Asociaciones docentes"
+              >
+                <Link2 size={18} />
+                <span>Asociaciones docentes</span>
+              </button>
+            )}
+
             {canSeePeriodos && (
               <button
                 className={`nav-tab-btn ${activeTab === 'periodos' ? 'active' : ''}`}
@@ -139,39 +175,52 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
               </button>
             )}
 
-            {canSeePeriodos && (
+            {canSeeProgramacion && (
               <button
                 className={`nav-tab-btn ${activeTab === 'programacion_cohortes' ? 'active' : ''}`}
                 onClick={() => setActiveTab('programacion_cohortes')}
-                title="Programación y Cohortes"
+                title={isCoordinador ? 'Cupos de estudiantes' : 'Programación y Cohortes'}
               >
                 <CalendarCheck size={18} />
-                <span>Programación y Cohortes</span>
+                <span>{isCoordinador ? 'Cupos de estudiantes' : 'Programación y Cohortes'}</span>
+              </button>
+            )}
+
+            {/* HU-058: bitácora, solo administrador */}
+            {canSeeBitacora && (
+              <button
+                className={`nav-tab-btn ${activeTab === 'bitacora' ? 'active' : ''}`}
+                onClick={() => setActiveTab('bitacora')}
+                title="Bitácora"
+              >
+                <ScrollText size={18} />
+                <span>Bitácora</span>
               </button>
             )}
 
             {isDocente && (
-              <button
-                className={`nav-tab-btn ${activeTab === 'disponibilidad' ? 'active' : ''}`}
-                onClick={() => setActiveTab('disponibilidad')}
-                title="Disponibilidad"
-              >
-                <CalendarDays size={18} />
-                <span>Disponibilidad</span>
-              </button>
+              <>
+                <button
+                  className={`nav-tab-btn ${activeTab === 'disponibilidad' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('disponibilidad')}
+                  title="Disponibilidad"
+                >
+                  <CalendarDays size={18} />
+                  <span>Disponibilidad</span>
+                </button>
+
+                <button
+                  className={`nav-tab-btn ${activeTab === 'mis_cursos' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('mis_cursos')}
+                  title="Mis cursos asignados"
+                >
+                  <BookOpen size={18} />
+                  <span>Mis cursos</span>
+                </button>
+              </>
             )}
 
-            {/* Mi perfil: visible para todos los roles */}
-            {user && (
-              <button
-                className={`nav-tab-btn ${activeTab === 'mi-perfil' ? 'active' : ''}`}
-                onClick={() => setActiveTab('mi-perfil')}
-                title="Mi perfil"
-              >
-                <UserCircle size={18} />
-                <span style={{ whiteSpace: 'nowrap' }}>Mi perfil</span>
-              </button>
-            )}
+
           </nav>
         </div>
       </div>

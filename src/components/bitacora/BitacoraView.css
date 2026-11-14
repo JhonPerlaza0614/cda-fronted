@@ -1,0 +1,298 @@
+/* HU-058: bitácora (solo lectura) */
+.bita-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.bita-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.bita-title {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0;
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.bita-subtitle {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.bita-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.bita-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding: 1rem;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.bita-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.bita-field-sm {
+  flex: 0 1 160px;
+}
+
+.bita-field > span {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-sub);
+}
+
+.bita-input {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: #fff;
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.bita-input:focus {
+  outline: none;
+  border-color: var(--primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.bita-dropdown {
+  width: 100%;
+}
+
+.bita-filter-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.bita-error {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid #fecaca;
+  background-color: #fef2f2;
+  color: #991b1b;
+  font-size: 0.9rem;
+}
+
+.bita-error span {
+  flex: 1;
+}
+
+.bita-table-wrap {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  transition: opacity 0.15s ease;
+}
+
+.bita-table-wrap.is-loading {
+  opacity: 0.6;
+}
+
+.bita-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.bita-table th,
+.bita-table td {
+  padding: 0.7rem 0.9rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.bita-table th {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  background-color: var(--secondary-light);
+  white-space: nowrap;
+}
+
+.bita-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.bita-row-rechazado td {
+  background-color: #fffbfb;
+}
+
+.bita-nowrap {
+  white-space: nowrap;
+}
+
+.bita-user {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.bita-user strong {
+  color: #0f172a;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.bita-user span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.bita-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.bita-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bita-badge.is-info {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+}
+
+.bita-badge.is-success {
+  background-color: #ecfdf5;
+  color: #047857;
+}
+
+.bita-badge.is-danger {
+  background-color: #fef2f2;
+  color: #b91c1c;
+}
+
+.bita-detail-col {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.bita-table th.bita-detail-col {
+  text-align: right;
+}
+
+.bita-empty {
+  text-align: center !important;
+  color: var(--text-muted);
+  padding: 2.5rem 1rem !important;
+}
+
+.bita-empty svg {
+  display: block;
+  margin: 0 auto 0.5rem;
+}
+
+.bita-values-row td {
+  background-color: #f8fafc;
+}
+
+.bita-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.bita-values-label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.bita-values pre {
+  margin: 0;
+  padding: 0.75rem;
+  max-height: 260px;
+  overflow: auto;
+  background-color: #0f172a;
+  color: #e2e8f0;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bita-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  color: var(--text-sub);
+  font-size: 0.88rem;
+}
+
+.bita-pagination-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+@media (max-width: 720px) {
+  .bita-container {
+    padding: 1rem;
+  }
+
+  .bita-field,
+  .bita-field-sm {
+    flex: 1 1 100%;
+  }
+
+  .bita-filter-actions {
+    width: 100%;
+  }
+
+  .bita-filter-actions .bita-btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .bita-values {
+    grid-template-columns: 1fr;
+  }
+}

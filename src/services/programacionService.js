@@ -1,5 +1,5 @@
 import { supabase } from '../supabase'
-import { requestBackend } from './academicService'
+import { requestBackend, requestBackendBlob } from './academicService'
 
 export async function generarProgramacion(periodoId, sobrescribir = false) {
   return await requestBackend(`/programacion/generar?periodoId=${periodoId}`, {
@@ -38,10 +38,19 @@ export async function getProgramacion(periodoId, { codeProgram = '', codeCourse 
       jornada: c.jornada,
       numeroResolucion: c.numero_resolucion,
       grupo: c.grupo,
+      cupos: c.cupos ?? null,
       idDocente: c.id_docente,
       estado: c.estado
     }))
   }
+}
+
+export async function getAvanceProgramacion(periodoId) {
+  return requestBackend(`/programacion/avance?periodoId=${encodeURIComponent(periodoId)}`)
+}
+
+export async function descargarPendientesProgramacion(periodoId) {
+  return requestBackendBlob(`/programacion/avance/excel?periodoId=${encodeURIComponent(periodoId)}`)
 }
 
 export async function getResumenProgramacion(periodoId) {
@@ -68,4 +77,105 @@ export async function getResumenProgramacion(periodoId) {
       mensaje: 'Resumen consolidado de la programación'
     }
   }
+}
+
+// HU-047: ajustes del administrador sobre la programación generada.
+// Contrato: docs/contratos/HU-047.md del backend.
+
+/** Cómo quedarían los grupos de la asignatura si se excluye el curso (no guarda nada). */
+export async function getVistaPreviaExclusion(cursoId) {
+  return requestBackend(`/programacion/cursos/${cursoId}/exclusion/vista-previa`)
+}
+
+/** Excluye el curso con justificación y renumera los grupos de la asignatura. */
+export async function excluirCurso(cursoId, justificacion) {
+  return requestBackend(`/programacion/cursos/${cursoId}/excluir`, {
+    method: 'PATCH',
+    body: JSON.stringify({ justificacion }),
+  })
+}
+
+/** Reactiva un curso excluido; toma el siguiente grupo de la serie. */
+export async function reactivarCurso(cursoId, justificacion) {
+  return requestBackend(`/programacion/cursos/${cursoId}/reactivar`, {
+    method: 'PATCH',
+    body: JSON.stringify({ justificacion }),
+  })
+}
+
+// HU-059: cupos de estudiantes por curso/grupo.
+
+/** Máximo de cupos y si el plazo de edición está abierto para el usuario. */
+export async function getCuposConfig(periodoId) {
+  return requestBackend(`/programacion/cupos/config?periodoId=${periodoId}`)
+}
+
+/** Guarda los cupos de los cursos activos. No hay respaldo Supabase para escrituras. */
+export async function actualizarCupos(periodoId, cursos) {
+  return requestBackend('/programacion/cupos', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      periodoId: Number(periodoId),
+      cursos: (cursos || []).map((c) => ({
+        cursoId: Number(c.cursoId),
+        cupos: Number(c.cupos)
+      }))
+    })
+  })
+}
+
+/** Designa o desasigna un docente a un curso programado existente. */
+export async function asignarDocenteACurso(cursoId, idDocente, reemplazarDocente = false) {
+  return await requestBackend(`/programacion/cursos/${cursoId}/docente`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      idDocente: idDocente ? Number(idDocente) : null,
+      reemplazarDocente: Boolean(reemplazarDocente)
+    })
+  })
+}
+
+/** Designa o desasigna un docente a una materia asegurando el curso programado. */
+export async function asignarDocentePorMateria({
+  periodoId, codeProgram, codeCourse, semestre, idDocente, reemplazarDocente = false
+}) {
+  return await requestBackend('/programacion/asignar-docente', {
+    method: 'POST',
+    body: JSON.stringify({
+      periodoId: Number(periodoId),
+      codeProgram,
+      codeCourse,
+      semestre: Number(semestre),
+      idDocente: idDocente ? Number(idDocente) : null,
+      reemplazarDocente: Boolean(reemplazarDocente)
+    })
+  })
+}
+
+// --- Electivas profesionales programadas por el coordinador ---
+
+// GET /api/programacion/electivas?codeProgram=  → { periodoId, plazoAbierto, puedeEditar, electivas: [...] }
+export async function getElectivasProgramadas(codeProgram) {
+  return await requestBackend(`/programacion/electivas?codeProgram=${encodeURIComponent(codeProgram)}`)
+}
+
+// POST /api/programacion/electivas  → electiva creada (incluye `alerta` si no hay docentes asociados, HU-051)
+export async function programarElectiva({ codeProgram, codeEspacio, codeCourse, cupos }) {
+  return await requestBackend('/programacion/electivas', {
+    method: 'POST',
+    body: JSON.stringify({ codeProgram, codeEspacio, codeCourse, cupos: Number(cupos) })
+  })
+}
+
+// PATCH /api/programacion/electivas/{cursoId}  (solo sin docente asignado)
+export async function modificarElectiva(cursoId, { codeCourse, cupos }) {
+  return await requestBackend(`/programacion/electivas/${cursoId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ codeCourse, cupos: Number(cupos) })
+  })
+}
+
+// DELETE /api/programacion/electivas/{cursoId}  (solo sin docente asignado)
+export async function quitarElectiva(cursoId) {
+  return await requestBackend(`/programacion/electivas/${cursoId}`, { method: 'DELETE' })
 }

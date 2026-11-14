@@ -10,23 +10,29 @@ import {
   BookOpen,
   Info,
   Sparkles,
-  Filter,
-  Search,
   Check,
-  RotateCcw
+  RotateCcw,
+  TrendingUp
 } from 'lucide-react'
 import { getPeriodos, getProgramas, getPensumByProgram } from '../../services/academicService'
 import { getCohortes, guardarCohortes, getPropuestaCohortes } from '../../services/cohortesService'
-import { generarProgramacion, getProgramacion, getResumenProgramacion } from '../../services/programacionService'
+import { generarProgramacion, getProgramacion, getResumenProgramacion, getCuposConfig } from '../../services/programacionService'
+import CursosProgramadosPanel from './CursosProgramadosPanel'
+import AvanceProgramacionView from './AvanceProgramacionView'
 import './ProgramacionCohortesView.css'
 
-export default function ProgramacionCohortesView({ onShowToast }) {
+export default function ProgramacionCohortesView({ onShowToast, user, coordinadorPerfil }) {
+  const rol = Number(user?.rol ?? 1)
+  const isAdmin = rol === 1
+  const isCoordinador = rol === 2
+  const coordCode = coordinadorPerfil?.code_program || ''
+
   const [periodos, setPeriodos] = useState([])
   const [selectedPeriodoId, setSelectedPeriodoId] = useState('')
   const [programas, setProgramas] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
 
-  const [activeTab, setActiveTab] = useState('cohortes') // 'cohortes' | 'generacion' | 'cursos'
+  const [activeTab, setActiveTab] = useState(isCoordinador ? 'cursos' : 'cohortes')
   const [loading, setLoading] = useState(false)
   const [savingCohortes, setSavingCohortes] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -35,6 +41,9 @@ export default function ProgramacionCohortesView({ onShowToast }) {
   const [allCohortes, setAllCohortes] = useState([])
   const [resumen, setResumen] = useState(null)
   const [cursos, setCursos] = useState([])
+  // HU-059: máximo de cupos y plazo de edición para el usuario de la sesión.
+  const [cuposConfig, setCuposConfig] = useState(null)
+  const [cuposConfigCargando, setCuposConfigCargando] = useState(true)
 
   // Estado para edición de cohortes del programa seleccionado
   // Array de { semestre: number, jornada: 'DIURNA'|'NOCTURNA', numeroResolucion: string, activo: boolean, confirmada: boolean }
@@ -53,11 +62,6 @@ export default function ProgramacionCohortesView({ onShowToast }) {
   // Estado confirmación regenerar
   const [isConfirmRegenerarOpen, setIsConfirmRegenerarOpen] = useState(false)
 
-  // Filtros cursos
-  const [filterProgram, setFilterProgram] = useState('')
-  const [filterJornada, setFilterJornada] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
-
   // 1. Cargar períodos y programas al montar
   useEffect(() => {
     async function loadInitial() {
@@ -68,14 +72,21 @@ export default function ProgramacionCohortesView({ onShowToast }) {
           getProgramas()
         ])
         setPeriodos(periodosData || [])
-        setProgramas(programasData || [])
+
+        // El coordinador solo trabaja con su programa.
+        const programasVisibles = isCoordinador
+          ? (programasData || []).filter(p => p.code_program === coordCode)
+          : (programasData || [])
+        setProgramas(programasVisibles)
 
         // Seleccionar periodo vigente por defecto
         const vigente = periodosData?.find(p => p.vigente)
         if (vigente) {
           setSelectedPeriodoId(String(vigente.id))
         }
-        if (programasData?.length > 0) {
+        if (isCoordinador) {
+          if (coordCode) setSelectedProgramCode(coordCode)
+        } else if (programasData?.length > 0) {
           setSelectedProgramCode(programasData[0].code_program)
         }
       } catch (err) {
@@ -85,7 +96,7 @@ export default function ProgramacionCohortesView({ onShowToast }) {
       }
     }
     loadInitial()
-  }, [onShowToast])
+  }, [onShowToast, isCoordinador, coordCode])
 
   const selectedPeriodo = useMemo(() => {
     return periodos.find(p => String(p.id) === String(selectedPeriodoId))
@@ -99,25 +110,41 @@ export default function ProgramacionCohortesView({ onShowToast }) {
     return programas.find(p => p.code_program === selectedProgramCode)
   }, [programas, selectedProgramCode])
 
+  const cursosVisibles = useMemo(() => {
+    if (!isCoordinador || !coordCode) return cursos
+    return cursos.filter(c => c.codeProgram === coordCode)
+  }, [cursos, isCoordinador, coordCode])
+
   // 2. Cargar cohortes, resumen y cursos cuando cambia el periodo
   const loadPeriodoData = useCallback(async () => {
-    if (!selectedPeriodoId) return
+    if (!selectedPeriodoId) {
+      setCuposConfigCargando(false)
+      return
+    }
     setLoading(true)
+    setCuposConfigCargando(true)
+    setCuposConfig(null)
     try {
-      const [cohortesData, resumenData, cursosData] = await Promise.all([
+      const [cohortesData, resumenData, cursosData, cuposData] = await Promise.all([
         getCohortes(selectedPeriodoId).catch(() => []),
         getResumenProgramacion(selectedPeriodoId).catch(() => null),
-        getProgramacion(selectedPeriodoId).catch(() => [])
+        getProgramacion(
+          selectedPeriodoId,
+          isCoordinador && coordCode ? { codeProgram: coordCode } : {}
+        ).catch(() => []),
+        getCuposConfig(selectedPeriodoId).catch(() => null)
       ])
       setAllCohortes(cohortesData || [])
       setResumen(resumenData)
       setCursos(cursosData || [])
+      setCuposConfig(cuposData)
     } catch (err) {
       onShowToast?.(err.message || 'Error al cargar datos del período', 'error')
     } finally {
       setLoading(false)
+      setCuposConfigCargando(false)
     }
-  }, [selectedPeriodoId, onShowToast])
+  }, [selectedPeriodoId, onShowToast, isCoordinador, coordCode])
 
   useEffect(() => {
     loadPeriodoData()
@@ -135,8 +162,7 @@ export default function ProgramacionCohortesView({ onShowToast }) {
       return
     }
     // Fallback: consultar el pensum para extraer la resolución (datos legacy con NULL en programas)
-    fetch(`/api/pensum/programa/${selectedPrograma.code_program}`)
-      .then(r => r.ok ? r.json() : null)
+    getPensumByProgram(selectedPrograma.code_program)
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
           const res = data.find(p => p.numeroResolucion)?.numeroResolucion || null
@@ -298,27 +324,25 @@ export default function ProgramacionCohortesView({ onShowToast }) {
   }
 
   // Filtrado de cursos
-  const filteredCursos = useMemo(() => {
-    return cursos.filter(c => {
-      const matchProg = !filterProgram || c.codeProgram === filterProgram
-      const matchJor = !filterJornada || c.jornada === filterJornada
-      const q = searchTerm.toLowerCase().trim()
-      const matchSearch = !q ||
-        c.codeCourse?.toLowerCase().includes(q) ||
-        c.nombreAsignatura?.toLowerCase().includes(q) ||
-        c.nombrePrograma?.toLowerCase().includes(q)
-      return matchProg && matchJor && matchSearch
-    })
-  }, [cursos, filterProgram, filterJornada, searchTerm])
 
   return (
     <div className="programacion-cohortes-container">
       {/* 1. Header con Selección de Período */}
       <div className="pc-header">
         <div>
-          <h2 className="pc-title">Oferta de Cohortes y Programación Académica</h2>
+          <h2 className="pc-title">
+            {isCoordinador
+              ? 'Cupos de estudiantes'
+              : activeTab === 'avance'
+                ? 'Avance de la Programación Académica'
+                : 'Oferta de Cohortes y Programación Académica'}
+          </h2>
           <p className="pc-subtitle">
-            Configure las cohortes activas por programa y genere automáticamente la oferta de cursos a partir de las mallas curriculares.
+            {isCoordinador
+              ? 'Registre el número de cupos de estudiantes de cada materia y grupo de su programa.'
+              : activeTab === 'avance'
+                ? 'Consulte los cursos generados, los pendientes, los docentes sin disponibilidad y las fechas de cierre de cada ventana.'
+                : 'Configure las cohortes activas por programa y genere automáticamente la oferta de cursos a partir de las mallas curriculares.'}
           </p>
         </div>
 
@@ -342,33 +366,47 @@ export default function ProgramacionCohortesView({ onShowToast }) {
 
       {/* 2. Barra de Pestañas */}
       <div className="pc-tabs-nav">
-        <button
-          className={`pc-tab-btn ${activeTab === 'cohortes' ? 'active' : ''}`}
-          onClick={() => setActiveTab('cohortes')}
-        >
-          <Layers size={18} />
-          <span>1. Oferta de Cohortes por Programa</span>
-        </button>
+        {!isCoordinador && (
+          <button
+            className={`pc-tab-btn ${activeTab === 'cohortes' ? 'active' : ''}`}
+            onClick={() => setActiveTab('cohortes')}
+          >
+            <Layers size={18} />
+            <span>1. Oferta de Cohortes por Programa</span>
+          </button>
+        )}
 
-        <button
-          className={`pc-tab-btn ${activeTab === 'generacion' ? 'active' : ''}`}
-          onClick={() => setActiveTab('generacion')}
-        >
-          <Sparkles size={18} />
-          <span>2. Generar Programación</span>
-          {resumen && resumen.totalCursos > 0 && (
-            <span className="pc-tab-counter">{resumen.totalCursos}</span>
-          )}
-        </button>
+        {!isCoordinador && (
+          <button
+            className={`pc-tab-btn ${activeTab === 'generacion' ? 'active' : ''}`}
+            onClick={() => setActiveTab('generacion')}
+          >
+            <Sparkles size={18} />
+            <span>2. Generar Programación</span>
+            {resumen && resumen.totalCursos > 0 && (
+              <span className="pc-tab-counter">{resumen.totalCursos}</span>
+            )}
+          </button>
+        )}
 
         <button
           className={`pc-tab-btn ${activeTab === 'cursos' ? 'active' : ''}`}
           onClick={() => setActiveTab('cursos')}
         >
           <BookOpen size={18} />
-          <span>3. Cursos Programados</span>
-          <span className="pc-tab-counter">{cursos.length}</span>
+          <span>{isCoordinador ? 'Cupos de estudiantes' : '3. Cursos Programados'}</span>
+          <span className="pc-tab-counter">{cursosVisibles.length}</span>
         </button>
+
+        {isAdmin && (
+          <button
+            className={`pc-tab-btn ${activeTab === 'avance' ? 'active' : ''}`}
+            onClick={() => setActiveTab('avance')}
+          >
+            <TrendingUp size={18} />
+            <span>4. Avance del Período</span>
+          </button>
+        )}
       </div>
 
       {/* 3. Contenido de las Pestañas */}
@@ -615,109 +653,30 @@ export default function ProgramacionCohortesView({ onShowToast }) {
         </div>
       )}
 
-      {/* Pestaña 3: Cursos Programados */}
+      {/* Pestaña 3: Cursos Programados (HU-047) */}
       {activeTab === 'cursos' && (
         <div className="pc-tab-content">
-          <div className="pc-panel">
-            {/* Filtros */}
-            <div className="pc-filters-bar">
-              <div className="pc-search-box">
-                <Search size={16} className="pc-search-icon" />
-                <input
-                  type="text"
-                  placeholder="Buscar por código, nombre de materia o carrera..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pc-input"
-                />
-              </div>
-
-              <div className="pc-filter-group">
-                <Filter size={16} />
-                <select
-                  value={filterProgram}
-                  onChange={(e) => setFilterProgram(e.target.value)}
-                  className="pc-select"
-                >
-                  <option value="">Todos los programas</option>
-                  {programas.map(p => (
-                    <option key={p.code_program} value={p.code_program}>
-                      {p.name_program}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={filterJornada}
-                  onChange={(e) => setFilterJornada(e.target.value)}
-                  className="pc-select"
-                >
-                  <option value="">Todas las jornadas</option>
-                  <option value="DIURNA">Diurna</option>
-                  <option value="NOCTURNA">Nocturna</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Tabla de cursos */}
-            <div className="pc-table-wrapper">
-              <table className="pc-table">
-                <thead>
-                  <tr>
-                    <th>Grupo</th>
-                    <th>Código</th>
-                    <th>Asignatura</th>
-                    <th>Semestre</th>
-                    <th>Jornada</th>
-                    <th>Créditos</th>
-                    <th>Programa</th>
-                    <th>Resolución</th>
-                    <th>Docente</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCursos.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="pc-empty-cell">
-                        No hay cursos para mostrar. Vaya a la pestaña "Generar Programación" si aún no ha generado la oferta.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredCursos.map((curso) => (
-                      <tr key={curso.id}>
-                        <td><span className="pc-grupo-badge">{curso.grupo || '50'}</span></td>
-                        <td><code>{curso.codeCourse}</code></td>
-                        <td><strong>{curso.nombreAsignatura}</strong></td>
-                        <td>{curso.semestre}º</td>
-                        <td>
-                          <span className={`pc-badge ${curso.jornada === 'NOCTURNA' ? 'pc-badge-purple' : 'pc-badge-blue'}`}>
-                            {curso.jornada}
-                          </span>
-                        </td>
-                        <td>{curso.credits}</td>
-                        <td>{curso.nombrePrograma}</td>
-                        <td><small className="pc-text-muted">{curso.numeroResolucion}</small></td>
-                        <td>
-                          {curso.nombreDocente ? (
-                            <span className="pc-docente-assigned">{curso.nombreDocente}</span>
-                          ) : (
-                            <span className="pc-text-muted">Sin docente asignado</span>
-                          )}
-                        </td>
-                        <td>
-                          <span className={`pc-badge ${curso.estado === 'ASIGNADO' ? 'pc-badge-success' : 'pc-badge-warning'}`}>
-                            {curso.estado}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <CursosProgramadosPanel
+            cursos={cursosVisibles}
+            programas={programas}
+            onCambio={loadPeriodoData}
+            onShowToast={onShowToast}
+            periodoId={selectedPeriodoId}
+            maxCupos={cuposConfig?.maxPorGrupo ?? 60}
+            puedeEditarCupos={cuposConfig?.puedeEditar ?? isAdmin}
+            plazoAbierto={cuposConfig?.plazoAbierto ?? false}
+            cargandoCuposConfig={cuposConfigCargando}
+            cargandoCupos={loading || cuposConfigCargando}
+            puedeAjustarProgramacion={isAdmin}
+          />
         </div>
+      )}
+
+      {isAdmin && activeTab === 'avance' && (
+        <AvanceProgramacionView
+          periodoId={selectedPeriodoId}
+          onShowToast={onShowToast}
+        />
       )}
 
       {/* Modal: Propuesta de Avance Automático (HU-043) */}
@@ -855,8 +814,10 @@ export default function ProgramacionCohortesView({ onShowToast }) {
                 Ya existe una programación generada para el período <strong>{selectedPeriodo?.nombre}</strong>.
               </p>
               <p>
-                Al volver a generar, <strong>se conservarán los docentes que ya hayan sido asignados</strong> a los cursos
-                cuyas materias sigan ofertándose.
+                Al volver a generar, <strong>se conservarán los docentes asignados, los cursos excluidos con su
+                justificación y los grupos</strong> de los cursos que sigan ofertándose. Los cursos nuevos se agregan al
+                final de la serie de su asignatura. Los que ya no estén en la oferta no se borran: quedan marcados como
+                «Requiere revisión».
               </p>
               <p className="pc-text-muted">
                 ¿Desea sobrescribir la programación actual?

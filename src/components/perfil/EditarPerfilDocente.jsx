@@ -1,24 +1,24 @@
-import React, { useRef, useState } from 'react'
-import { AlertTriangle, Camera, Trash2, UserCircle } from 'lucide-react'
-import { deleteMiFoto, updateMiContacto, uploadMiFoto } from '../../services/docenteService'
+import React, { useEffect, useState } from 'react'
+import { AlertTriangle } from 'lucide-react'
+import { updateMiContacto } from '../../services/docenteService'
+import { getFacultades } from '../../services/academicService'
 
-// HU-015: el docente edita su foto, correo personal y teléfono desde "Mi perfil".
+// HU-015: el docente edita su facultad, correo personal, teléfono y celular desde "Mi perfil".
 // Nombres, apellidos y correo institucional son de solo lectura.
-
-const FOTO_TAMANO_MAXIMO = 5 * 1024 * 1024
-const FOTO_TIPOS = ['image/jpeg', 'image/png']
 
 const MSG_SIN_CAMBIOS = 'No hay cambios para guardar'
 const MSG_ACTUALIZADO = 'Perfil actualizado'
 const MSG_ERROR_GUARDAR = 'No se pudo guardar. Intente de nuevo'
-const MSG_FOTO_INVALIDA = 'Formato o tamaño no válido'
-const MSG_ERROR_FOTO = 'No se pudo cargar la imagen'
+// Celular (2026-11-10): opcional, distinto del teléfono, de 7 a 10 dígitos.
+const MSG_CELULAR_INVALIDO = 'Por favor complete este campo correctamente'
 
 const CORREO_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/
 const TELEFONO_REGEX = /^[0-9]{7,10}$/
+const CELULAR_REGEX = /^[0-9]{7,10}$/
+const CAMPOS_NUMERICOS = new Set(['telefono', 'celular'])
 
 // Mismas reglas que el backend (docs/contratos/HU-015.md)
-function validar({ correoPersonal, telefono }) {
+function validar({ correoPersonal, telefono, celular }) {
     const errores = {}
     const correo = correoPersonal.trim()
     if (correo) {
@@ -33,6 +33,10 @@ function validar({ correoPersonal, telefono }) {
     const tel = telefono.trim()
     if (tel && !TELEFONO_REGEX.test(tel)) {
         errores.telefono = 'El teléfono solo admite de 7 a 10 dígitos'
+    }
+    const cel = celular.trim()
+    if (cel && !CELULAR_REGEX.test(cel)) {
+        errores.celular = MSG_CELULAR_INVALIDO
     }
     return errores
 }
@@ -71,24 +75,59 @@ function ConfirmModal({ titulo, mensaje, textoConfirmar, peligro, procesando, on
     )
 }
 
-export default function EditarPerfilDocente({ docente, fotoSrc, onCancel, onSaved, onFotoChange, onShowToast }) {
-    const original = {
+export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShowToast }) {
+    const [facultades, setFacultades] = useState([])
+    const [cargandoFacultades, setCargandoFacultades] = useState(true)
+
+    const [original, setOriginal] = useState({
         correoPersonal: normalizar(docente.correo_personal),
-        telefono: normalizar(docente.telefono)
-    }
+        telefono: normalizar(docente.telefono),
+        celular: normalizar(docente.celular),
+        idFacultad: docente.id_facultad != null ? String(docente.id_facultad) : ''
+    })
     const [form, setForm] = useState(original)
     const [errores, setErrores] = useState({})
-    const [confirmacion, setConfirmacion] = useState(null) // guardar | descartar | reemplazar-foto | eliminar-foto
+    const [confirmacion, setConfirmacion] = useState(null) // guardar | descartar
     const [procesando, setProcesando] = useState(false)
-    const [fotoPendiente, setFotoPendiente] = useState(null)
-    const fileInputRef = useRef(null)
+
+    useEffect(() => {
+        let isMounted = true
+        getFacultades()
+            .then((data) => {
+                if (!isMounted) return
+                if (Array.isArray(data)) {
+                    setFacultades(data)
+                    if (docente.id_facultad == null && docente.nombre_facultad) {
+                        const encontrada = data.find(
+                            (f) => (f.nombre || f.Nombre)?.trim().toLowerCase() === docente.nombre_facultad.trim().toLowerCase()
+                        )
+                        if (encontrada) {
+                            const idStr = String(encontrada.id)
+                            setOriginal((prev) => ({ ...prev, idFacultad: idStr }))
+                            setForm((prev) => (prev.idFacultad ? prev : { ...prev, idFacultad: idStr }))
+                        }
+                    }
+                }
+            })
+            .catch((err) => {
+                console.warn('Error al cargar facultades:', err)
+            })
+            .finally(() => {
+                if (isMounted) setCargandoFacultades(false)
+            })
+        return () => {
+            isMounted = false
+        }
+    }, [docente.id_facultad, docente.nombre_facultad])
 
     const hayCambios =
         normalizar(form.correoPersonal).toLowerCase() !== original.correoPersonal.toLowerCase() ||
-        normalizar(form.telefono) !== original.telefono
+        normalizar(form.telefono) !== original.telefono ||
+        normalizar(form.celular) !== original.celular ||
+        String(form.idFacultad || '') !== String(original.idFacultad || '')
 
     const handleChange = (campo) => (e) => {
-        const valor = campo === 'telefono' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value
+        const valor = CAMPOS_NUMERICOS.has(campo) ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value
         setForm((prev) => ({ ...prev, [campo]: valor }))
         setErrores((prev) => ({ ...prev, [campo]: undefined }))
     }
@@ -110,7 +149,9 @@ export default function EditarPerfilDocente({ docente, fotoSrc, onCancel, onSave
         try {
             const actualizado = await updateMiContacto({
                 correo_personal: normalizar(form.correoPersonal) || null,
-                telefono: normalizar(form.telefono) || null
+                telefono: normalizar(form.telefono) || null,
+                celular: normalizar(form.celular) || null,
+                id_facultad: form.idFacultad ? parseInt(form.idFacultad, 10) : null
             })
             setConfirmacion(null)
             onShowToast?.(MSG_ACTUALIZADO, 'success')
@@ -122,7 +163,9 @@ export default function EditarPerfilDocente({ docente, fotoSrc, onCancel, onSave
             if (err.status === 400 && erroresBackend) {
                 setErrores({
                     correoPersonal: erroresBackend.correoPersonal || erroresBackend.correo_personal,
-                    telefono: erroresBackend.telefono
+                    telefono: erroresBackend.telefono,
+                    celular: erroresBackend.celular,
+                    idFacultad: erroresBackend.idFacultad || erroresBackend.id_facultad
                 })
             } else if (err.status === 400 && err.message === MSG_SIN_CAMBIOS) {
                 onShowToast?.(MSG_SIN_CAMBIOS, 'info')
@@ -140,124 +183,13 @@ export default function EditarPerfilDocente({ docente, fotoSrc, onCancel, onSave
         else onCancel()
     }
 
-    // Criterio 5: JPG o PNG de máximo 5 MB
-    const handleFotoSeleccionada = (e) => {
-        const archivo = e.target.files?.[0]
-        e.target.value = ''
-        if (!archivo) return
-        if (!FOTO_TIPOS.includes(archivo.type) || archivo.size === 0 || archivo.size > FOTO_TAMANO_MAXIMO) {
-            onShowToast?.(MSG_FOTO_INVALIDA, 'error')
-            return
-        }
-        setFotoPendiente(archivo)
-        // Criterio 6: reemplazar una foto existente pide confirmación
-        if (docente.tiene_foto) setConfirmacion('reemplazar-foto')
-        else subirFoto(archivo)
-    }
-
-    const subirFoto = async (archivo) => {
-        setProcesando(true)
-        try {
-            const actualizado = await uploadMiFoto(archivo)
-            onShowToast?.(MSG_ACTUALIZADO, 'success')
-            onFotoChange(actualizado)
-        } catch (err) {
-            onShowToast?.(err.status === 400 ? MSG_FOTO_INVALIDA : MSG_ERROR_FOTO, 'error')
-        } finally {
-            setProcesando(false)
-            setFotoPendiente(null)
-            setConfirmacion(null)
-        }
-    }
-
-    const confirmarEliminarFoto = async () => {
-        setProcesando(true)
-        try {
-            await deleteMiFoto()
-            onShowToast?.(MSG_ACTUALIZADO, 'success')
-            onFotoChange({ ...docente, tiene_foto: false })
-        } catch {
-            onShowToast?.(MSG_ERROR_GUARDAR, 'error')
-        } finally {
-            setProcesando(false)
-            setConfirmacion(null)
-        }
-    }
-
     const cerrarConfirmacion = () => {
         if (procesando) return
         setConfirmacion(null)
-        setFotoPendiente(null)
     }
-
-    const iniciales = `${docente.nombres?.[0] ?? ''}${docente.apellidos?.[0] ?? ''}`.toUpperCase()
 
     return (
         <form onSubmit={handleGuardar} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
-            {/* Foto */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                {fotoSrc ? (
-                    <img
-                        src={fotoSrc}
-                        alt="Tu foto de perfil"
-                        style={{ width: '88px', height: '88px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #d4d4d8' }}
-                    />
-                ) : (
-                    <div
-                        aria-label="Sin foto"
-                        style={{
-                            width: '88px',
-                            height: '88px',
-                            borderRadius: '50%',
-                            background: '#f4f4f5',
-                            border: '2px solid #d4d4d8',
-                            color: '#52525b',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '1.6rem',
-                            fontWeight: 600
-                        }}
-                    >
-                        {iniciales || <UserCircle size={40} />}
-                    </div>
-                )}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <button
-                            type="button"
-                            className="btn-secondary btn-sm flex-align-center"
-                            style={{ gap: '0.35rem' }}
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={procesando}
-                        >
-                            <Camera size={15} />
-                            {docente.tiene_foto ? 'Cambiar foto' : 'Subir foto'}
-                        </button>
-                        {docente.tiene_foto && (
-                            <button
-                                type="button"
-                                className="btn-danger btn-sm flex-align-center"
-                                style={{ gap: '0.35rem' }}
-                                onClick={() => setConfirmacion('eliminar-foto')}
-                                disabled={procesando}
-                            >
-                                <Trash2 size={15} />
-                                Eliminar foto
-                            </button>
-                        )}
-                    </div>
-                    <span className="form-hint">JPG o PNG, máximo 5 MB.</span>
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png"
-                        onChange={handleFotoSeleccionada}
-                        style={{ display: 'none' }}
-                    />
-                </div>
-            </div>
-
             {/* Solo lectura */}
             <div className="form-group">
                 <label htmlFor="perfil-nombres">Nombres</label>
@@ -280,6 +212,29 @@ export default function EditarPerfilDocente({ docente, fotoSrc, onCancel, onSave
             </div>
 
             {/* Editables */}
+            <div className="form-group">
+                <label htmlFor="perfil-facultad">Facultad</label>
+                <select
+                    id="perfil-facultad"
+                    value={form.idFacultad}
+                    onChange={handleChange('idFacultad')}
+                    disabled={procesando || cargandoFacultades}
+                    aria-invalid={Boolean(errores.idFacultad)}
+                    className={errores.idFacultad ? 'input-error' : undefined}
+                >
+                    <option value="">
+                        {cargandoFacultades ? 'Cargando facultades...' : 'Seleccione una facultad...'}
+                    </option>
+                    {facultades.map((fac) => (
+                        <option key={fac.id} value={fac.id}>
+                            {fac.nombre || fac.Nombre}
+                        </option>
+                    ))}
+                </select>
+                {errores.idFacultad && <span className="field-error">{errores.idFacultad}</span>}
+                <span className="form-hint">Facultad a la que estás adscrito.</span>
+            </div>
+
             <div className="form-group">
                 <label htmlFor="perfil-correo-personal">Correo personal (opcional)</label>
                 <input
@@ -309,6 +264,25 @@ export default function EditarPerfilDocente({ docente, fotoSrc, onCancel, onSave
                 />
                 {errores.telefono && <span className="field-error">{errores.telefono}</span>}
             </div>
+            <div className="form-group">
+                <label htmlFor="perfil-celular">Celular (opcional)</label>
+                <input
+                    id="perfil-celular"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    maxLength={10}
+                    value={form.celular}
+                    onChange={handleChange('celular')}
+                    aria-invalid={Boolean(errores.celular)}
+                    aria-describedby={errores.celular ? 'perfil-celular-error' : 'perfil-celular-ayuda'}
+                    className={errores.celular ? 'input-error' : undefined}
+                    disabled={procesando}
+                />
+                {errores.celular
+                    ? <span id="perfil-celular-error" className="field-error">{errores.celular}</span>
+                    : <span id="perfil-celular-ayuda" className="form-hint">Solo números, de 7 a 10 dígitos. Puedes dejarlo vacío.</span>}
+            </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button type="button" className="btn-secondary" onClick={handleCancelar} disabled={procesando}>
@@ -336,27 +310,6 @@ export default function EditarPerfilDocente({ docente, fotoSrc, onCancel, onSave
                     textoConfirmar="Sí, descartar"
                     peligro
                     onConfirmar={onCancel}
-                    onCancelar={cerrarConfirmacion}
-                />
-            )}
-            {confirmacion === 'reemplazar-foto' && fotoPendiente && (
-                <ConfirmModal
-                    titulo="Reemplazar foto"
-                    mensaje={`¿Deseas reemplazar tu foto de perfil por «${fotoPendiente.name}»?`}
-                    textoConfirmar="Sí, reemplazar"
-                    procesando={procesando}
-                    onConfirmar={() => subirFoto(fotoPendiente)}
-                    onCancelar={cerrarConfirmacion}
-                />
-            )}
-            {confirmacion === 'eliminar-foto' && (
-                <ConfirmModal
-                    titulo="Eliminar foto"
-                    mensaje="¿Deseas eliminar tu foto de perfil? Se mostrará la imagen por defecto."
-                    textoConfirmar="Sí, eliminar"
-                    peligro
-                    procesando={procesando}
-                    onConfirmar={confirmarEliminarFoto}
                     onCancelar={cerrarConfirmacion}
                 />
             )}
