@@ -11,12 +11,14 @@ import {
   Info,
   Sparkles,
   Check,
-  RotateCcw
+  RotateCcw,
+  TrendingUp
 } from 'lucide-react'
 import { getPeriodos, getProgramas, getPensumByProgram } from '../../services/academicService'
 import { getCohortes, guardarCohortes, getPropuestaCohortes } from '../../services/cohortesService'
 import { generarProgramacion, getProgramacion, getResumenProgramacion, getCuposConfig } from '../../services/programacionService'
 import CursosProgramadosPanel from './CursosProgramadosPanel'
+import AvanceProgramacionView from './AvanceProgramacionView'
 import './ProgramacionCohortesView.css'
 
 export default function ProgramacionCohortesView({ onShowToast, user, coordinadorPerfil }) {
@@ -30,7 +32,7 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
   const [programas, setProgramas] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
 
-  const [activeTab, setActiveTab] = useState(isCoordinador ? 'cursos' : 'cohortes') // 'cohortes' | 'generacion' | 'cursos'
+  const [activeTab, setActiveTab] = useState(isCoordinador ? 'cursos' : 'cohortes')
   const [loading, setLoading] = useState(false)
   const [savingCohortes, setSavingCohortes] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -329,12 +331,18 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
       <div className="pc-header">
         <div>
           <h2 className="pc-title">
-            {isCoordinador ? 'Cupos de estudiantes' : 'Oferta de Cohortes y Programación Académica'}
+            {isCoordinador
+              ? 'Cupos de estudiantes'
+              : activeTab === 'avance'
+                ? 'Avance de la Programación Académica'
+                : 'Oferta de Cohortes y Programación Académica'}
           </h2>
           <p className="pc-subtitle">
             {isCoordinador
               ? 'Registre el número de cupos de estudiantes de cada materia y grupo de su programa.'
-              : 'Configure las cohortes activas por programa y genere automáticamente la oferta de cursos a partir de las mallas curriculares.'}
+              : activeTab === 'avance'
+                ? 'Consulte los cursos generados, los pendientes, los docentes sin disponibilidad y las fechas de cierre de cada ventana.'
+                : 'Configure las cohortes activas por programa y genere automáticamente la oferta de cursos a partir de las mallas curriculares.'}
           </p>
         </div>
 
@@ -389,6 +397,16 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
           <span>{isCoordinador ? 'Cupos de estudiantes' : '3. Cursos Programados'}</span>
           <span className="pc-tab-counter">{cursosVisibles.length}</span>
         </button>
+
+        {isAdmin && (
+          <button
+            className={`pc-tab-btn ${activeTab === 'avance' ? 'active' : ''}`}
+            onClick={() => setActiveTab('avance')}
+          >
+            <TrendingUp size={18} />
+            <span>4. Avance del Período</span>
+          </button>
+        )}
       </div>
 
       {/* 3. Contenido de las Pestañas */}
@@ -652,6 +670,13 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
             puedeAjustarProgramacion={isAdmin}
           />
         </div>
+      )}
+
+      {isAdmin && activeTab === 'avance' && (
+        <AvanceProgramacionView
+          periodoId={selectedPeriodoId}
+          onShowToast={onShowToast}
+        />
       )}
 
       {/* Modal: Propuesta de Avance Automático (HU-043) */}

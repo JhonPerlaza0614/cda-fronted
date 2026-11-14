@@ -1,5 +1,5 @@
 import { supabase } from '../supabase'
-import { requestBackend } from './academicService'
+import { requestBackend, requestBackendBlob } from './academicService'
 
 export async function generarProgramacion(periodoId, sobrescribir = false) {
   return await requestBackend(`/programacion/generar?periodoId=${periodoId}`, {
@@ -43,6 +43,14 @@ export async function getProgramacion(periodoId, { codeProgram = '', codeCourse 
       estado: c.estado
     }))
   }
+}
+
+export async function getAvanceProgramacion(periodoId) {
+  return requestBackend(`/programacion/avance?periodoId=${encodeURIComponent(periodoId)}`)
+}
+
+export async function descargarPendientesProgramacion(periodoId) {
+  return requestBackendBlob(`/programacion/avance/excel?periodoId=${encodeURIComponent(periodoId)}`)
 }
 
 export async function getResumenProgramacion(periodoId) {
