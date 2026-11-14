@@ -20,6 +20,7 @@ import {
   getProgramas,
   getAsignaturas,
   getAllPensum,
+  getPeriodos,
   checkDatabaseHealth
 } from './services/academicService'
 import { getMiPerfilCoordinador } from './services/docenteService'
@@ -53,6 +54,7 @@ export default function App({ user, onLogout }) {
   const [pensumList, setPensumList] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
   const [coordinadorPerfil, setCoordinadorPerfil] = useState(null)
+  const [periodoActivo, setPeriodoActivo] = useState(null)
   // HU-037: programa a editar al llegar a «Programas» desde «Programas y coordinadores»
   const [programaCoordinadorCode, setProgramaCoordinadorCode] = useState(null)
   // Docente seleccionado desde Plantilla para el registro administrativo de disponibilidad.
@@ -88,13 +90,14 @@ export default function App({ user, onLogout }) {
       .catch(() => { if (seq === loadSeq.current) setIsConnected(false) })
 
     try {
-      const [progs, asigs, pensum, coordData] = await Promise.all([
+      const [progs, asigs, pensum, coordData, periodos] = await Promise.all([
         canSeeAcademicData ? getProgramas() : Promise.resolve([]),
         canSeeAcademicData ? getAsignaturas() : Promise.resolve([]),
         canSeeAcademicData ? getAllPensum() : Promise.resolve([]),
         isCoordinador && user?.email
           ? getMiPerfilCoordinador(user.email).catch(() => null)
-          : Promise.resolve(null)
+          : Promise.resolve(null),
+        canSeeAcademicData ? getPeriodos().catch(() => []) : Promise.resolve([])
       ])
       if (seq !== loadSeq.current) return
 
@@ -102,6 +105,8 @@ export default function App({ user, onLogout }) {
       setProgramas(progs)
       setAsignaturas(asigs)
       setPensumList(pensum.map(item => withCourseInfo(item, asigMap)))
+      const listaP = Array.isArray(periodos) ? periodos : []
+      setPeriodoActivo(listaP.find(p => p.vigente) || listaP[0] || null)
 
       if (isCoordinador) {
         setCoordinadorPerfil(coordData)
@@ -299,6 +304,7 @@ export default function App({ user, onLogout }) {
                 programas={isCoordinador ? programasParaPensum : programas}
                 programasTodos={programas}
                 pensumList={pensumList}
+                periodoActivoProp={periodoActivo}
                 onShowToast={showToast}
               />
             )}

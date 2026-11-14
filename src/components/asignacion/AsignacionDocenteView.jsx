@@ -179,6 +179,9 @@ function horasRegistradas(franjas) {
 }
 
 
+// Cache en memoria entre visitas para mostrar materias de inmediato sin spinner
+const cacheCursosGlobal = new Map()
+
 export default function AsignacionDocenteView({
   user,
   isAdmin = false,
@@ -189,6 +192,7 @@ export default function AsignacionDocenteView({
   // (al coordinador `programas` le llega solo con el suyo).
   programasTodos = null,
   pensumList = [],
+  periodoActivoProp = null,
   onShowToast
 }) {
   // 1. Estado de selección de Programa y Período
@@ -199,25 +203,32 @@ export default function AsignacionDocenteView({
 
   const [selectedProgramCode, setSelectedProgramCode] = useState(defaultProgramCode)
   const [periodos, setPeriodos] = useState([])
-  const [periodoActivo, setPeriodoActivo] = useState(null)
+  const [periodoActivo, setPeriodoActivo] = useState(periodoActivoProp)
   const [facultadesList, setFacultadesList] = useState([])
 
   // 2. Semestre seleccionado (donde escojan un semestre)
   const [selectedSemestre, setSelectedSemestre] = useState(1)
 
+  // Cache inicial si ya se consultó antes este programa
+  const cacheKeyInicial = `${periodoActivoProp?.id || ''}_${defaultProgramCode}_${FILTRO_JORNADA_DEFECTO}`
+  const cursosIniciales = cacheCursosGlobal.get(cacheKeyInicial) || {}
+
   // 3. Datos de cursos programados (por programa visible), docentes y sus disponibilidades
-  const [cursosPorPrograma, setCursosPorPrograma] = useState({}) // { codeProgram: [cursos, incluidos excluidos] }
+  const [cursosPorPrograma, setCursosPorPrograma] = useState(cursosIniciales)
   const [docentesList, setDocentesList] = useState([])
   const [disponibilidadesMap, setDisponibilidadesMap] = useState({}) // { docenteId: [items] }
   const [cargaPorDocente, setCargaPorDocente] = useState({})
   const [cargaDisponible, setCargaDisponible] = useState(false)
   const [evaluacionesMap, setEvaluacionesMap] = useState({}) // { docenteId: evaluation }
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(Object.keys(cursosIniciales).length === 0)
   const [refreshing, setRefreshing] = useState(false)
-  const [periodosCargando, setPeriodosCargando] = useState(true)
+  const [periodosCargando, setPeriodosCargando] = useState(!periodoActivoProp)
   const [errorCarga, setErrorCarga] = useState(false)
   // Número de la última carga: una respuesta de una carga anterior (otra jornada) se ignora.
   const cargaSeq = useRef(0)
+  // Datos del modal (docentes, disps, carga): se cargan solo la primera vez
+  const datosModalCargados = useRef(false)
+  const [cargandoModal, setCargandoModal] = useState(false)
 
   // HU-016: filtros (no se guardan en localStorage)
   const [filtroJornada, setFiltroJornada] = useState(FILTRO_JORNADA_DEFECTO)
@@ -289,8 +300,13 @@ export default function AsignacionDocenteView({
     setLoading(true)
   }
 
-  // Cargar períodos
+  // Cargar períodos (solo si no vino del padre como prop)
   const cargarPeriodos = useCallback(async () => {
+    if (periodoActivoProp) {
+      setPeriodoActivo(periodoActivoProp)
+      setPeriodosCargando(false)
+      return
+    }
     setPeriodosCargando(true)
     setErrorCarga(false)
     try {
@@ -305,7 +321,7 @@ export default function AsignacionDocenteView({
     } finally {
       setPeriodosCargando(false)
     }
-  }, [])
+  }, [periodoActivoProp])
 
   useEffect(() => {
     cargarPeriodos()
@@ -317,23 +333,8 @@ export default function AsignacionDocenteView({
       .then(data => {
         if (Array.isArray(data)) setFacultadesList(data)
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [])
-
-  // Cargar lista de docentes
-  const cargarDocentes = useCallback(async () => {
-    try {
-      const data = await getDocentes()
-      const lista = Array.isArray(data) ? data.filter(d => d.estado !== false) : []
-      setDocentesList(lista)
-    } catch (err) {
-      console.warn('Error al cargar docentes:', err)
-    }
-  }, [])
-
-  useEffect(() => {
-    cargarDocentes()
-  }, [cargarDocentes])
 
   // Cargar los cursos de cada programa visible (con la jornada elegida) y las disponibilidades
   const cargarDatosProgramacion = useCallback(async (silencioso = false) => {
@@ -348,28 +349,34 @@ export default function AsignacionDocenteView({
       return
     }
 
+    const cacheKey = `${periodoActivo.id}_${codigosVisibles}_${filtroJornada}`
+    const enCache = cacheCursosGlobal.get(cacheKey)
+
+    // Si ya está en memoria, mostrar de inmediato y revalidar en segundo plano
+    if (enCache && Object.keys(enCache).length > 0) {
+      setCursosPorPrograma(enCache)
+      setLoading(false)
+      silencioso = true
+    }
+
     if (!silencioso) setLoading(true)
     else setRefreshing(true)
 
     try {
-      // HU-016 criterio 7: el error de la programación no se oculta; la disponibilidad sí puede faltar.
-      const [listas, disps, cargas] = await Promise.all([
-        Promise.all(codigos.map(codeProgram =>
-          getProgramacion(periodoActivo.id, { codeProgram, jornada: consultaJornada(filtroJornada) }))),
-        consultarDisponibilidadesPeriodo(periodoActivo.id).catch(() => ({})),
-        getCargaPorPeriodo(periodoActivo.id).catch(() => null)
-      ])
+      // HU-016 criterio 7: solo se carga la programación; docentes/disponibilidades/carga
+      // se cargan de forma diferida al abrir el modal de asignación (lazy load).
+      const listas = await Promise.all(
+        codigos.map(codeProgram =>
+          getProgramacion(periodoActivo.id, { codeProgram, jornada: consultaJornada(filtroJornada) }))
+      )
       if (seq !== cargaSeq.current) return // llegó tarde: el usuario ya cambió de jornada
 
       const mapa = {}
       codigos.forEach((codeProgram, i) => {
         mapa[codeProgram] = Array.isArray(listas[i]) ? listas[i] : []
       })
+      cacheCursosGlobal.set(cacheKey, mapa)
       setCursosPorPrograma(mapa)
-      setDisponibilidadesMap(disps || {})
-      setCargaPorDocente(Array.isArray(cargas)
-        ? Object.fromEntries(cargas.map(c => [String(c.docente_id), c])) : {})
-      setCargaDisponible(Array.isArray(cargas))
       setErrorCarga(false)
     } catch (err) {
       if (seq !== cargaSeq.current) return
@@ -461,7 +468,7 @@ export default function AsignacionDocenteView({
     [pensumList]
   )
 
-    // Materias de cada semestre: por cada programa visible, solo sus cursos programados.
+  // Materias de cada semestre: por cada programa visible, solo sus cursos programados.
   const materiasPorSemestre = useMemo(() => {
     const porSemestre = {}
     for (let s = 1; s <= totalSemestres; s++) porSemestre[s] = []
@@ -491,6 +498,8 @@ export default function AsignacionDocenteView({
             // El grupo lo asigna HU-046; no se inventa un número.
             grupo: c.grupo ?? null,
             jornada,
+            // Espacio de la malla que ocupa (solo electivas profesionales programadas por el coordinador)
+            nombreEspacio: c.nombreEspacio || null,
             idDocente: c.idDocente,
             nombreDocente: c.nombreDocente,
             estado: c.idDocente ? 'ASIGNADO' : 'PROGRAMADO',
@@ -631,28 +640,54 @@ export default function AsignacionDocenteView({
     return lista
   }, [docentesList, soloDelPrograma, programaModal, facultadModal, materiaParaDesignar, disponibilidadesMap, busquedaDocente])
 
-  // Abrir modal de asignación
-  const handleAbrirDesignacion = (materia) => {
+  // Abrir modal de asignación — carga docentes/disponibilidades/carga de forma diferida
+  const handleAbrirDesignacion = async (materia) => {
     if (!puedeAsignar) return
     setMateriaParaDesignar(materia)
     setBusquedaDocente('')
-    setSoloDelPrograma(true) // Siempre inicia enfocado a los docentes del programa
+    setSoloDelPrograma(true)
     setEvaluacionesMap({})
+
+    const promesas = []
+
+    // Evaluaciones: siempre se recargan por materia (específicas del curso)
     if (periodoActivo?.id && materia?.codeCourse) {
-      getEvaluacionesDocentes(periodoActivo.id, materia.codeCourse)
-        .then(evaluaciones => {
-          const mapa = {}
-          const lista = Array.isArray(evaluaciones) ? evaluaciones : []
-          lista.forEach(evaluacion => {
-            mapa[String(evaluacion.docente_id ?? evaluacion.docenteId)] = evaluacion
+      promesas.push(
+        getEvaluacionesDocentes(periodoActivo.id, materia.codeCourse)
+          .then(evaluaciones => {
+            const mapa = {}
+            const lista = Array.isArray(evaluaciones) ? evaluaciones : []
+            lista.forEach(e => { mapa[String(e.docente_id ?? e.docenteId)] = e })
+            setEvaluacionesMap(mapa)
           })
-          setEvaluacionesMap(mapa)
-        })
-        .catch(err => {
-          console.error('Error al cargar evaluaciones docentes:', err)
-          onShowToast?.('No fue posible cargar las calificaciones docentes', 'error')
-        })
+          .catch(err => {
+            console.error('Error al cargar evaluaciones docentes:', err)
+            onShowToast?.('No fue posible cargar las calificaciones docentes', 'error')
+          })
+      )
     }
+
+    // Docentes, disponibilidades y carga: solo la primera vez que se abre el modal
+    if (!datosModalCargados.current && periodoActivo?.id) {
+      setCargandoModal(true)
+      promesas.push(
+        Promise.all([
+          getDocentes().catch(() => []),
+          consultarDisponibilidadesPeriodo(periodoActivo.id).catch(() => ({})),
+          getCargaPorPeriodo(periodoActivo.id).catch(() => null)
+        ]).then(([docData, disps, cargas]) => {
+          const lista = Array.isArray(docData) ? docData.filter(d => d.estado !== false) : []
+          setDocentesList(lista)
+          setDisponibilidadesMap(disps || {})
+          setCargaPorDocente(Array.isArray(cargas)
+            ? Object.fromEntries(cargas.map(c => [String(c.docente_id), c])) : {})
+          setCargaDisponible(Array.isArray(cargas))
+          datosModalCargados.current = true
+        }).finally(() => setCargandoModal(false))
+      )
+    }
+
+    await Promise.all(promesas)
   }
 
   // Ejecutar asignación de docente
@@ -788,302 +823,306 @@ export default function AsignacionDocenteView({
       )}
 
       {!coordinadorSinPrograma && (<>
-      {/* 2. Barra de filtros de HU-016: la jornada decide qué programa se muestra debajo */}
-      <div className="asig-doc-filtros-bar">
-        {!isCoordinador && (
-          <div className="asig-doc-filtro">
-            <span className="asig-doc-filtro-label">Programa</span>
-            <select
-              className="asig-doc-program-select"
-              value={selectedProgramCode}
-              onChange={(e) => handleCambiarPrograma(e.target.value)}
-              aria-label="Seleccionar programa académico"
-            >
-              {programas.map(p => (
-                <option key={p.code_program} value={p.code_program}>
-                  {p.code_program} - {p.name_program}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        <div className="asig-doc-filtro">
-          <span className="asig-doc-filtro-label">Jornada</span>
-          <div className="asig-doc-segmentado" role="group" aria-label="Filtrar por jornada">
-            {OPCIONES_JORNADA.map(op => (
-              <button
-                key={op.value}
-                type="button"
-                className={`asig-doc-segmento ${filtroJornada === op.value ? 'active' : ''}`}
-                aria-pressed={filtroJornada === op.value}
-                onClick={() => handleCambiarJornada(op.value)}
+        {/* 2. Barra de filtros de HU-016: la jornada decide qué programa se muestra debajo */}
+        <div className="asig-doc-filtros-bar">
+          {!isCoordinador && (
+            <div className="asig-doc-filtro">
+              <span className="asig-doc-filtro-label">Programa</span>
+              <select
+                className="asig-doc-program-select"
+                value={selectedProgramCode}
+                onChange={(e) => handleCambiarPrograma(e.target.value)}
+                aria-label="Seleccionar programa académico"
               >
-                {op.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="asig-doc-filtro">
-          <span className="asig-doc-filtro-label">Docentes</span>
-          <div className="asig-doc-segmentado" role="group" aria-label="Filtrar por docente asignado">
-            {OPCIONES_DOCENTES.map(op => (
-              <button
-                key={op.value}
-                type="button"
-                className={`asig-doc-segmento ${filtroDocentes === op.value ? 'active' : ''}`}
-                aria-pressed={filtroDocentes === op.value}
-                onClick={() => setFiltroDocentes(op.value)}
-              >
-                {op.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Programa(s) de la jornada elegida: una tarjeta por programa */}
-      {sinProgramaEnJornada ? (
-        <div className="asig-doc-estado-vacio asig-doc-sin-jornada">
-          <AlertCircle size={36} className="asig-doc-estado-icono" />
-          <h3>Su programa no se oferta en jornada {ETIQUETA_JORNADA[filtroJornada]}</h3>
-        </div>
-      ) : (
-        <div className="asig-doc-programas">
-          {programasVisibles.map(prog => {
-            const facultad = facultadDe(prog)
-            return (
-              <div key={prog.code_program} className="asig-doc-program-bar">
-                <div className="asig-doc-program-info">
-                  <BookOpen size={18} style={{ color: '#c8102e' }} />
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>Programa Académico:</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <span className="asig-doc-program-code">{prog.code_program}</span>
-                    <span className="asig-doc-program-name">{prog.name_program}</span>
-                    {facultad && (
-                      <span className="badge badge-neutral" style={{ fontSize: '0.75rem' }}>
-                        <Building2 size={12} style={{ display: 'inline', marginRight: '3px' }} />
-                        {facultad.nombre}
-                      </span>
-                    )}
-                    <span className="badge badge-neutral" style={{ fontSize: '0.75rem' }}>Jornada {prog.jornada || 'DIURNA'}</span>
-                  </div>
-                </div>
-
-                <div style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 500 }}>
-                  Duración: <strong>{duracionPrograma(prog, filtroJornada)} semestres</strong> · Total materias en malla: <strong>{mallaDe(prog.code_program).length}</strong>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* 4. Barra de Selección de Semestre (ancho completo) */}
-      {!sinProgramaEnJornada && (
-        <div className="asig-doc-semestres-bar" role="tablist" aria-label="Semestres del programa">
-          {Array.from({ length: totalSemestres }, (_, i) => i + 1).map(sem => {
-            const res = resumenPorSemestre[sem] || { total: 0, asignados: 0, pendientes: 0 }
-            const isActive = selectedSemestre === sem
-            let subtitulo
-            let atenuado = false
-            if (soloPendientes) {
-              subtitulo = res.pendientes > 0 ? textoPendientes(res.pendientes) : 'Sin pendientes'
-              atenuado = res.pendientes === 0
-            } else {
-              subtitulo = res.total > 0 ? `${res.asignados}/${res.total} asignadas` : 'Sin materias'
-            }
-            return (
-              <button
-                key={sem}
-                type="button"
-                className={`asig-doc-semestre-btn ${isActive ? 'active' : ''}`}
-                onClick={() => setSelectedSemestre(sem)}
-                role="tab"
-                aria-selected={isActive}
-              >
-                <span>Semestre {sem}</span>
-                <span className={`asig-doc-semestre-sub ${atenuado ? 'atenuado' : ''}`}>
-                  {subtitulo}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* 5. Materias desplegadas para ese semestre */}
-      <div className="asig-doc-materias-section">
-        {mostrarLista && (
-          <div className="asig-doc-materias-header">
-            <div className="asig-doc-materias-title">
-              <Layers size={18} style={{ color: '#c8102e' }} />
-              <span>Materias de Semestre {selectedSemestre}</span>
+                {programas.map(p => (
+                  <option key={p.code_program} value={p.code_program}>
+                    {p.code_program} - {p.name_program}
+                  </option>
+                ))}
+              </select>
             </div>
-            {soloPendientes ? (
-              <div style={{ fontSize: '0.84rem', color: '#64748b' }}>
-                {materiasDelSemestre.length} {materiasDelSemestre.length === 1 ? 'materia pendiente' : 'materias pendientes'} en el semestre · Total del programa: {textoPendientes(totalPendientesPrograma)}
-              </div>
-            ) : materiasDelSemestre.length > 0 && (
-              <div style={{ fontSize: '0.84rem', color: '#64748b' }}>
-                {asignadasEnSemestre} de {materiasDelSemestre.length} materias con docente designado
-              </div>
-            )}
+          )}
+          <div className="asig-doc-filtro">
+            <span className="asig-doc-filtro-label">Jornada</span>
+            <div className="asig-doc-segmentado" role="group" aria-label="Filtrar por jornada">
+              {OPCIONES_JORNADA.map(op => (
+                <button
+                  key={op.value}
+                  type="button"
+                  className={`asig-doc-segmento ${filtroJornada === op.value ? 'active' : ''}`}
+                  aria-pressed={filtroJornada === op.value}
+                  onClick={() => handleCambiarJornada(op.value)}
+                >
+                  {op.label}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+          <div className="asig-doc-filtro">
+            <span className="asig-doc-filtro-label">Docentes</span>
+            <div className="asig-doc-segmentado" role="group" aria-label="Filtrar por docente asignado">
+              {OPCIONES_DOCENTES.map(op => (
+                <button
+                  key={op.value}
+                  type="button"
+                  className={`asig-doc-segmento ${filtroDocentes === op.value ? 'active' : ''}`}
+                  aria-pressed={filtroDocentes === op.value}
+                  onClick={() => setFiltroDocentes(op.value)}
+                >
+                  {op.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
 
-        {mostrarLista && soloConsultaCoordinador && (
-          <div className="asig-doc-aviso-consulta" role="status">
-            <AlertCircle size={16} />
-            <span>Fuera del período habilitado: solo consulta</span>
-          </div>
-        )}
-
-        {sinProgramaEnJornada ? null : cargandoVista ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
-            <RefreshCw size={24} className="spin" style={{ marginBottom: '0.5rem', color: '#c8102e' }} />
-            <p>Cargando materias del semestre y estado de asignaciones...</p>
-          </div>
-        ) : errorCarga ? (
-          <div className="asig-doc-estado-vacio" role="alert">
-            <AlertCircle size={36} className="asig-doc-estado-icono error" />
-            <h3>No se pudo cargar</h3>
-            <button type="button" className="btn-primary btn-sm" onClick={handleReintentar}>
-              <RefreshCw size={14} />
-              <span>Reintentar</span>
-            </button>
-          </div>
-        ) : !hayProgramacion ? (
-          <div className="asig-doc-estado-vacio">
-            <BookOpen size={36} className="asig-doc-estado-icono" />
-            <h3>Aún no hay programación iniciada</h3>
-          </div>
-        ) : materiasDelSemestre.length === 0 ? (
-          <div className="asig-doc-estado-vacio">
-            <BookOpen size={36} className="asig-doc-estado-icono" />
-            <h3>
-              {soloPendientes
-                ? 'No hay materias pendientes de asignación'
-                : filtroJornada === 'AMBAS'
-                  ? `No hay materias registradas en el Semestre ${selectedSemestre}`
-                  : `No hay materias de la jornada ${ETIQUETA_JORNADA[filtroJornada]} en el Semestre ${selectedSemestre}`}
-            </h3>
+        {/* 3. Programa(s) de la jornada elegida: una tarjeta por programa */}
+        {sinProgramaEnJornada ? (
+          <div className="asig-doc-estado-vacio asig-doc-sin-jornada">
+            <AlertCircle size={36} className="asig-doc-estado-icono" />
+            <h3>Su programa no se oferta en jornada {ETIQUETA_JORNADA[filtroJornada]}</h3>
           </div>
         ) : (
-          <div className="asig-doc-materias-grid">
-            {materiasDelSemestre.map((mat) => {
-              const tieneDocente = Boolean(mat.idDocente)
-              const horariosDoc = tieneDocente ? formatearHorariosDocente(mat.idDocente) : null
-
+          <div className="asig-doc-programas">
+            {programasVisibles.map(prog => {
+              const facultad = facultadDe(prog)
               return (
-                <div
-                  key={mat.clave}
-                  className={`asig-doc-materia-card ${tieneDocente ? 'asignado' : 'sin-asignar'}`}
-                >
-                  <div>
-                    <div className="asig-doc-card-top">
-                      <span className="asig-doc-course-code">{mat.codeCourse}</span>
-                      <span className="asig-doc-group-badge">{textoGrupo(mat)}</span>
-                    </div>
-
-                    <h4 className="asig-doc-materia-name">{mat.nameCourse}</h4>
-
-                    <div className="asig-doc-materia-meta">
-                      <span><strong>{mat.credits}</strong> créditos</span>
-                      <span>•</span>
-                      <span>Jornada {ETIQUETA_JORNADA[mat.jornada] || mat.jornada}</span>
-                      {programasVisibles.length > 1 && (
-                        <>
-                          <span>•</span>
-                          <span>Programa {mat.codeProgram}</span>
-                        </>
-                      )}
-                      <span>•</span>
-                      <span>Semestre {mat.semestre}</span>
-                    </div>
-
-                    {/* Información del Docente asignado o pendiente */}
-                    <div className={`asig-doc-docente-box ${tieneDocente ? 'con-docente' : ''}`}>
-                      <div className="asig-doc-docente-header">
-                        <span className="asig-doc-docente-label">Docente Responsable</span>
-                        <span
-                          className={`badge ${tieneDocente ? 'badge-success' : 'asig-doc-badge-pendiente'}`}
-                          style={{ fontSize: '0.72rem', padding: '0.15rem 0.45rem' }}
-                        >
-                          {tieneDocente ? 'Designado' : 'Sin docente asignado'}
+                <div key={prog.code_program} className="asig-doc-program-bar">
+                  <div className="asig-doc-program-info">
+                    <BookOpen size={18} style={{ color: '#c8102e' }} />
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>Programa Académico:</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span className="asig-doc-program-code">{prog.code_program}</span>
+                      <span className="asig-doc-program-name">{prog.name_program}</span>
+                      {facultad && (
+                        <span className="badge badge-neutral" style={{ fontSize: '0.75rem' }}>
+                          <Building2 size={12} style={{ display: 'inline', marginRight: '3px' }} />
+                          {facultad.nombre}
                         </span>
-                      </div>
-
-                      {tieneDocente ? (
-                        <>
-                          <div className="asig-doc-docente-nombre">
-                            <UserCheck size={14} style={{ display: 'inline', marginRight: '4px', color: '#16a34a' }} />
-                            {mat.nombreDocente}
-                          </div>
-
-                          {/* Horario de disponibilidad del docente */}
-                          <div className="asig-doc-docente-horario-summary">
-                            <Clock size={13} style={{ flexShrink: 0, marginTop: '2px', color: '#2563eb' }} />
-                            <div>
-                              <strong>Disponibilidad registrada:</strong>{' '}
-                              {horariosDoc && horariosDoc.length > 0 ? (
-                                <span>{horariosDoc.map(h => `${h.dia}: ${h.horas}`).join(' | ')}</span>
-                              ) : (
-                                <span style={{ color: '#64748b', fontStyle: 'italic' }}>Sin horario registrado en este período</span>
-                              )}
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <div style={{ color: '#64748b', fontSize: '0.85rem', fontStyle: 'italic' }}>
-                          Aún no se ha designado un docente para este curso.
-                        </div>
                       )}
+                      <span className="badge badge-neutral" style={{ fontSize: '0.75rem' }}>Jornada {prog.jornada || 'DIURNA'}</span>
                     </div>
                   </div>
 
-                  {/* Acciones: con el plazo cerrado la vista es solo de consulta (criterio 3) */}
-                  {puedeAsignar && (
-                  <div className="asig-doc-card-actions">
-                    {tieneDocente ? (
-                      <>
-                        <button
-                          type="button"
-                          className="btn-secondary btn-sm"
-                          onClick={() => handleAbrirDesignacion(mat)}
-                          style={{ flex: 1 }}
-                        >
-                          <UserPlus size={14} />
-                          <span>Editar docente</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-danger btn-sm"
-                          onClick={() => handleDesasignarDocente(mat)}
-                          title="Desasignar docente"
-                          style={{ padding: '0.45rem 0.65rem' }}
-                        >
-                          <UserX size={14} />
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        className="btn-primary btn-sm"
-                        onClick={() => handleAbrirDesignacion(mat)}
-                        style={{ width: '100%', justifyContent: 'center' }}
-                      >
-                        <UserPlus size={15} />
-                        <span>Asignar docente</span>
-                      </button>
-                    )}
+                  <div style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 500 }}>
+                    Duración: <strong>{duracionPrograma(prog, filtroJornada)} semestres</strong> · Total materias en malla: <strong>{mallaDe(prog.code_program).length}</strong>
                   </div>
-                  )}
                 </div>
               )
             })}
           </div>
         )}
-      </div>
+
+        {/* 4. Barra de Selección de Semestre (ancho completo) */}
+        {!sinProgramaEnJornada && (
+          <div className="asig-doc-semestres-bar" role="tablist" aria-label="Semestres del programa">
+            {Array.from({ length: totalSemestres }, (_, i) => i + 1).map(sem => {
+              const res = resumenPorSemestre[sem] || { total: 0, asignados: 0, pendientes: 0 }
+              const isActive = selectedSemestre === sem
+              let subtitulo
+              let atenuado = false
+              if (soloPendientes) {
+                subtitulo = res.pendientes > 0 ? textoPendientes(res.pendientes) : 'Sin pendientes'
+                atenuado = res.pendientes === 0
+              } else {
+                subtitulo = res.total > 0 ? `${res.asignados}/${res.total} asignadas` : 'Sin materias'
+              }
+              return (
+                <button
+                  key={sem}
+                  type="button"
+                  className={`asig-doc-semestre-btn ${isActive ? 'active' : ''}`}
+                  onClick={() => setSelectedSemestre(sem)}
+                  role="tab"
+                  aria-selected={isActive}
+                >
+                  <span>Semestre {sem}</span>
+                  <span className={`asig-doc-semestre-sub ${atenuado ? 'atenuado' : ''}`}>
+                    {subtitulo}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* 5. Materias desplegadas para ese semestre */}
+        <div className="asig-doc-materias-section">
+          {mostrarLista && (
+            <div className="asig-doc-materias-header">
+              <div className="asig-doc-materias-title">
+                <Layers size={18} style={{ color: '#c8102e' }} />
+                <span>Materias de Semestre {selectedSemestre}</span>
+              </div>
+              {soloPendientes ? (
+                <div style={{ fontSize: '0.84rem', color: '#64748b' }}>
+                  {materiasDelSemestre.length} {materiasDelSemestre.length === 1 ? 'materia pendiente' : 'materias pendientes'} en el semestre · Total del programa: {textoPendientes(totalPendientesPrograma)}
+                </div>
+              ) : materiasDelSemestre.length > 0 && (
+                <div style={{ fontSize: '0.84rem', color: '#64748b' }}>
+                  {asignadasEnSemestre} de {materiasDelSemestre.length} materias con docente designado
+                </div>
+              )}
+            </div>
+          )}
+
+          {mostrarLista && soloConsultaCoordinador && (
+            <div className="asig-doc-aviso-consulta" role="status">
+              <AlertCircle size={16} />
+              <span>Fuera del período habilitado: solo consulta</span>
+            </div>
+          )}
+
+          {sinProgramaEnJornada ? null : cargandoVista ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+              <RefreshCw size={24} className="spin" style={{ marginBottom: '0.5rem', color: '#c8102e' }} />
+              <p>Cargando materias del semestre y estado de asignaciones...</p>
+            </div>
+          ) : errorCarga ? (
+            <div className="asig-doc-estado-vacio" role="alert">
+              <AlertCircle size={36} className="asig-doc-estado-icono error" />
+              <h3>No se pudo cargar</h3>
+              <button type="button" className="btn-primary btn-sm" onClick={handleReintentar}>
+                <RefreshCw size={14} />
+                <span>Reintentar</span>
+              </button>
+            </div>
+          ) : !hayProgramacion ? (
+            <div className="asig-doc-estado-vacio">
+              <BookOpen size={36} className="asig-doc-estado-icono" />
+              <h3>Aún no hay programación iniciada</h3>
+            </div>
+          ) : materiasDelSemestre.length === 0 ? (
+            <div className="asig-doc-estado-vacio">
+              <BookOpen size={36} className="asig-doc-estado-icono" />
+              <h3>
+                {soloPendientes
+                  ? 'No hay materias pendientes de asignación'
+                  : filtroJornada === 'AMBAS'
+                    ? `No hay materias registradas en el Semestre ${selectedSemestre}`
+                    : `No hay materias de la jornada ${ETIQUETA_JORNADA[filtroJornada]} en el Semestre ${selectedSemestre}`}
+              </h3>
+            </div>
+          ) : (
+            <div className="asig-doc-materias-grid">
+              {materiasDelSemestre.map((mat) => {
+                const tieneDocente = Boolean(mat.idDocente)
+                const horariosDoc = tieneDocente ? formatearHorariosDocente(mat.idDocente) : null
+
+                return (
+                  <div
+                    key={mat.clave}
+                    className={`asig-doc-materia-card ${tieneDocente ? 'asignado' : 'sin-asignar'}`}
+                  >
+                    <div>
+                      <div className="asig-doc-card-top">
+                        <span className="asig-doc-course-code">{mat.codeCourse}</span>
+                        <span className="asig-doc-group-badge">{textoGrupo(mat)}</span>
+                      </div>
+
+                      {mat.nombreEspacio && (
+                        <div className="asig-doc-espacio-badge">{mat.nombreEspacio}</div>
+                      )}
+
+                      <h4 className="asig-doc-materia-name">{mat.nameCourse}</h4>
+
+                      <div className="asig-doc-materia-meta">
+                        <span><strong>{mat.credits}</strong> créditos</span>
+                        <span>•</span>
+                        <span>Jornada {ETIQUETA_JORNADA[mat.jornada] || mat.jornada}</span>
+                        {programasVisibles.length > 1 && (
+                          <>
+                            <span>•</span>
+                            <span>Programa {mat.codeProgram}</span>
+                          </>
+                        )}
+                        <span>•</span>
+                        <span>Semestre {mat.semestre}</span>
+                      </div>
+
+                      {/* Información del Docente asignado o pendiente */}
+                      <div className={`asig-doc-docente-box ${tieneDocente ? 'con-docente' : ''}`}>
+                        <div className="asig-doc-docente-header">
+                          <span className="asig-doc-docente-label">Docente Responsable</span>
+                          <span
+                            className={`badge ${tieneDocente ? 'badge-success' : 'asig-doc-badge-pendiente'}`}
+                            style={{ fontSize: '0.72rem', padding: '0.15rem 0.45rem' }}
+                          >
+                            {tieneDocente ? 'Designado' : 'Sin docente asignado'}
+                          </span>
+                        </div>
+
+                        {tieneDocente ? (
+                          <>
+                            <div className="asig-doc-docente-nombre">
+                              <UserCheck size={14} style={{ display: 'inline', marginRight: '4px', color: '#16a34a' }} />
+                              {mat.nombreDocente}
+                            </div>
+
+                            {/* Horario de disponibilidad del docente */}
+                            <div className="asig-doc-docente-horario-summary">
+                              <Clock size={13} style={{ flexShrink: 0, marginTop: '2px', color: '#2563eb' }} />
+                              <div>
+                                <strong>Disponibilidad registrada:</strong>{' '}
+                                {horariosDoc && horariosDoc.length > 0 ? (
+                                  <span>{horariosDoc.map(h => `${h.dia}: ${h.horas}`).join(' | ')}</span>
+                                ) : (
+                                  <span style={{ color: '#64748b', fontStyle: 'italic' }}>Sin horario registrado en este período</span>
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ color: '#64748b', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                            Aún no se ha designado un docente para este curso.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Acciones: con el plazo cerrado la vista es solo de consulta (criterio 3) */}
+                    {puedeAsignar && (
+                      <div className="asig-doc-card-actions">
+                        {tieneDocente ? (
+                          <>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={() => handleAbrirDesignacion(mat)}
+                              style={{ flex: 1 }}
+                            >
+                              <UserPlus size={14} />
+                              <span>Editar docente</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-danger btn-sm"
+                              onClick={() => handleDesasignarDocente(mat)}
+                              title="Desasignar docente"
+                              style={{ padding: '0.45rem 0.65rem' }}
+                            >
+                              <UserX size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-primary btn-sm"
+                            onClick={() => handleAbrirDesignacion(mat)}
+                            style={{ width: '100%', justifyContent: 'center' }}
+                          >
+                            <UserPlus size={15} />
+                            <span>Asignar docente</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </>)}
 
       {/* 6. Modal de Designación de Docentes con Horarios */}
@@ -1228,8 +1267,10 @@ export default function AsignacionDocenteView({
                             )}
                           </div>
 
-                          <div style={{ fontSize: '0.78rem', marginTop: '0.5rem', fontWeight: 600,
-                            color: capacidad.valido ? '#166534' : '#b45309' }}>
+                          <div style={{
+                            fontSize: '0.78rem', marginTop: '0.5rem', fontWeight: 600,
+                            color: capacidad.valido ? '#166534' : '#b45309'
+                          }}>
                             {capacidad.registradas.toFixed(1)} h registradas · {capacidad.asignadas} h asignadas ·
                             {' '}{capacidad.restantes.toFixed(1)} h restantes
                             {' · '}{Number.isFinite(capacidad.requeridas) ? capacidad.requeridas : '?'} h requeridas
