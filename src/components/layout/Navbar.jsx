@@ -1,5 +1,5 @@
 import React from 'react'
-import { GraduationCap, BookOpen, Library, Layers, LogOut, Users, Home, UserCircle, CalendarDays, UserCheck, CalendarCheck, Link2, ScrollText } from 'lucide-react'
+import { GraduationCap, BookOpen, Library, LogOut, Users, Home, UserCircle, CalendarDays, UserCheck, CalendarCheck, Link2, ScrollText } from 'lucide-react'
 
 export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout }) {
   const rol = Number(user?.rol ?? 1) // 1: Admin, 2: Coordinador, 3: Docente
@@ -7,7 +7,6 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
   const isCoordinador = rol === 2
   const isDocente = rol === 3
 
-  const canSeePensum = isAdmin || isCoordinador
   const canSeeProgramas = isAdmin || isCoordinador
   const canSeeAsignaturas = isAdmin
   const canSeeProgramasCoordinadores = isAdmin

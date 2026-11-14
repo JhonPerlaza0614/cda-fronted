@@ -7,8 +7,6 @@ import {
   LogOut,
   GraduationCap,
   CalendarDays,
-  Users,
-  UserCheck,
   UserCircle,
   Library
 } from 'lucide-react'

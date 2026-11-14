@@ -8,7 +8,6 @@ import {
   RefreshCw,
   Save,
   BookOpen,
-  Info,
   Sparkles,
   Check,
   RotateCcw,
@@ -101,10 +100,6 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
   const selectedPeriodo = useMemo(() => {
     return periodos.find(p => String(p.id) === String(selectedPeriodoId))
   }, [periodos, selectedPeriodoId])
-
-  const periodosVigentes = useMemo(() => {
-    return periodos.filter(periodo => periodo.vigente)
-  }, [periodos])
 
   const selectedPrograma = useMemo(() => {
     return programas.find(p => p.code_program === selectedProgramCode)
