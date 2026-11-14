@@ -1,0 +1,62 @@
+/* Electivas profesionales programadas sobre los espacios «Electiva Profesional N» de la malla */
+.electiva-programada {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid rgba(139, 92, 246, 0.45);
+    border-radius: 8px;
+    background: rgba(139, 92, 246, 0.1);
+    font-size: 0.8rem;
+    line-height: 1.3;
+}
+
+.electiva-programada-titulo {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-weight: 600;
+}
+
+.electiva-programada-meta {
+    margin-top: 0.2rem;
+    opacity: 0.8;
+}
+
+.electiva-programada-alerta {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+    padding: 0.35rem 0.45rem;
+    border-radius: 6px;
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+
+.electiva-programada-alerta svg {
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+.electiva-programada-acciones {
+    display: flex;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+}
+
+.btn-programar-electiva {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.5rem;
+    padding: 0.3rem 0.65rem;
+    border: 1px dashed rgba(139, 92, 246, 0.7);
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.btn-programar-electiva:hover {
+    background: rgba(139, 92, 246, 0.15);
+}

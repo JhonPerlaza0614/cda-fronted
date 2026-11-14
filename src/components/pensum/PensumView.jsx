@@ -37,7 +37,14 @@ import {
   deactivatePensum,
   reactivatePensum
 } from '../../services/academicService'
+import {
+  getElectivasProgramadas,
+  programarElectiva,
+  modificarElectiva,
+  quitarElectiva
+} from '../../services/programacionService'
 import './MallaScroll.css'
+import './ElectivasProgramadas.css'
 
 function inferTipoAsignatura(item) {
   if (item?.tipo_asignatura) return item.tipo_asignatura
@@ -45,6 +52,12 @@ function inferTipoAsignatura(item) {
   if (item?.is_elective) return 'Act. extracurricular'
   if (item?.es_basica) return 'Asignatura básica'
   return 'Profesional'
+}
+
+// Espacio «Electiva Profesional N» de la malla (la complementaria es de las básicas y no cuenta)
+function esEspacioElectiva(code) {
+  const c = String(code || '').toUpperCase()
+  return c.startsWith('ELE-PROF-') && c !== 'ELE-PROF-COMPLEMENTARIA'
 }
 
 export default function PensumView({
@@ -690,6 +703,179 @@ export default function PensumView({
       setFormErrors({})
       setBannerMessage(null)
     }
+  }
+
+  // =========================================================================
+  // ELECTIVAS PROFESIONALES PROGRAMADAS (coordinador)
+  // Se programan en el período vigente sobre los espacios «Electiva Profesional N»
+  // de la malla. La malla no se modifica: al cambiar de período el espacio vuelve a verse vacío.
+  // =========================================================================
+  const [electivasProg, setElectivasProg] = useState([])
+  const [electivasMeta, setElectivasMeta] = useState({ periodoId: null, plazoAbierto: false, puedeEditar: false })
+  const [electivaModal, setElectivaModal] = useState(null)
+  const [electivaSaving, setElectivaSaving] = useState(false)
+
+  const cargarElectivasProg = useCallback(async () => {
+    const code = currentProgram?.code_program
+    if (!code) {
+      setElectivasProg([])
+      setElectivasMeta({ periodoId: null, plazoAbierto: false, puedeEditar: false })
+      return
+    }
+    try {
+      const r = await getElectivasProgramadas(code)
+      setElectivasProg(r?.electivas || [])
+      setElectivasMeta({
+        periodoId: r?.periodoId ?? null,
+        plazoAbierto: Boolean(r?.plazoAbierto),
+        puedeEditar: Boolean(r?.puedeEditar)
+      })
+    } catch {
+      setElectivasProg([])
+      setElectivasMeta({ periodoId: null, plazoAbierto: false, puedeEditar: false })
+    }
+  }, [currentProgram?.code_program])
+
+  useEffect(() => {
+    cargarElectivasProg()
+  }, [cargarElectivasProg])
+
+  const electivaPorEspacio = useMemo(() => {
+    const mapa = new Map()
+    for (const e of electivasProg) mapa.set(String(e.codeEspacio).toUpperCase(), e)
+    return mapa
+  }, [electivasProg])
+
+  const puedeProgramarElectivas = !isViewingInactive && electivasMeta.periodoId !== null && electivasMeta.puedeEditar
+
+  // Espacios de la malla que todavía no tienen electiva programada
+  const espaciosLibres = useMemo(() => {
+    return currentPensum
+      .filter(i => esEspacioElectiva(i.code_course) && !electivaPorEspacio.has(String(i.code_course).toUpperCase()))
+      .sort((a, b) => (a.semestre - b.semestre) || String(a.code_course).localeCompare(String(b.code_course)))
+  }, [currentPensum, electivaPorEspacio])
+
+  // Banco profesional: electivas de la facultad del programa (sin las comunes ni los espacios de la malla)
+  const bancoProfesional = useMemo(() => {
+    if (!programFacultyId) return []
+    return allElectivasDisponibles.filter(a => {
+      const esComun = Boolean(
+        a.es_complementaria ||
+        String(a.id_facultad) === '2' ||
+        a.name_course?.toLowerCase().includes('complementar')
+      )
+      return Boolean(a.is_elective) && !esComun && !esEspacioElectiva(a.code_course) &&
+        a.activo !== false && String(a.id_facultad) === String(programFacultyId)
+    })
+  }, [allElectivasDisponibles, programFacultyId])
+
+  const abrirModalElectiva = (config) => {
+    setElectivaModal({ cursoId: null, codeEspacio: '', codeCourse: '', cupos: '', ...config })
+  }
+
+  const guardarElectiva = async (e) => {
+    e.preventDefault()
+    const m = electivaModal
+    if (!m || !currentProgram) return
+    const cupos = parseInt(m.cupos, 10)
+    if (!Number.isInteger(cupos) || cupos <= 0) {
+      onShowToast('Ingresa un número de cupos válido', 'error')
+      return
+    }
+    if (!m.codeEspacio || !m.codeCourse) {
+      onShowToast('Selecciona la electiva y el espacio de la malla', 'error')
+      return
+    }
+    setElectivaSaving(true)
+    try {
+      const r = m.cursoId
+        ? await modificarElectiva(m.cursoId, { codeCourse: m.codeCourse, cupos })
+        : await programarElectiva({
+          codeProgram: currentProgram.code_program,
+          codeEspacio: m.codeEspacio,
+          codeCourse: m.codeCourse,
+          cupos
+        })
+      const base = m.cursoId ? 'Electiva actualizada' : 'Electiva programada en el período vigente'
+      onShowToast(r?.alerta ? `${base}. ${r.alerta}` : base, r?.alerta ? 'info' : 'success')
+      setElectivaModal(null)
+      await cargarElectivasProg()
+    } catch (err) {
+      onShowToast(err.message || 'No se pudo guardar la electiva', 'error')
+    } finally {
+      setElectivaSaving(false)
+    }
+  }
+
+  const quitarElectivaProg = async (el) => {
+    if (!window.confirm(`¿Quitar «${el.nombreAsignatura}» de ${el.nombreEspacio}?`)) return
+    try {
+      await quitarElectiva(el.cursoId)
+      onShowToast('Electiva quitada', 'success')
+      await cargarElectivasProg()
+    } catch (err) {
+      onShowToast(err.message || 'No se pudo quitar la electiva', 'error')
+    }
+  }
+
+  // Lo que se muestra dentro de la tarjeta de un espacio «Electiva Profesional N»
+  const renderElectivaEspacio = (item) => {
+    if (!esEspacioElectiva(item.code_course) || isViewingInactive || electivasMeta.periodoId === null) return null
+    const prog = electivaPorEspacio.get(String(item.code_course).toUpperCase())
+    if (!prog) {
+      if (!puedeProgramarElectivas) return null
+      return (
+        <button
+          type="button"
+          className="btn-programar-electiva print-hide"
+          onClick={() => abrirModalElectiva({ codeEspacio: item.code_course })}
+        >
+          <Sparkles size={12} /> Programar electiva
+        </button>
+      )
+    }
+    const editable = puedeProgramarElectivas && !prog.idDocente
+    return (
+      <div className="electiva-programada print-hide">
+        <div className="electiva-programada-titulo">
+          <CheckCircle2 size={13} /> {prog.nombreAsignatura}
+        </div>
+        <div className="electiva-programada-meta">
+          {prog.codigoCurso} · {prog.cupos} cupos · {prog.nombreDocente || 'Sin docente'}
+        </div>
+        {prog.sinDocentesAsociados && (
+          <div className="electiva-programada-alerta">
+            <AlertTriangle size={12} />
+            <span>No hay docentes asociados a esta electiva. El administrador debe registrar la disponibilidad de un docente en su nombre.</span>
+          </div>
+        )}
+        {editable && (
+          <div className="electiva-programada-acciones">
+            <button
+              type="button"
+              className="btn-card-tool"
+              title="Modificar electiva"
+              onClick={() => abrirModalElectiva({
+                cursoId: prog.cursoId,
+                codeEspacio: item.code_course,
+                codeCourse: prog.codeCourse,
+                cupos: String(prog.cupos ?? '')
+              })}
+            >
+              <Edit3 size={13} />
+            </button>
+            <button
+              type="button"
+              className="btn-card-tool tool-danger"
+              title="Quitar electiva"
+              onClick={() => quitarElectivaProg(prog)}
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        )}
+      </div>
+    )
   }
 
   // Generador de nombre consecutivo para electivas
@@ -1475,8 +1661,8 @@ export default function PensumView({
                     {submitting
                       ? 'Guardando...'
                       : editorMode === 'edit'
-                      ? 'Guardar cambios de resolución'
-                      : 'Guardar resolución'}
+                        ? 'Guardar cambios de resolución'
+                        : 'Guardar resolución'}
                   </span>
                 </button>
               </div>
@@ -1559,8 +1745,8 @@ export default function PensumView({
                 {isViewingInactive
                   ? `Malla Curricular Inactiva · Versión ${viewingInactiveVersion} (Solo Consulta)`
                   : isActiveMalla
-                  ? 'Malla Curricular Oficial (Activa)'
-                  : 'Sin Malla Activa (Solo Consulta)'}
+                    ? 'Malla Curricular Oficial (Activa)'
+                    : 'Sin Malla Activa (Solo Consulta)'}
               </div>
               {isMallaEditada && (
                 <span
@@ -1793,6 +1979,7 @@ export default function PensumView({
                           </div>
 
                           <h4 className="pensum-course-name">{item.name_course}</h4>
+                          {renderElectivaEspacio(item)}
                         </div>
                       )
                     })
@@ -1930,6 +2117,16 @@ export default function PensumView({
                               ) : (
                                 <span className="dock-available-badge">Disponible</span>
                               )}
+                              {puedeProgramarElectivas && espaciosLibres.length > 0 &&
+                                !electivasProg.some(p => p.codeCourse === el.code_course) && (
+                                  <button
+                                    type="button"
+                                    className="btn-programar-electiva"
+                                    onClick={() => abrirModalElectiva({ codeCourse: el.code_course })}
+                                  >
+                                    Programar
+                                  </button>
+                                )}
                             </div>
                           </div>
                         )
@@ -2319,6 +2516,88 @@ export default function PensumView({
                   disabled={submitting || targetSemester === movingCourse.semestre}
                 >
                   {submitting ? 'Guardando...' : 'Guardar Cambio'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {electivaModal && (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <div className="modal-header">
+              <h2>{electivaModal.cursoId ? 'Modificar electiva programada' : 'Programar electiva profesional'}</h2>
+              <button className="modal-close-btn" onClick={() => setElectivaModal(null)} disabled={electivaSaving}>
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={guardarElectiva}>
+              <div className="modal-body">
+                <p className="text-muted">
+                  Se programa en el período vigente, sin docente ni horario (se asignan después).
+                </p>
+
+                <div className="form-group" style={{ marginTop: '1rem' }}>
+                  <label htmlFor="electiva-asignatura">Electiva profesional:</label>
+                  <select
+                    id="electiva-asignatura"
+                    className="select-input"
+                    value={electivaModal.codeCourse}
+                    onChange={(e) => setElectivaModal(m => ({ ...m, codeCourse: e.target.value }))}
+                  >
+                    <option value="">Selecciona una electiva…</option>
+                    {bancoProfesional
+                      .filter(a => a.code_course === electivaModal.codeCourse ||
+                        !electivasProg.some(p => p.codeCourse === a.code_course))
+                      .map(a => (
+                        <option key={a.code_course} value={a.code_course}>
+                          {a.code_course} · {a.name_course}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '1rem' }}>
+                  <label htmlFor="electiva-espacio">Se agrega en:</label>
+                  <select
+                    id="electiva-espacio"
+                    className="select-input"
+                    value={electivaModal.codeEspacio}
+                    disabled={Boolean(electivaModal.cursoId)}
+                    onChange={(e) => setElectivaModal(m => ({ ...m, codeEspacio: e.target.value }))}
+                  >
+                    <option value="">Selecciona el espacio de la malla…</option>
+                    {(electivaModal.cursoId
+                      ? currentPensum.filter(i => i.code_course === electivaModal.codeEspacio)
+                      : espaciosLibres
+                    ).map(i => (
+                      <option key={i.code_course} value={i.code_course}>
+                        {i.name_course} · Semestre {i.semestre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '1rem' }}>
+                  <label htmlFor="electiva-cupos">Cupos:</label>
+                  <input
+                    id="electiva-cupos"
+                    type="number"
+                    min="1"
+                    inputMode="numeric"
+                    className="select-input"
+                    value={electivaModal.cupos}
+                    onChange={(e) => setElectivaModal(m => ({ ...m, cupos: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn-secondary" onClick={() => setElectivaModal(null)} disabled={electivaSaving}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary" disabled={electivaSaving}>
+                  {electivaSaving ? 'Guardando...' : (electivaModal.cursoId ? 'Guardar cambios' : 'Programar')}
                 </button>
               </div>
             </form>

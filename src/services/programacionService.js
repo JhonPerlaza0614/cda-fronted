@@ -151,3 +151,31 @@ export async function asignarDocentePorMateria({
     })
   })
 }
+
+// --- Electivas profesionales programadas por el coordinador ---
+
+// GET /api/programacion/electivas?codeProgram=  → { periodoId, plazoAbierto, puedeEditar, electivas: [...] }
+export async function getElectivasProgramadas(codeProgram) {
+  return await requestBackend(`/programacion/electivas?codeProgram=${encodeURIComponent(codeProgram)}`)
+}
+
+// POST /api/programacion/electivas  → electiva creada (incluye `alerta` si no hay docentes asociados, HU-051)
+export async function programarElectiva({ codeProgram, codeEspacio, codeCourse, cupos }) {
+  return await requestBackend('/programacion/electivas', {
+    method: 'POST',
+    body: JSON.stringify({ codeProgram, codeEspacio, codeCourse, cupos: Number(cupos) })
+  })
+}
+
+// PATCH /api/programacion/electivas/{cursoId}  (solo sin docente asignado)
+export async function modificarElectiva(cursoId, { codeCourse, cupos }) {
+  return await requestBackend(`/programacion/electivas/${cursoId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ codeCourse, cupos: Number(cupos) })
+  })
+}
+
+// DELETE /api/programacion/electivas/{cursoId}  (solo sin docente asignado)
+export async function quitarElectiva(cursoId) {
+  return await requestBackend(`/programacion/electivas/${cursoId}`, { method: 'DELETE' })
+}
