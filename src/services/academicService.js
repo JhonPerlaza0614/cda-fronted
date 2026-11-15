@@ -644,6 +644,15 @@ export async function getPensumVersion(code_program, version) {
   }
 }
 
+// HU-035: descarga en Excel la malla que está en pantalla. Sin versión, la vigente.
+// Solo backend: no hay alternativa en Supabase. Devuelve { blob, filename }.
+export async function descargarMallaExcel(code_program, version = null) {
+  const query = version !== null && version !== undefined
+    ? `?version=${encodeURIComponent(version)}`
+    : ''
+  return requestBackendBlob(`/pensum/programa/${encodeURIComponent(code_program)}/excel${query}`)
+}
+
 export async function deactivatePensum(code_program) {
   try {
     return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/desactivar`, { method: 'PATCH' })
