@@ -53,6 +53,14 @@ export async function descargarPendientesProgramacion(periodoId) {
   return requestBackendBlob(`/programacion/avance/excel?periodoId=${encodeURIComponent(periodoId)}`)
 }
 
+export async function descargarProgramacionExcel(periodoId, codeProgram) {
+  let endpoint = `/programacion/exportar-excel?periodoId=${encodeURIComponent(periodoId)}`
+  if (codeProgram) {
+    endpoint += `&codeProgram=${encodeURIComponent(codeProgram)}`
+  }
+  return requestBackendBlob(endpoint)
+}
+
 export async function getResumenProgramacion(periodoId) {
   try {
     return await requestBackend(`/programacion/resumen?periodoId=${periodoId}`)
