@@ -657,6 +657,7 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
             onCambio={loadPeriodoData}
             onShowToast={onShowToast}
             periodoId={selectedPeriodoId}
+            periodoNombre={selectedPeriodo?.nombre || ''}
             maxCupos={cuposConfig?.maxPorGrupo ?? 60}
             puedeEditarCupos={cuposConfig?.puedeEditar ?? isAdmin}
             plazoAbierto={cuposConfig?.plazoAbierto ?? false}
