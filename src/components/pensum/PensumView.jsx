@@ -25,7 +25,9 @@ import {
   AlertTriangle,
   Edit3,
   Eye,
-  FileText
+  FileText,
+  FileSpreadsheet,
+  RefreshCw
 } from 'lucide-react'
 import {
   getFacultades,
@@ -34,7 +36,8 @@ import {
   getPensumHistory,
   getPensumVersion,
   deactivatePensum,
-  reactivatePensum
+  reactivatePensum,
+  descargarMallaExcel
 } from '../../services/academicService'
 import {
   getElectivasProgramadas,
@@ -128,6 +131,9 @@ export default function PensumView({
   const [programSearch, setProgramSearch] = useState('')
   const [programDropdownOpen, setProgramDropdownOpen] = useState(false)
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
+  // HU-035: descarga de la malla en Excel
+  const [descargandoExcel, setDescargandoExcel] = useState(false)
+  const [errorExcel, setErrorExcel] = useState(null)
   const programInputRef = useRef(null)
   const comboboxRef = useRef(null)
   const actionsMenuRef = useRef(null)
@@ -1105,6 +1111,39 @@ export default function PensumView({
     window.print()
   }
 
+  // HU-035: exporta la versión que está en pantalla (vigente o del historial).
+  const handleDescargarExcel = async () => {
+    if (!currentProgram || descargandoExcel) return
+    setDescargandoExcel(true)
+    setErrorExcel(null)
+    try {
+      const version = isViewingInactive ? viewingInactiveVersion : null
+      const { blob, filename } = await descargarMallaExcel(currentProgram.code_program, version)
+      const url = URL.createObjectURL(blob)
+      const enlace = document.createElement('a')
+      enlace.href = url
+      enlace.download = filename || 'malla.xlsx'
+      document.body.appendChild(enlace)
+      enlace.click()
+      enlace.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      // 403, 404 y 409 traen un mensaje propio del backend; cualquier otra falla es el criterio 3.
+      const mensaje = [403, 404, 409].includes(err?.status) && err.message
+        ? err.message
+        : 'No se pudo generar el archivo'
+      // Se guarda con el programa y la versión para no mostrarlo al cambiar de malla.
+      setErrorExcel({
+        mensaje,
+        code_program: currentProgram.code_program,
+        version: isViewingInactive ? viewingInactiveVersion : null
+      })
+      onShowToast(mensaje, 'error')
+    } finally {
+      setDescargandoExcel(false)
+    }
+  }
+
   if (programas.length === 0) {
     return (
       <div className="section-container">
@@ -1371,6 +1410,39 @@ export default function PensumView({
                 <span>Imprimir / Exportar Malla</span>
               </button>
 
+              <button
+                type="button"
+                onClick={() => {
+                  setActionsMenuOpen(false)
+                  handleDescargarExcel()
+                }}
+                disabled={descargandoExcel || currentPensum.length === 0 || hasUnsavedChanges}
+                title={hasUnsavedChanges
+                  ? 'Guarda primero los cambios pendientes'
+                  : (currentPensum.length === 0 ? 'La malla no tiene asignaturas' : 'Descargar la malla en Excel')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.65rem',
+                  width: '100%',
+                  padding: '0.6rem 0.75rem',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.88rem',
+                  fontWeight: 600,
+                  color: '#0f172a',
+                  cursor: descargandoExcel || currentPensum.length === 0 || hasUnsavedChanges ? 'not-allowed' : 'pointer',
+                  opacity: descargandoExcel || currentPensum.length === 0 || hasUnsavedChanges ? 0.55 : 1,
+                  textAlign: 'left'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+              >
+                {descargandoExcel ? <RefreshCw size={16} className="pc-spin" /> : <FileSpreadsheet size={16} />}
+                <span>{descargandoExcel ? 'Generando Excel...' : 'Descargar Excel'}</span>
+              </button>
+
               {canEdit && isActiveMalla && (
                 <>
                   <div style={{ height: '1px', background: '#e2e8f0', margin: '0.2rem 0' }} />
@@ -1409,6 +1481,31 @@ export default function PensumView({
           )}
         </div>
       </div>
+
+      {/* HU-035 criterio 3: error al generar el Excel, con reintento */}
+      {errorExcel
+        && errorExcel.code_program === currentProgram?.code_program
+        && errorExcel.version === (isViewingInactive ? viewingInactiveVersion : null) && (
+        <div className="warning-banner print-hide" role="alert" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <AlertTriangle size={18} />
+            <span>{errorExcel.mensaje}</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn-primary btn-sm"
+              onClick={handleDescargarExcel}
+              disabled={descargandoExcel}
+            >
+              <RefreshCw size={14} className={descargandoExcel ? 'pc-spin' : undefined} /> Reintentar
+            </button>
+            <button type="button" className="btn-secondary btn-sm" onClick={() => setErrorExcel(null)}>
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Banner de Malla Inactiva — Solo Consulta (HU-032 Criterio 1) */}
       {isViewingInactive && (
