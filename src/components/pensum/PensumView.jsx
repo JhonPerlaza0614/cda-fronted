@@ -28,7 +28,6 @@ import {
   FileText
 } from 'lucide-react'
 import {
-  createAsignatura,
   getFacultades,
   savePensumVersion,
   updatePensumVersion,
@@ -138,33 +137,9 @@ export default function PensumView({
   const [draggingCode, setDraggingCode] = useState(null)
   const [dragOverSem, setDragOverSem] = useState(null)
 
-  // La barra de semestres se pega justo debajo del navbar, mida lo que mida (zoom, móvil)
-  const [stickyTop, setStickyTop] = useState(76)
-  useEffect(() => {
-    const measure = () => {
-      const nav = document.querySelector('.navbar')
-      if (nav) setStickyTop(nav.offsetHeight + 8)
-    }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [])
-
-  // Navegación de la malla: scroll horizontal, arrastre del fondo con el mouse y saltos por semestre
+  // Navegación de la malla: arrastre del fondo con el mouse
   const mallaRef = useRef(null)
   const panRef = useRef({ active: false, startX: 0, startLeft: 0 })
-
-  const scrollMalla = (direction) => {
-    mallaRef.current?.scrollBy({ left: direction * 300, behavior: 'smooth' })
-  }
-
-  const scrollToSemester = (num) => {
-    const wrapper = mallaRef.current
-    const column = wrapper?.querySelector(`[data-sem="${num}"]`)
-    if (wrapper && column) {
-      wrapper.scrollTo({ left: Math.max(0, column.offsetLeft - 16), behavior: 'smooth' })
-    }
-  }
 
   const handleMallaMouseDown = (e) => {
     const skip = canEdit
@@ -892,13 +867,6 @@ export default function PensumView({
     const roman = romanNumerals[count - 1] || `${count}`
     return `Electiva Profesional ${roman}`
   }, [currentProgram, currentPensum])
-
-  const handleSwitchToElective = () => {
-    setAddMode('elective')
-    setElectiveCode('')
-    setElectiveName(getConsecutiveElectiveName())
-    setElectiveCredits('')
-  }
 
   const handleOpenAddModal = (semesterNum = 1) => {
     if (!effectiveCanEdit) return

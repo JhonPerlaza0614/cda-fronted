@@ -67,9 +67,11 @@ function formatTime(slot) {
   const totalMinutes = slot * 30
   const hour24 = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
-  const suffix = hour24 >= 12 ? 'p. m.' : 'a. m.'
-  const hour12 = hour24 % 12 || 12
-  return `${hour12}:${String(minutes).padStart(2, '0')} ${suffix}`
+  return `${String(hour24).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
+function formatSlotRange(slot) {
+  return `${formatTime(slot)} – ${formatTime(slot + 1)}`
 }
 
 function slotToApiTime(slot) {
@@ -279,6 +281,13 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
       ...interval,
     })),
   ), [selectedSlots])
+  const pendingIntervalsSummary = useMemo(() => {
+    return pendingIntervals.map((i) => {
+      const ini = slotToApiTime(i.start).slice(0, 5)
+      const fin = slotToApiTime(i.end).slice(0, 5)
+      return `${i.dayLabel} ${ini}–${fin}`
+    }).join(', ')
+  }, [pendingIntervals])
   const savedIntervalLabels = toDisplayIntervals(schedules)
 
   const setSlot = (dayId, slot, selected) => {
@@ -526,14 +535,14 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
 
   const noPeriod = status?.estado === 'SIN_PERIODO'
   const tienePlazoDefinido = Boolean(plazoDocente.inicio && plazoDocente.fin) && !noPeriod
+  const [mountTime] = useState(() => Date.now())
   const plazoAbierto = useMemo(() => {
     if (!tienePlazoDefinido) return false
     if (status?.estado) return status.estado === 'HABILITADO' && !status.accesoExtraordinarioFin
-    const now = Date.now()
     const startMs = new Date(plazoDocente.inicio).getTime()
     const endMs = new Date(plazoDocente.fin).getTime()
-    return !Number.isNaN(startMs) && !Number.isNaN(endMs) && now >= startMs && now <= endMs
-  }, [tienePlazoDefinido, status?.estado, plazoDocente.inicio, plazoDocente.fin])
+    return !Number.isNaN(startMs) && !Number.isNaN(endMs) && mountTime >= startMs && mountTime <= endMs
+  }, [tienePlazoDefinido, status?.estado, status?.accesoExtraordinarioFin, plazoDocente.inicio, plazoDocente.fin, mountTime])
 
   if (loading) {
     return (
@@ -646,18 +655,18 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
         <>
           <div className="availability-instructions">
             <span className="availability-info-icon"><Info size={18} /></span>
-            <div><strong>¿Cómo funciona?</strong><span>Cada casilla representa 30 minutos. Haz clic o arrastra para seleccionar un intervalo continuo; las casillas consecutivas del mismo día se agrupan en un solo horario. Puedes marcar y desmarcar libremente; al guardar se comprueba que cada intervalo dure <strong>mínimo 1 hora</strong> (2 casillas seguidas), porque no se puede registrar un bloque de 30 minutos. Con el botón <strong>“Seleccionar todo”</strong> de cada día marcas todas las horas habilitadas de ese día, y con el <strong>“Seleccionar todo”</strong> de abajo marcas toda la semana. Los sábados de 7:00 p. m. a 9:00 p. m. no están habilitados. Al guardar tu horario la tabla se bloquea; si necesitas modificar casillas marcadas o no marcadas, pulsa el botón <strong>“Editar”</strong> en el resumen inferior. En modo edición, <strong>“Limpiar selección”</strong> elimina el registro guardado, previa confirmación.</span></div>
+            <div><strong>¿Cómo funciona?</strong><span>Cada casilla representa una franja de 30 minutos indicada en la columna de hora (ej. <strong>07:00 – 07:30</strong>). Haz clic o arrastra para seleccionar un intervalo continuo; las casillas consecutivas del mismo día se agrupan en un solo horario. Puedes marcar y desmarcar libremente; al guardar se comprueba que cada intervalo dure <strong>mínimo 1 hora</strong> (2 casillas seguidas), porque no se puede registrar un bloque de 30 minutos. Con el botón <strong>“Seleccionar todo”</strong> de cada día marcas todas las horas habilitadas de ese día, y con el <strong>“Seleccionar todo”</strong> de abajo marcas toda la semana. Los sábados de 19:00 a 21:00 no están habilitados. Al guardar tu horario la tabla se bloquea; si necesitas modificar casillas marcadas o no marcadas, pulsa el botón <strong>“Editar”</strong> en el resumen inferior. En modo edición, <strong>“Limpiar selección”</strong> elimina el registro guardado, previa confirmación.</span></div>
           </div>
 
           <div className="availability-card">
             <div className="availability-card-top">
-              <div className="availability-card-title"><span className="availability-card-title-icon"><Clock3 size={18} /></span><div><h2>Horario semanal</h2><p>Lunes a sábado · bloques de 30 minutos · mínimo 1 hora</p></div></div>
+              <div className="availability-card-title"><span className="availability-card-title-icon"><Clock3 size={18} /></span><div><h2>Horario semanal</h2><p>Lunes a sábado · franjas de 30 minutos · mínimo 1 hora</p></div></div>
               <div className="availability-selected-count"><span /> {displayedIntervalCount} {displayedIntervalCount === 1 ? 'intervalo' : 'disponibilidades'} · {totalHours} h</div>
             </div>
 
             <div className="availability-table-scroll">
               <table className="availability-table">
-                <thead><tr><th className="availability-time-heading" scope="col">HORA</th>{DAYS.map((day) => <th key={day.id} scope="col"><span className="availability-day-short">{day.short}</span><span className="availability-day-name">{day.label}</span>{canEdit && (
+                <thead><tr><th className="availability-time-heading" scope="col">FRANJA</th>{DAYS.map((day) => <th key={day.id} scope="col"><span className="availability-day-short">{day.short}</span><span className="availability-day-name">{day.label}</span>{canEdit && (
                   <button type="button" className="availability-day-select-button" onClick={() => selectDay(day)} disabled={saving} aria-label={`Seleccionar todo el ${day.label.toLowerCase()}`} title={`Seleccionar todo el ${day.label.toLowerCase()}`}>
                     <span className="availability-day-select-long">Seleccionar todo</span><span className="availability-day-select-short" aria-hidden="true">Todo</span>
                   </button>
@@ -665,21 +674,21 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
                 <tbody>{SLOTS.map((slot) => {
                   const isHourStart = slot % 2 === 0
                   return <tr key={slot} className={isHourStart ? 'availability-hour-start' : 'availability-half-hour-row'}>
-                    <th scope="row" className="availability-hour-label">{formatTime(slot)}</th>
+                    <th scope="row" className="availability-hour-label">{formatSlotRange(slot)}</th>
                     {DAYS.map((day) => {
                       if (isBlockedSlot(day.id, slot)) {
-                        return <td key={day.id}><button type="button" disabled aria-disabled="true" className="availability-slot is-blocked" aria-label={`${day.label}, ${formatTime(slot)} a ${formatTime(slot + 1)}, no habilitado`} title={`${day.label}: ${formatTime(slot)} – ${formatTime(slot + 1)} (no habilitado)`}><Ban size={11} aria-hidden="true" /></button></td>
+                        return <td key={day.id}><button type="button" disabled aria-disabled="true" className="availability-slot is-blocked" aria-label={`${day.label}, ${formatSlotRange(slot)}, no habilitado`} title={`${day.label}: ${formatSlotRange(slot)} (no habilitado)`}><Ban size={11} aria-hidden="true" /></button></td>
                       }
                       const key = slotKey(day.id, slot)
                       const isSaved = !isEditing && savedSlots.has(key)
                       const isPending = selectedSlots.has(key)
                       const selected = isSaved || isPending
-                      return <td key={day.id}><button type="button" className={`availability-slot ${selected ? 'is-selected' : ''} ${isSaved ? 'is-saved' : ''} ${!canEdit ? 'is-readonly' : ''}`} aria-label={`${day.label}, ${formatTime(slot)} a ${formatTime(slot + 1)}${isSaved ? ', ya registrada' : isPending ? ', seleccionada para guardar' : ''}`} aria-pressed={selected} aria-disabled={!canEdit || isSaved} onPointerDown={(event) => handlePointerDown(event, day, slot)} onPointerEnter={() => handlePointerEnter(day, slot)} onClick={(event) => handleKeyboardClick(event, day, slot)} onContextMenu={(event) => event.preventDefault()} title={`${day.label}: ${formatTime(slot)} – ${formatTime(slot + 1)}${isSaved ? ' (guardado - pulsa Editar abajo para modificar)' : isPending ? ' (seleccionado)' : ''}`}>{selected && <Check size={12} strokeWidth={2.8} />}</button></td>
+                      return <td key={day.id}><button type="button" className={`availability-slot ${selected ? 'is-selected' : ''} ${isSaved ? 'is-saved' : ''} ${!canEdit ? 'is-readonly' : ''}`} aria-label={`${day.label}, ${formatSlotRange(slot)}${isSaved ? ', ya registrada' : isPending ? ', seleccionada para guardar' : ''}`} aria-pressed={selected} aria-disabled={!canEdit || isSaved} onPointerDown={(event) => handlePointerDown(event, day, slot)} onPointerEnter={() => handlePointerEnter(day, slot)} onClick={(event) => handleKeyboardClick(event, day, slot)} onContextMenu={(event) => event.preventDefault()} title={`${day.label}: ${formatSlotRange(slot)}${isSaved ? ' (guardado - pulsa Editar abajo para modificar)' : isPending ? ' (seleccionado)' : ''}`}>{selected && <Check size={12} strokeWidth={2.8} />}</button></td>
                     })}
                   </tr>
                 })}</tbody>
               </table>
-              <div className="availability-end-time"><span>9:00 p. m.</span><span>Fin del horario disponible</span></div>
+              <div className="availability-end-time"><span>21:00</span><span>Fin del horario disponible</span></div>
             </div>
 
             <div className="availability-legend"><span className="availability-legend-swatch" /><span>Horario registrado</span><span className="availability-legend-pending" /><span>{isEditing ? 'Casilla en edición (marcada)' : 'Nuevo intervalo pendiente'}</span><span className="availability-legend-empty" /><span>Sin seleccionar</span><span className="availability-legend-blocked" /><span>No habilitado</span></div>
@@ -688,9 +697,9 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
               <div className="availability-actions">
                 <div className="availability-actions-help">
                   {isEditing
-                    ? `Modo edición activo: ${pendingIntervals.length} ${pendingIntervals.length === 1 ? 'intervalo' : 'intervalos'} · ${(selectedSlots.size / 2)} horas seleccionadas.`
+                    ? `Modo edición activo: ${pendingIntervals.length} ${pendingIntervals.length === 1 ? 'intervalo' : 'intervalos'}${pendingIntervalsSummary ? ` (${pendingIntervalsSummary})` : ''} · ${(selectedSlots.size / 2)} horas seleccionadas.`
                     : selectedSlots.size
-                      ? `${pendingIntervals.length} ${pendingIntervals.length === 1 ? 'intervalo nuevo' : 'intervalos nuevos'} · ${(selectedSlots.size / 2)} horas pendientes de guardar.`
+                      ? `${pendingIntervals.length} ${pendingIntervals.length === 1 ? 'intervalo nuevo' : 'intervalos nuevos'}${pendingIntervalsSummary ? `: ${pendingIntervalsSummary}` : ''} · ${(selectedSlots.size / 2)} horas pendientes de guardar.`
                       : 'Aún no has marcado nuevos intervalos.'}
                 </div>
                 <div className="availability-action-buttons">

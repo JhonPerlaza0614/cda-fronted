@@ -1,7 +1,7 @@
 import React, { Component, useCallback, useEffect, useRef, useState } from 'react'
 import Login from './LoginView.jsx'
 import App from './App.jsx'
-import { getCurrentSession, loginWithGoogle, logout, notifySessionExpired } from './services/authService.js'
+import { getCurrentSession, loginWithGoogle, logout } from './services/authService.js'
 
 class ErrorBoundary extends Component {
   constructor(props) {

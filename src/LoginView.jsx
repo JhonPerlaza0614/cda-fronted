@@ -41,18 +41,22 @@ function loadGoogleIdentityServices() {
 
 export default function LoginView({ onContinue, loading = false, error = null }) {
   const googleButtonRef = useRef(null)
-  const [configurationError, setConfigurationError] = useState(null)
+  const [runtimeError, setRuntimeError] = useState(null)
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
+
+  const configurationError = !clientId
+    ? 'Falta configurar VITE_GOOGLE_CLIENT_ID en el archivo .env del frontend.'
+    : runtimeError
 
   useEffect(() => {
     let isActive = true
+    const currentBtn = googleButtonRef.current
 
     if (!clientId) {
-      setConfigurationError('Falta configurar VITE_GOOGLE_CLIENT_ID en el archivo .env del frontend.')
       return () => { isActive = false }
     }
 
-    setConfigurationError(null)
+    setRuntimeError(null)
 
     loadGoogleIdentityServices()
       .then((google) => {
@@ -65,7 +69,7 @@ export default function LoginView({ onContinue, loading = false, error = null })
           callback: (response) => {
             if (!isActive) return
             if (!response?.credential) {
-              setConfigurationError('Google no devolvió una credencial. Inténtalo de nuevo.')
+              setRuntimeError('Google no devolvió una credencial. Inténtalo de nuevo.')
               return
             }
             onContinue(response.credential)
@@ -86,12 +90,12 @@ export default function LoginView({ onContinue, loading = false, error = null })
         })
       })
       .catch((loadError) => {
-        if (isActive) setConfigurationError(loadError.message || 'No fue posible inicializar Google.')
+        if (isActive) setRuntimeError(loadError.message || 'No fue posible inicializar Google.')
       })
 
     return () => {
       isActive = false
-      if (googleButtonRef.current) googleButtonRef.current.replaceChildren()
+      if (currentBtn) currentBtn.replaceChildren()
     }
   }, [clientId, onContinue])
 

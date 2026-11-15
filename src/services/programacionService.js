@@ -125,30 +125,50 @@ export async function actualizarCupos(periodoId, cursos) {
 }
 
 /** Designa o desasigna un docente a un curso programado existente. */
-export async function asignarDocenteACurso(cursoId, idDocente, reemplazarDocente = false) {
+export async function asignarDocenteACurso(cursoId, idDocente, reemplazarDocente = false, horarioData = null) {
+  const payload = {
+    idDocente: idDocente ? Number(idDocente) : null,
+    reemplazarDocente: Boolean(reemplazarDocente)
+  }
+  if (horarioData) {
+    if (horarioData.dia != null) payload.dia = Number(horarioData.dia)
+    if (horarioData.horaInicio) payload.horaInicio = horarioData.horaInicio
+    if (horarioData.horaFin) payload.horaFin = horarioData.horaFin
+    if (horarioData.dia2 != null) payload.dia2 = Number(horarioData.dia2)
+    if (horarioData.horaInicio2) payload.horaInicio2 = horarioData.horaInicio2
+    if (horarioData.horaFin2) payload.horaFin2 = horarioData.horaFin2
+    if (horarioData.horario) payload.horario = horarioData.horario
+  }
   return await requestBackend(`/programacion/cursos/${cursoId}/docente`, {
     method: 'PATCH',
-    body: JSON.stringify({
-      idDocente: idDocente ? Number(idDocente) : null,
-      reemplazarDocente: Boolean(reemplazarDocente)
-    })
+    body: JSON.stringify(payload)
   })
 }
 
 /** Designa o desasigna un docente a una materia asegurando el curso programado. */
 export async function asignarDocentePorMateria({
-  periodoId, codeProgram, codeCourse, semestre, idDocente, reemplazarDocente = false
+  periodoId, codeProgram, codeCourse, semestre, idDocente, reemplazarDocente = false,
+  dia = null, horaInicio = null, horaFin = null,
+  dia2 = null, horaInicio2 = null, horaFin2 = null, horario = null
 }) {
+  const payload = {
+    periodoId: Number(periodoId),
+    codeProgram,
+    codeCourse,
+    semestre: Number(semestre),
+    idDocente: idDocente ? Number(idDocente) : null,
+    reemplazarDocente: Boolean(reemplazarDocente)
+  }
+  if (dia != null) payload.dia = Number(dia)
+  if (horaInicio) payload.horaInicio = horaInicio
+  if (horaFin) payload.horaFin = horaFin
+  if (dia2 != null) payload.dia2 = Number(dia2)
+  if (horaInicio2) payload.horaInicio2 = horaInicio2
+  if (horaFin2) payload.horaFin2 = horaFin2
+  if (horario) payload.horario = horario
   return await requestBackend('/programacion/asignar-docente', {
     method: 'POST',
-    body: JSON.stringify({
-      periodoId: Number(periodoId),
-      codeProgram,
-      codeCourse,
-      semestre: Number(semestre),
-      idDocente: idDocente ? Number(idDocente) : null,
-      reemplazarDocente: Boolean(reemplazarDocente)
-    })
+    body: JSON.stringify(payload)
   })
 }
 

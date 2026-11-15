@@ -7,12 +7,11 @@ import {
   Search,
   BookOpen,
   Clock,
-  CheckCircle2,
   AlertCircle,
   RefreshCw,
+  Info,
   X,
   Layers,
-  ChevronRight,
   UserPlus,
   Building2
 } from 'lucide-react'
@@ -202,7 +201,6 @@ export default function AsignacionDocenteView({
     : (programas[0]?.code_program || '')
 
   const [selectedProgramCode, setSelectedProgramCode] = useState(defaultProgramCode)
-  const [periodos, setPeriodos] = useState([])
   const [periodoActivo, setPeriodoActivo] = useState(periodoActivoProp)
   const [facultadesList, setFacultadesList] = useState([])
 
@@ -228,7 +226,6 @@ export default function AsignacionDocenteView({
   const cargaSeq = useRef(0)
   // Datos del modal (docentes, disps, carga): se cargan solo la primera vez
   const datosModalCargados = useRef(false)
-  const [cargandoModal, setCargandoModal] = useState(false)
 
   // HU-016: filtros (no se guardan en localStorage)
   const [filtroJornada, setFiltroJornada] = useState(FILTRO_JORNADA_DEFECTO)
@@ -236,6 +233,9 @@ export default function AsignacionDocenteView({
 
   // 4. Modal de designación de docente
   const [materiaParaDesignar, setMateriaParaDesignar] = useState(null)
+  const [franjasSeleccionadas, setFranjasSeleccionadas] = useState({}) // { [docenteId]: franjaObj }
+  const [franjasSeleccionadasDia2, setFranjasSeleccionadasDia2] = useState({}) // { [docenteId]: franjaObj } (segundo día)
+  const [modoDistribucion, setModoDistribucion] = useState('1_DIA') // '1_DIA' | '2_DIAS'
   const [busquedaDocente, setBusquedaDocente] = useState('')
   const [soloDelPrograma, setSoloDelPrograma] = useState(true) // Por defecto solo docentes del programa/facultad
   const [asignandoId, setAsignandoId] = useState(null)
@@ -312,7 +312,6 @@ export default function AsignacionDocenteView({
     try {
       const data = await getPeriodos()
       const lista = Array.isArray(data) ? data : []
-      setPeriodos(lista)
       const vigente = lista.find(p => p.vigente) || lista[0]
       setPeriodoActivo(vigente || null)
     } catch (err) {
@@ -502,6 +501,13 @@ export default function AsignacionDocenteView({
             nombreEspacio: c.nombreEspacio || null,
             idDocente: c.idDocente,
             nombreDocente: c.nombreDocente,
+            dia: c.dia,
+            horaInicio: c.horaInicio,
+            horaFin: c.horaFin,
+            dia2: c.dia2,
+            horaInicio2: c.horaInicio2,
+            horaFin2: c.horaFin2,
+            horario: c.horario,
             estado: c.idDocente ? 'ASIGNADO' : 'PROGRAMADO',
             existeEnProgramacion: true,
           })
@@ -547,6 +553,112 @@ export default function AsignacionDocenteView({
       horas: horas.join(', ')
     }))
   }, [disponibilidadesMap])
+
+  /**
+   * Calcula las franjas horarias disponibles de un docente para la materia seleccionada:
+   * 1. Descuenta horas y tiempos ya ocupados por otros cursos del docente en el mismo período.
+   * 2. Respeta el límite máximo de 20 horas totales.
+   * 3. Filtra únicamente aquellas franjas con horas disponibles >= horas presenciales de la materia.
+   */
+  const calcularFranjasDisponibles = useCallback((docenteId) => {
+    const franjas = disponibilidadesMap[docenteId]
+    if (!Array.isArray(franjas) || franjas.length === 0) return []
+
+    const carga = cargaPorDocente[String(docenteId)]
+    const totalAsignadas = Number(carga?.total_horas || 0)
+    const limite = Number(carga?.limite ?? 20)
+
+    const esActual = materiaParaDesignar?.idDocente != null &&
+      Number(materiaParaDesignar.idDocente) === Number(docenteId)
+    const propias = esActual ? Number(materiaParaDesignar.horasSemanales || 0) : 0
+    const ocupadasOtras = Math.max(0, totalAsignadas - propias)
+    const horasRestantes20h = Math.max(0, limite - ocupadasOtras)
+    const horasRequeridas = modoDistribucion === '2_DIAS'
+      ? (Number(materiaParaDesignar?.horasSemanales || 0) / 2.0)
+      : Number(materiaParaDesignar?.horasSemanales || 0)
+
+    // Cursos ya asignados a este docente en el período (excluyendo el actual)
+    const cursosDelDocente = cursosProgramados.filter(c =>
+      c.idDocente != null &&
+      Number(c.idDocente) === Number(docenteId) &&
+      c.id !== materiaParaDesignar?.id &&
+      !c.isExcluido
+    )
+
+    const franjasAptas = []
+
+    franjas.forEach((f, idx) => {
+      const diaNom = DIAS_SEMANA[f.dia] || `Día ${f.dia}`
+      const iniStr = f.horaInicio ? f.horaInicio.slice(0, 5) : ''
+      const finStr = f.horaFin ? f.horaFin.slice(0, 5) : ''
+      const inicioArr = iniStr.split(':').map(Number)
+      const finArr = finStr.split(':').map(Number)
+      if (inicioArr.length < 2 || finArr.length < 2) return
+
+      const iniMin = inicioArr[0] * 60 + inicioArr[1]
+      const finMin = finArr[0] * 60 + finArr[1]
+
+      // Buscar solapamientos con cursos ya asignados en el mismo día (sesión 1 o sesión 2)
+      let minutosOcupados = 0
+
+      cursosDelDocente.forEach(c => {
+        // Solape con sesión 1 del curso asignado
+        if (Number(c.dia) === Number(f.dia) && c.horaInicio && c.horaFin) {
+          const cIni = String(c.horaInicio).slice(0, 5).split(':').map(Number)
+          const cFin = String(c.horaFin).slice(0, 5).split(':').map(Number)
+          const cIniMin = cIni[0] * 60 + cIni[1]
+          const cFinMin = cFin[0] * 60 + cFin[1]
+          const solapeIni = Math.max(iniMin, cIniMin)
+          const solapeFin = Math.min(finMin, cFinMin)
+          if (solapeFin > solapeIni) {
+            minutosOcupados += (solapeFin - solapeIni)
+          }
+        } else if (Number(c.dia) === Number(f.dia) && c.horasSemanales) {
+          minutosOcupados += Number(c.horasSemanales) * 60
+        }
+        // Solape con sesión 2 del curso asignado (si se dividió en 2 días)
+        if (c.dia2 != null && Number(c.dia2) === Number(f.dia) && c.horaInicio2 && c.horaFin2) {
+          const cIni2 = String(c.horaInicio2).slice(0, 5).split(':').map(Number)
+          const cFin2 = String(c.horaFin2).slice(0, 5).split(':').map(Number)
+          const cIniMin2 = cIni2[0] * 60 + cIni2[1]
+          const cFinMin2 = cFin2[0] * 60 + cFin2[1]
+          const solapeIni2 = Math.max(iniMin, cIniMin2)
+          const solapeFin2 = Math.min(finMin, cFinMin2)
+          if (solapeFin2 > solapeIni2) {
+            minutosOcupados += (solapeFin2 - solapeIni2)
+          }
+        }
+      })
+
+      const minutosLibres = Math.max(0, (finMin - iniMin) - minutosOcupados)
+      const horasLibres = minutosLibres / 60.0
+
+      // Disponibilidad real limitada por el tope de 20h
+      const horasDisponiblesEfectivas = Math.min(horasLibres, horasRestantes20h)
+
+      // Regla: solo mostrar franjas con capacidad >= horas requeridas de la clase
+      if (horasDisponiblesEfectivas >= horasRequeridas && horasRequeridas > 0) {
+        const claseFinMin = iniMin + Math.round(horasRequeridas * 60)
+        const finH = Math.floor(claseFinMin / 60)
+        const finM = claseFinMin % 60
+        const horaFinClase = `${String(finH).padStart(2, '0')}:${String(finM).padStart(2, '0')}:00`
+
+        franjasAptas.push({
+          id: f.id || `${f.dia}-${iniStr}-${idx}`,
+          dia: f.dia,
+          diaNombre: diaNom,
+          horaInicio: f.horaInicio,
+          horaFin: f.horaFin,
+          horaFinClase,
+          horasDisponiblesEfectivas,
+          textoFranja: `${diaNom} ${iniStr} - ${finStr} (${horasDisponiblesEfectivas.toFixed(1)}h disp.)`,
+          textoHorarioAsignar: `${diaNom} ${iniStr} - ${horaFinClase.slice(0, 5)}`
+        })
+      }
+    })
+
+    return franjasAptas
+  }, [disponibilidadesMap, cargaPorDocente, materiaParaDesignar, cursosProgramados, modoDistribucion])
 
   // La carga del API incluye TODOS los programas; si el curso ya pertenece al mismo
   // docente, se excluyen sus horas para no contarlas dos veces al volver a guardar.
@@ -637,13 +749,33 @@ export default function AsignacionDocenteView({
       })
     }
 
+    // 4. Si hay historial de calificaciones previas para esta asignatura, priorizar al inicio
+    // a los docentes evaluados en ella (ordenados por mayor calificación).
+    // Si NO hay historial de calificaciones, todos los profesores de la facultad se muestran en orden alfabético.
+    const tieneHistorialEvaluacion = Object.keys(evaluacionesMap).length > 0
+    if (tieneHistorialEvaluacion) {
+      lista.sort((a, b) => {
+        const evA = evaluacionesMap[String(a.id)]
+        const evB = evaluacionesMap[String(b.id)]
+        if (evA && !evB) return -1
+        if (!evA && evB) return 1
+        if (evA && evB) return Number(evB.calificacion || 0) - Number(evA.calificacion || 0)
+        return (a.nombres || '').localeCompare(b.nombres || '')
+      })
+    } else {
+      lista.sort((a, b) => (a.nombres || '').localeCompare(b.nombres || ''))
+    }
+
     return lista
-  }, [docentesList, soloDelPrograma, programaModal, facultadModal, materiaParaDesignar, disponibilidadesMap, busquedaDocente])
+  }, [docentesList, soloDelPrograma, programaModal, facultadModal, materiaParaDesignar, disponibilidadesMap, busquedaDocente, evaluacionesMap])
 
   // Abrir modal de asignación — carga docentes/disponibilidades/carga de forma diferida
   const handleAbrirDesignacion = async (materia) => {
     if (!puedeAsignar) return
     setMateriaParaDesignar(materia)
+    setFranjasSeleccionadas({})
+    setFranjasSeleccionadasDia2({})
+    setModoDistribucion('1_DIA')
     setBusquedaDocente('')
     setSoloDelPrograma(true)
     setEvaluacionesMap({})
@@ -669,7 +801,6 @@ export default function AsignacionDocenteView({
 
     // Docentes, disponibilidades y carga: solo la primera vez que se abre el modal
     if (!datosModalCargados.current && periodoActivo?.id) {
-      setCargandoModal(true)
       promesas.push(
         Promise.all([
           getDocentes().catch(() => []),
@@ -683,20 +814,37 @@ export default function AsignacionDocenteView({
             ? Object.fromEntries(cargas.map(c => [String(c.docente_id), c])) : {})
           setCargaDisponible(Array.isArray(cargas))
           datosModalCargados.current = true
-        }).finally(() => setCargandoModal(false))
+        })
       )
     }
 
     await Promise.all(promesas)
   }
 
-  // Ejecutar asignación de docente
-  const handleConfirmarDesignacion = async (docente) => {
+  // Ejecutar asignación de docente con la franja horaria elegida (1 día o 2 días)
+  const handleConfirmarDesignacion = async (docente, franja1, franja2 = null) => {
     if (!capacidadDocente(docente.id).valido) {
       onShowToast?.('Este docente no tiene suficientes horas semanales restantes para la materia', 'error')
       return
     }
     if (!materiaParaDesignar || !periodoActivo?.id || !puedeAsignar) return
+
+    if (modoDistribucion === '2_DIAS') {
+      if (!franja1 || !franja2) {
+        onShowToast?.('Por favor elija las dos sesiones de clase en días diferentes', 'warning')
+        return
+      }
+      if (Number(franja1.dia) === Number(franja2.dia)) {
+        onShowToast?.('Los dos días de clase deben ser diferentes', 'warning')
+        return
+      }
+    } else {
+      if (!franja1) {
+        onShowToast?.('Por favor elija una franja horaria disponible para la clase', 'warning')
+        return
+      }
+    }
+
     const reemplazando = materiaParaDesignar.idDocente
       && Number(materiaParaDesignar.idDocente) !== Number(docente.id)
     if (reemplazando) {
@@ -709,9 +857,32 @@ export default function AsignacionDocenteView({
     setAsignandoId(docente.id)
 
     try {
-      await asignarDocenteACurso(materiaParaDesignar.id, docente.id, Boolean(reemplazando))
+      let horarioData = null
+      let textoHorarioCompleto = ''
+      if (modoDistribucion === '2_DIAS' && franja1 && franja2) {
+        textoHorarioCompleto = `${franja1.textoHorarioAsignar} / ${franja2.textoHorarioAsignar}`
+        horarioData = {
+          dia: franja1.dia,
+          horaInicio: franja1.horaInicio,
+          horaFin: franja1.horaFinClase,
+          dia2: franja2.dia,
+          horaInicio2: franja2.horaInicio,
+          horaFin2: franja2.horaFinClase,
+          horario: textoHorarioCompleto
+        }
+      } else if (franja1) {
+        textoHorarioCompleto = franja1.textoHorarioAsignar
+        horarioData = {
+          dia: franja1.dia,
+          horaInicio: franja1.horaInicio,
+          horaFin: franja1.horaFinClase,
+          horario: franja1.textoHorarioAsignar
+        }
+      }
 
-      onShowToast?.(`Docente ${docente.nombres} ${docente.apellidos} asignado correctamente a ${materiaParaDesignar.nameCourse}`, 'success')
+      await asignarDocenteACurso(materiaParaDesignar.id, docente.id, Boolean(reemplazando), horarioData)
+
+      onShowToast?.(`Docente ${docente.nombres} ${docente.apellidos} asignado correctamente a ${materiaParaDesignar.nameCourse} (${textoHorarioCompleto})`, 'success')
       const programaDelCurso = materiaParaDesignar.codeProgram
       setMateriaParaDesignar(null)
       await recargarCursosDePrograma(programaDelCurso)
@@ -1059,18 +1230,29 @@ export default function AsignacionDocenteView({
                               {mat.nombreDocente}
                             </div>
 
-                            {/* Horario de disponibilidad del docente */}
-                            <div className="asig-doc-docente-horario-summary">
-                              <Clock size={13} style={{ flexShrink: 0, marginTop: '2px', color: '#2563eb' }} />
-                              <div>
-                                <strong>Disponibilidad registrada:</strong>{' '}
-                                {horariosDoc && horariosDoc.length > 0 ? (
-                                  <span>{horariosDoc.map(h => `${h.dia}: ${h.horas}`).join(' | ')}</span>
-                                ) : (
-                                  <span style={{ color: '#64748b', fontStyle: 'italic' }}>Sin horario registrado en este período</span>
-                                )}
+                            {/* Horario asignado a la clase */}
+                            {mat.horario ? (
+                              <div className="asig-doc-horario-asignado">
+                                <Clock size={13} style={{ flexShrink: 0, color: '#16a34a' }} />
+                                <div>
+                                  <strong>Horario de clase:</strong>{' '}
+                                  <span>{mat.horario}</span>
+                                </div>
                               </div>
-                            </div>
+                            ) : (
+                              /* Horario de disponibilidad del docente */
+                              <div className="asig-doc-docente-horario-summary">
+                                <Clock size={13} style={{ flexShrink: 0, marginTop: '2px', color: '#2563eb' }} />
+                                <div>
+                                  <strong>Disponibilidad registrada:</strong>{' '}
+                                  {horariosDoc && horariosDoc.length > 0 ? (
+                                    <span>{horariosDoc.map(h => `${h.dia}: ${h.horas}`).join(' | ')}</span>
+                                  ) : (
+                                    <span style={{ color: '#64748b', fontStyle: 'italic' }}>Sin horario registrado en este período</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </>
                         ) : (
                           <div style={{ color: '#64748b', fontSize: '0.85rem', fontStyle: 'italic' }}>
@@ -1198,6 +1380,52 @@ export default function AsignacionDocenteView({
                 </span>
               </div>
 
+              {/* Aviso cuando no hay calificaciones previas registradas */}
+              {Object.keys(evaluacionesMap).length === 0 && (
+                <div className="asig-modal-notice-info">
+                  <Info size={16} style={{ flexShrink: 0 }} />
+                  <span>
+                    Esta asignatura no registra historial de calificaciones docentes previas. Mostrando todos los profesores de la facultad {facultadModal?.nombre ? `(${facultadModal.nombre})` : ''} para su elección.
+                  </span>
+                </div>
+              )}
+
+              {/* Opciones de distribución del horario: 1 día o 2 días */}
+              {Number(materiaParaDesignar?.horasSemanales || 0) >= 2 && (
+                <div className="asig-distribucion-box">
+                  <div className="asig-distribucion-label">
+                    <CalendarDays size={16} style={{ color: '#2563eb' }} />
+                    <span>Distribución de las {materiaParaDesignar.horasSemanales}h presenciales:</span>
+                  </div>
+                  <div className="asig-distribucion-buttons">
+                    <button
+                      type="button"
+                      className={`btn-sm ${modoDistribucion === '1_DIA' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', fontWeight: 650 }}
+                      onClick={() => {
+                        setModoDistribucion('1_DIA')
+                        setFranjasSeleccionadas({})
+                        setFranjasSeleccionadasDia2({})
+                      }}
+                    >
+                      1 solo día ({materiaParaDesignar.horasSemanales}h seguidas)
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-sm ${modoDistribucion === '2_DIAS' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', fontWeight: 650 }}
+                      onClick={() => {
+                        setModoDistribucion('2_DIAS')
+                        setFranjasSeleccionadas({})
+                        setFranjasSeleccionadasDia2({})
+                      }}
+                    >
+                      Dividir en 2 días ({(Number(materiaParaDesignar.horasSemanales) / 2.0).toFixed(1).replace('.0', '')}h cada día)
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Lista de docentes con su horario */}
               <div className="asig-docente-list">
                 {docentesFiltrados.length === 0 ? (
@@ -1226,6 +1454,25 @@ export default function AsignacionDocenteView({
                     const estaAsignando = asignandoId === docente.id
                     const evaluacion = evaluacionesMap[String(docente.id)]
                     const capacidad = capacidadDocente(docente.id)
+                    const franjasAptas = calcularFranjasDisponibles(docente.id)
+                    const franjaElegida = franjasSeleccionadas[docente.id] || franjasAptas[0] || null
+
+                    // Para modo 2 días: filtrar franjas disponibles en días distintos a la sesión 1
+                    const franjasAptasDia2 = modoDistribucion === '2_DIAS'
+                      ? franjasAptas.filter(f => !franjaElegida || Number(f.dia) !== Number(franjaElegida.dia))
+                      : []
+                    const franjaElegidaDia2 = modoDistribucion === '2_DIAS'
+                      ? (franjasSeleccionadasDia2[docente.id] || franjasAptasDia2[0] || null)
+                      : null
+
+                    const tieneFranjaValida = modoDistribucion === '2_DIAS'
+                      ? Boolean(franjaElegida && franjaElegidaDia2 && Number(franjaElegida.dia) !== Number(franjaElegidaDia2.dia))
+                      : Boolean(franjaElegida)
+
+                    const horasRequeridas = Number(materiaParaDesignar?.horasSemanales || 0)
+                    const horasRequeridasSesion = modoDistribucion === '2_DIAS'
+                      ? (horasRequeridas / 2.0).toFixed(1).replace('.0', '')
+                      : horasRequeridas
 
                     return (
                       <div
@@ -1289,7 +1536,7 @@ export default function AsignacionDocenteView({
                             </div>
                             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <Clock size={12} style={{ color: '#2563eb' }} />
-                              <span>Horario de disponibilidad en el período:</span>
+                              <span>Horario general de disponibilidad en el período:</span>
                             </div>
                             {horarios && horarios.length > 0 ? (
                               <div className="asig-horario-container">
@@ -1304,6 +1551,161 @@ export default function AsignacionDocenteView({
                                 <span>El docente no ha registrado disponibilidad horaria para este período</span>
                               </div>
                             )}
+
+                            {/* Selector de franja horaria para la clase */}
+                            <div className="asig-franjas-selector">
+                              <div className="asig-franjas-title">
+                                <Clock size={12} style={{ color: '#2563eb' }} />
+                                <span>
+                                  {modoDistribucion === '2_DIAS'
+                                    ? `Elegir 2 días de clase (${horasRequeridasSesion}h por sesión):`
+                                    : `Elegir franja de clase (${horasRequeridas}h presenciales requeridas):`}
+                                </span>
+                              </div>
+
+                              {modoDistribucion === '1_DIA' ? (
+                                franjasAptas.length > 0 ? (
+                                  <div className="asig-franjas-list">
+                                    {franjasAptas.map(franja => {
+                                      const isSelected = franjaElegida?.id === franja.id
+                                      return (
+                                        <label
+                                          key={franja.id}
+                                          className={`asig-franja-chip ${isSelected ? 'selected' : ''}`}
+                                          onClick={() => setFranjasSeleccionadas(prev => ({ ...prev, [docente.id]: franja }))}
+                                        >
+                                          <div className="asig-franja-radio">
+                                            <input
+                                              type="radio"
+                                              name={`franja-${docente.id}`}
+                                              checked={isSelected}
+                                              onChange={() => setFranjasSeleccionadas(prev => ({ ...prev, [docente.id]: franja }))}
+                                            />
+                                            <span>{franja.textoFranja}</span>
+                                          </div>
+                                          <span className="asig-franja-badge-clase">Clase: {franja.textoHorarioAsignar}</span>
+                                        </label>
+                                      )
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="asig-franja-warning-tag">
+                                    <AlertCircle size={13} />
+                                    <span>Sin franjas con al menos {horasRequeridas}h disponibles (o límite de 20h alcanzado)</span>
+                                  </div>
+                                )
+                              ) : (
+                                /* Selector de 2 días */
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                                  {/* Sesión Día 1 */}
+                                  <div>
+                                    <div style={{ fontSize: '0.73rem', fontWeight: 700, color: '#334155', marginBottom: '0.25rem' }}>
+                                      1. Sesión Día 1 ({horasRequeridasSesion}h):
+                                    </div>
+                                    {franjasAptas.length > 0 ? (
+                                      <div className="asig-franjas-list">
+                                        {franjasAptas.map(franja => {
+                                          const isSelected = franjaElegida?.id === franja.id
+                                          return (
+                                            <label
+                                              key={`s1-${franja.id}`}
+                                              className={`asig-franja-chip ${isSelected ? 'selected' : ''}`}
+                                              onClick={() => {
+                                                setFranjasSeleccionadas(prev => ({ ...prev, [docente.id]: franja }))
+                                                if (franjaElegidaDia2 && Number(franjaElegidaDia2.dia) === Number(franja.dia)) {
+                                                  setFranjasSeleccionadasDia2(prev => {
+                                                    const copia = { ...prev }
+                                                    delete copia[docente.id]
+                                                    return copia
+                                                  })
+                                                }
+                                              }}
+                                            >
+                                              <div className="asig-franja-radio">
+                                                <input
+                                                  type="radio"
+                                                  name={`franja-s1-${docente.id}`}
+                                                  checked={isSelected}
+                                                  onChange={() => {
+                                                    setFranjasSeleccionadas(prev => ({ ...prev, [docente.id]: franja }))
+                                                    if (franjaElegidaDia2 && Number(franjaElegidaDia2.dia) === Number(franja.dia)) {
+                                                      setFranjasSeleccionadasDia2(prev => {
+                                                        const copia = { ...prev }
+                                                        delete copia[docente.id]
+                                                        return copia
+                                                      })
+                                                    }
+                                                  }}
+                                                />
+                                                <span>{franja.textoFranja}</span>
+                                              </div>
+                                              <span className="asig-franja-badge-clase">Clase 1: {franja.textoHorarioAsignar}</span>
+                                            </label>
+                                          )
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <div className="asig-franja-warning-tag">
+                                        <AlertCircle size={13} />
+                                        <span>Sin franjas con al menos {horasRequeridasSesion}h disponibles</span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Sesión Día 2 */}
+                                  <div>
+                                    <div style={{ fontSize: '0.73rem', fontWeight: 700, color: '#334155', marginBottom: '0.25rem' }}>
+                                      2. Sesión Día 2 ({horasRequeridasSesion}h) — en día diferente al Día 1:
+                                    </div>
+                                    {franjasAptasDia2.length > 0 ? (
+                                      <div className="asig-franjas-list">
+                                        {franjasAptasDia2.map(franja => {
+                                          const isSelected = franjaElegidaDia2?.id === franja.id
+                                          return (
+                                            <label
+                                              key={`s2-${franja.id}`}
+                                              className={`asig-franja-chip ${isSelected ? 'selected' : ''}`}
+                                              onClick={() => setFranjasSeleccionadasDia2(prev => ({ ...prev, [docente.id]: franja }))}
+                                            >
+                                              <div className="asig-franja-radio">
+                                                <input
+                                                  type="radio"
+                                                  name={`franja-s2-${docente.id}`}
+                                                  checked={isSelected}
+                                                  onChange={() => setFranjasSeleccionadasDia2(prev => ({ ...prev, [docente.id]: franja }))}
+                                                />
+                                                <span>{franja.textoFranja}</span>
+                                              </div>
+                                              <span className="asig-franja-badge-clase">Clase 2: {franja.textoHorarioAsignar}</span>
+                                            </label>
+                                          )
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <div className="asig-franja-warning-tag">
+                                        <AlertCircle size={13} />
+                                        <span>
+                                          {!franjaElegida
+                                            ? 'Primero selecciona la sesión del Día 1'
+                                            : `Sin franjas disponibles de al menos ${horasRequeridasSesion}h en un día diferente a ${franjaElegida.diaNombre}`}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Resumen unificado */}
+                                  {franjaElegida && franjaElegidaDia2 && (
+                                    <div style={{
+                                      padding: '0.45rem 0.65rem', background: '#ecfdf5',
+                                      border: '1px solid #a7f3d0', borderRadius: '6px',
+                                      fontSize: '0.78rem', color: '#065f46', fontWeight: 650
+                                    }}>
+                                      Horario semanal completo: {franjaElegida.textoHorarioAsignar} / {franjaElegidaDia2.textoHorarioAsignar}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
 
@@ -1311,8 +1713,17 @@ export default function AsignacionDocenteView({
                           <button
                             type="button"
                             className={esElActual ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}
-                            onClick={() => handleConfirmarDesignacion(docente)}
-                            disabled={estaAsignando || esElActual || !capacidad.valido}
+                            onClick={() => handleConfirmarDesignacion(docente, franjaElegida, franjaElegidaDia2)}
+                            disabled={estaAsignando || esElActual || !capacidad.valido || !tieneFranjaValida}
+                            title={
+                              !capacidad.valido
+                                ? 'El docente no tiene horas suficientes'
+                                : (!tieneFranjaValida
+                                  ? (modoDistribucion === '2_DIAS'
+                                    ? `El docente debe tener dos franjas disponibles de al menos ${horasRequeridasSesion}h en días diferentes`
+                                    : `El docente no tiene una franja disponible con al menos ${horasRequeridas}h`)
+                                  : 'Designar docente a este curso')
+                            }
                             style={{ minWidth: '100px', whiteSpace: 'nowrap' }}
                           >
                             {estaAsignando ? 'Guardando...' : esElActual ? 'Asignado' : esElCoordinador ? 'Asignarme' : 'Designar'}
