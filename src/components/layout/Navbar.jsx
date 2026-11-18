@@ -1,7 +1,10 @@
-import React from 'react'
+import React, { useState } from 'react'
+import ManualViewer from '../manuals/ManualViewer'
 import { GraduationCap, BookOpen, Library, LogOut, Users, Home, UserCircle, CalendarDays, UserCheck, CalendarCheck, Link2, ScrollText } from 'lucide-react'
 
 export default function Navbar({ activeTab, setActiveTab, isConnected, user, onLogout }) {
+  const [showManual, setShowManual] = useState(false);
+
   const rol = Number(user?.rol ?? 1) // 1: Admin, 2: Coordinador, 3: Docente
   const isAdmin = rol === 1
   const isCoordinador = rol === 2
@@ -28,7 +31,26 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
   }
 
   return (
-    <header className="navbar">
+    <>
+      <button
+        type="button"
+        className="manual-floating-button"
+        onClick={() => setShowManual(true)}
+        title="Abrir manual de usuario"
+        aria-label="Abrir manual de usuario"
+      >
+        <BookOpen size={17} />
+        <span>Manual</span>
+      </button>
+
+      <ManualViewer
+        role={rol}
+        activeTab={activeTab}
+        isOpen={showManual}
+        onClose={() => setShowManual(false)}
+      />
+
+      <header className="navbar">
       {/* Nivel superior: Identidad institucional y Perfil / Acciones */}
       <div className="navbar-top-bar">
         <div className="navbar-top-container">
@@ -223,6 +245,7 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
           </nav>
         </div>
       </div>
-    </header>
+      </header>
+    </>
   )
 }
