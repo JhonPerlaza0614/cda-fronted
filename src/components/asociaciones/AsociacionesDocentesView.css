@@ -468,3 +468,185 @@
     display: block;
   }
 }
+
+/* Botón y modal de carga masiva de calificaciones (Excel) */
+.aso-btn-subir-excel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: #16a34a;
+  border-color: #16a34a;
+  color: #ffffff;
+}
+
+.aso-btn-subir-excel:hover:not(:disabled) {
+  background-color: #15803d;
+  border-color: #15803d;
+}
+
+.aso-excel-modal {
+  max-width: 680px;
+  width: 95%;
+}
+
+.aso-excel-info-box {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  font-size: 0.82rem;
+  color: #1e40af;
+}
+
+.aso-excel-columns-pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+
+.aso-excel-columns-pill-list span {
+  background: #ffffff;
+  border: 1px solid #93c5fd;
+  color: #1e3a8a;
+  border-radius: 999px;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.aso-excel-rules-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  line-height: 1.45;
+}
+
+.aso-excel-dropzone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.aso-excel-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 0.84rem;
+}
+
+.aso-excel-result {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.aso-excel-result-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+  color: #166534;
+}
+
+.aso-excel-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+
+.aso-excel-stat {
+  background: #ffffff;
+  border: 1px solid #dcfce7;
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.aso-excel-stat span {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.aso-excel-stat strong {
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.aso-excel-table-wrap {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.aso-excel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.aso-excel-table th,
+.aso-excel-table td {
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+}
+
+.aso-excel-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+}
+
+.aso-excel-grade-pill {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.73rem;
+}
+
+.aso-excel-grade-pill.evaluado {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.aso-excel-grade-pill.no-evaluado {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.aso-excel-warnings {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.78rem;
+  color: #92400e;
+}
+
+.aso-excel-warnings ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  max-height: 110px;
+  overflow-y: auto;
+}

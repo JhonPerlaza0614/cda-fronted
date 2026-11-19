@@ -15,7 +15,11 @@ import {
   UserPlus,
   Building2
 } from 'lucide-react'
-import { getDocentes, getEvaluacionesDocentes, getCargaPorPeriodo } from '../../services/docenteService'
+import {
+  getDocentes,
+  getEvaluacionesDocentes,
+  getCargaPorPeriodo
+} from '../../services/docenteService'
 import { getPeriodos, getFacultades } from '../../services/academicService'
 import {
   getProgramacion,
@@ -749,17 +753,21 @@ export default function AsignacionDocenteView({
       })
     }
 
-    // 4. Si hay historial de calificaciones previas para esta asignatura, priorizar al inicio
+    // 4. Si hay historial de calificaciones previas (> 0) para esta asignatura, priorizar al inicio
     // a los docentes evaluados en ella (ordenados por mayor calificación).
-    // Si NO hay historial de calificaciones, todos los profesores de la facultad se muestran en orden alfabético.
-    const tieneHistorialEvaluacion = Object.keys(evaluacionesMap).length > 0
+    // Quienes no tienen calificación o tienen 0 ("No evaluado") se ordenan alfabéticamente después.
+    const tieneHistorialEvaluacion = Object.values(evaluacionesMap).some(
+      ev => ev?.calificacion != null && Number(ev.calificacion) > 0
+    )
     if (tieneHistorialEvaluacion) {
       lista.sort((a, b) => {
-        const evA = evaluacionesMap[String(a.id)]
-        const evB = evaluacionesMap[String(b.id)]
-        if (evA && !evB) return -1
-        if (!evA && evB) return 1
-        if (evA && evB) return Number(evB.calificacion || 0) - Number(evA.calificacion || 0)
+        const notaA = Number(evaluacionesMap[String(a.id)]?.calificacion || 0)
+        const notaB = Number(evaluacionesMap[String(b.id)]?.calificacion || 0)
+        const evalA = notaA > 0
+        const evalB = notaB > 0
+        if (evalA && !evalB) return -1
+        if (!evalA && evalB) return 1
+        if (evalA && evalB && notaB !== notaA) return notaB - notaA
         return (a.nombres || '').localeCompare(b.nombres || '')
       })
     } else {
@@ -1528,11 +1536,15 @@ export default function AsignacionDocenteView({
                           <div>
                             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '0.45rem' }}>
                               Última evaluación registrada ({evaluacion?.periodo_nombre || evaluacion?.periodoNombre || 'período anterior'}):{' '}
-                              <strong style={{ color: evaluacion ? '#0f766e' : '#64748b' }}>
-                                {evaluacion
-                                  ? `${Number(evaluacion.calificacion).toFixed(2)} / 5.00`
-                                  : 'Sin registro'}
-                              </strong>
+                              {(() => {
+                                const nota = evaluacion?.calificacion != null ? Number(evaluacion.calificacion) : 0
+                                const evaluado = Number.isFinite(nota) && nota > 0
+                                return (
+                                  <strong style={{ color: evaluado ? '#0f766e' : '#64748b' }}>
+                                    {evaluado ? `${nota.toFixed(2)} / 5.00` : 'No evaluado'}
+                                  </strong>
+                                )
+                              })()}
                             </div>
                             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <Clock size={12} style={{ color: '#2563eb' }} />
