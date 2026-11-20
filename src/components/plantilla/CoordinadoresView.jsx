@@ -6,7 +6,7 @@ import {
   Edit2,
   Trash2,
   Mail,
-  Phone,
+  Smartphone,
   IdCard,
   BookOpen,
   CheckCircle2,
@@ -123,6 +123,17 @@ export default function CoordinadoresView({
 
     if (!editingCoord && !formData.identificacion.trim()) {
       onShowToast?.('La identificación es obligatoria', 'warning')
+      return
+    }
+
+    if (!editingCoord && !/^[0-9]{1,10}$/.test(formData.identificacion.trim())) {
+      onShowToast?.('El N. Documento solo admite números, hasta 10 dígitos', 'warning')
+      return
+    }
+
+    // El teléfono del coordinador es un celular: 10 dígitos y empieza por 3 (opcional)
+    if (formData.telefono.trim() && !/^3[0-9]{9}$/.test(formData.telefono.trim())) {
+      onShowToast?.('El celular debe tener 10 dígitos y empezar por 3', 'warning')
       return
     }
 
@@ -298,7 +309,7 @@ export default function CoordinadoresView({
               key={coord.id}
               className="card-item"
               style={{
-                background: '#5f57575d', /*Color de la tarjeta*/
+                background: '#5f57575d',
                 border: '1px solid #ffffffff',
                 borderRadius: '12px',
                 padding: '1.25rem',
@@ -337,9 +348,8 @@ export default function CoordinadoresView({
                   </span>
                 </div>
 
-                {/* Categoría, Tipo de Contrato y Programa en tonos grises elegantes */}
+                {/* Categoría, Tipo de Contrato y Programa */}
                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.9rem' }}>
-                  {/* Badge de Categoría */}
                   <span
                     style={{
                       display: 'inline-flex',
@@ -359,7 +369,6 @@ export default function CoordinadoresView({
                     <span>{coord.categoria || 'Auxiliar'}</span>
                   </span>
 
-                  {/* Badge de Tipo de Contrato */}
                   <span
                     style={{
                       display: 'inline-flex',
@@ -379,7 +388,6 @@ export default function CoordinadoresView({
                     <span>{coord.tipo_contrato || 'Nombrado'}</span>
                   </span>
 
-                  {/* Programa vinculado */}
                   <span
                     style={{
                       display: 'inline-flex',
@@ -404,7 +412,7 @@ export default function CoordinadoresView({
                   </span>
                 </div>
 
-                {/* Datos de contacto en escala de grises limpia */}
+                {/* Datos de contacto */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', fontSize: '0.85rem', color: '#d4d4d8' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Mail size={14} style={{ color: '#71717a', flexShrink: 0 }} />
@@ -426,8 +434,8 @@ export default function CoordinadoresView({
 
                   {coord.telefono && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Phone size={14} style={{ color: '#71717a', flexShrink: 0 }} />
-                      <span style={{ color: '#71717a' }}>Teléfono:</span>
+                      <Smartphone size={14} style={{ color: '#71717a', flexShrink: 0 }} />
+                      <span style={{ color: '#71717a' }}>Celular:</span>
                       <a href={'tel:' + coord.telefono} style={{ color: '#a1a1aa', textDecoration: 'none' }}>
                         {coord.telefono}
                       </a>
@@ -476,9 +484,11 @@ export default function CoordinadoresView({
                     type="text"
                     required
                     disabled={!!editingCoord}
+                    inputMode="numeric"
+                    maxLength={10}
                     placeholder="Ej. 1118234567"
                     value={formData.identificacion}
-                    onChange={(e) => setFormData({ ...formData, identificacion: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, identificacion: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                   />
                   {editingCoord && (
                     <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
@@ -493,15 +503,17 @@ export default function CoordinadoresView({
                   <input
                     type="text"
                     required
-                    placeholder="Ej. Dra. María Rodríguez Pérez"
+                    placeholder="Ej. María Fernanda Rodríguez Pérez"
                     value={formData.nombre_completo}
                     onChange={(e) => setFormData({ ...formData, nombre_completo: e.target.value })}
                   />
+                  <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
+                    Escríbalo sin títulos: nombres primero y luego los dos apellidos.
+                  </small>
                 </div>
 
                 {/* Fila doble: Categoría y Tipo de Contrato */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  {/* Categoría Seleccionable */}
                   <div className="form-group">
                     <label>Categoría*</label>
                     <select
@@ -517,7 +529,6 @@ export default function CoordinadoresView({
                     </select>
                   </div>
 
-                  {/* Tipo de Contrato Seleccionable */}
                   <div className="form-group">
                     <label>Tipo de Contrato *</label>
                     <select
@@ -557,14 +568,16 @@ export default function CoordinadoresView({
                   />
                 </div>
 
-                {/* Teléfono */}
+                {/* Celular (el campo se sigue llamando telefono en el backend) */}
                 <div className="form-group">
-                  <label>Teléfono de Contacto</label>
+                  <label>Celular</label>
                   <input
-                    type="text"
-                    placeholder="Ej. +57 315 123 4567"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="Ej. 3151234567 (10 dígitos, empieza por 3)"
                     value={formData.telefono}
-                    onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, telefono: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                   />
                 </div>
 
