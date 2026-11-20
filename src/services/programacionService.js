@@ -180,18 +180,22 @@ export async function asignarDocentePorMateria({
   })
 }
 
-// --- Electivas profesionales programadas por el coordinador ---
+// --- Electivas profesionales y complementarias programadas por el coordinador ---
 
-// GET /api/programacion/electivas?codeProgram=  → { periodoId, plazoAbierto, puedeEditar, electivas: [...] }
+// GET /api/programacion/electivas?codeProgram=
+//   → { periodoId, plazoAbierto, puedeEditar, electivas: [...], escuelasBanco: [...],
+//       complementarias: [...], bancoComplementarias: [{ codeCourse, nombre, credits }] }
 export async function getElectivasProgramadas(codeProgram) {
   return await requestBackend(`/programacion/electivas?codeProgram=${encodeURIComponent(codeProgram)}`)
 }
 
 // POST /api/programacion/electivas  → electiva creada (incluye `alerta` si no hay docentes asociados, HU-051)
-export async function programarElectiva({ codeProgram, codeEspacio, codeCourse, cupos }) {
+//  - electiva profesional / complementaria del semestre 1: codeEspacio = espacio de la malla (ELE-PROF-I, ...)
+//  - complementaria propuesta por el coordinador: codeEspacio = 'COMPLEMENTARIA' y jornada obligatoria
+export async function programarElectiva({ codeProgram, codeEspacio, codeCourse, cupos, jornada }) {
   return await requestBackend('/programacion/electivas', {
     method: 'POST',
-    body: JSON.stringify({ codeProgram, codeEspacio, codeCourse, cupos: Number(cupos) })
+    body: JSON.stringify({ codeProgram, codeEspacio, codeCourse, cupos: Number(cupos), jornada: jornada || null })
   })
 }
 

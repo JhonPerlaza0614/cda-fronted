@@ -26,6 +26,31 @@
    NAVBAR
    ============================================================================== */
 
+.manual-floating-button {
+  position: fixed;
+  left: 1rem;
+  top: 6.8rem;
+  z-index: 45;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 38px;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #93c5fd;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.manual-floating-button:hover {
+  background: #eff6ff;
+  border-color: #60a5fa;
+}
+
 .navbar {
   background-color: #ffffff;
   border-bottom: 1px solid #cbd5e1;
@@ -1658,6 +1683,100 @@
   max-width: min(760px, 95vw);
 }
 
+.manual-modal {
+  max-width: min(860px, 95vw);
+}
+
+.manual-modal-header {
+  background: linear-gradient(135deg, #f8fafc, #eff6ff);
+}
+
+.manual-modal-subtitle {
+  display: block;
+  margin-top: 0.15rem;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.manual-modal-close {
+  color: #64748b;
+  font-size: 1.5rem;
+}
+
+.manual-modal-close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.manual-tabs {
+  display: flex;
+  gap: 0.45rem;
+  padding: 0.65rem 1.25rem 0;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.manual-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #64748b;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.manual-tabs button.active {
+  border-bottom-color: #2563eb;
+  color: #1d4ed8;
+}
+
+.manual-modal-body {
+  display: block;
+  color: #334155;
+  background: #ffffff;
+}
+
+.manual-markdown h2 {
+  margin: 0 0 0.85rem;
+  color: #0f172a;
+  font-size: 1.25rem;
+}
+
+.manual-markdown h3 {
+  margin: 1.25rem 0 0.55rem;
+  color: #1e3a8a;
+  font-size: 1.02rem;
+}
+
+.manual-markdown h4 {
+  margin: 1rem 0 0.35rem;
+  color: #334155;
+  font-size: 0.95rem;
+}
+
+.manual-markdown p {
+  margin: 0 0 0.7rem;
+  line-height: 1.58;
+}
+
+.manual-markdown ul {
+  margin: 0.25rem 0 0.85rem;
+  padding-left: 1.35rem;
+}
+
+.manual-markdown ol {
+  margin: 0.25rem 0 0.85rem;
+  padding-left: 1.5rem;
+}
+
+.manual-markdown li {
+  margin: 0.32rem 0;
+  line-height: 1.45;
+}
+
 /* Soporte para que los formularios dentro de modales permitan scroll interno al hacer zoom */
 .modal-card>form {
   display: flex;
@@ -2829,6 +2948,22 @@
 }
 
 @media (max-width: 560px) {
+  .manual-floating-button {
+    left: 0.65rem;
+    top: 6.2rem;
+  }
+
+  .manual-floating-button span {
+    display: none;
+  }
+
+  .manual-floating-button {
+    width: 40px;
+    min-height: 40px;
+    justify-content: center;
+    padding: 0.55rem;
+  }
+
   .navbar-user {
     display: none;
   }

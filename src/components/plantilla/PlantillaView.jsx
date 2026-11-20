@@ -7,6 +7,7 @@ import {
   Award,
   Mail,
   Phone,
+  MapPin,
   BookOpen,
   Plus,
   Edit2,
@@ -98,6 +99,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
     correo_institucional: '',
     telefono: '',
     celular: '',
+    direccion: '',
     tipo_docente: 'NOMBRADO',
     categoria: 'AUXILIAR',
     id_facultad: '',
@@ -213,6 +215,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
       correoPersonal: null,
       telefono: d.telefono,
       celular: d.celular,
+      direccion: d.direccion,
       codeProgram: d.code_program,
       idFacultad: d.id_facultad,
       nombreFacultad:
@@ -470,6 +473,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
       correo_institucional: '',
       telefono: '',
       celular: '',
+      direccion: '',
       tipo_docente: 'NOMBRADO',
       categoria: 'AUXILIAR',
       id_facultad: facultadesList[0]?.id ? String(facultadesList[0].id) : '',
@@ -491,6 +495,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         correo_institucional: docenteFormData.correo_institucional.trim().toLowerCase(),
         telefono: docenteFormData.telefono.trim() || null,
         celular: docenteFormData.celular.trim() || null,
+        direccion: docenteFormData.direccion.trim() || null,
         tipo_docente: docenteFormData.tipo_docente,
         categoria: docenteFormData.categoria,
         id_facultad: docenteFormData.id_facultad ? parseInt(docenteFormData.id_facultad, 10) : null,
@@ -1728,6 +1733,16 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                     </div>
                   )}
 
+                  {selectedProfile.tipoRol === 'DOCENTE' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <MapPin size={16} style={{ color: '#9ca3af' }} />
+                      <span style={{ color: '#9ca3af' }}>Dirección:</span>
+                      <span style={{ color: '#f3f4f6' }}>
+                        {selectedProfile.direccion || 'Sin registrar'}
+                      </span>
+                    </div>
+                  )}
+
                 </div>
               </div>
 
@@ -2132,6 +2147,19 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                   <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
                     Opcional. De 7 a 10 dígitos, sin espacios ni +57.
                   </small>
+                </div>
+
+                {/* Dirección de vivienda */}
+                <div className="form-group">
+                  <label style={{ color: '#e5e7eb' }}>Dirección de vivienda (opcional)</label>
+                  <input
+                    type="text"
+                    maxLength={150}
+                    value={docenteFormData.direccion}
+                    onChange={(e) => setDocenteFormData({ ...docenteFormData, direccion: e.target.value })}
+                    placeholder="Ej. Calle 30 # 25-10, Palmira"
+                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
+                  />
                 </div>
 
                 {/* Tipo de Docente y Categoría */}

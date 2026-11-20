@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { UserCircle, Mail, IdCard, Award, Briefcase, BookOpen, CheckCircle2, XCircle, Star } from 'lucide-react'
+import { UserCircle, Mail, IdCard, Award, Briefcase, BookOpen, CheckCircle2, XCircle, Star, MapPin } from 'lucide-react'
 import { getMiPerfil } from '../../services/docenteService'
 
 const TIPO_DOCENTE_LABEL = { NOMBRADO: 'Nombrado', HORA_CATEDRA: 'Hora cátedra' }
@@ -121,6 +121,7 @@ export default function MiPerfilDocenteView({ correo, onShowToast }) {
 
                 <Row icon={<IdCard size={15} />} label="Código">{docente.codigo}</Row>
                 <Row icon={<Mail size={15} />} label="Correo">{docente.correo_institucional}</Row>
+                <Row icon={<MapPin size={15} />} label="Dirección">{docente.direccion || 'Sin registrar'}</Row>
                 <Row icon={<Briefcase size={15} />} label="Tipo de docente">
                     {TIPO_DOCENTE_LABEL[docente.tipo_docente] || docente.tipo_docente}
                 </Row>
