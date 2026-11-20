@@ -1452,8 +1452,9 @@ export default function AsignacionDocenteView({
               )}
             </div>
             <p className="asig-doc-comp-ayuda">
-              Cada coordinador propone aquí las electivas complementarias de su programa. No ocupan un espacio de la malla,
-              se programan una sola vez en el período y salen en la programación académica al final del consolidado.
+              Aquí se proponen las electivas complementarias generales del período: no pertenecen a la malla de ningún
+              programa ni ocupan un espacio de ella. Se programan una sola vez en el período y salen en la programación
+              académica al final del consolidado. El coordinador que la propone asigna su docente.
             </p>
 
             {!comp.puedeEditar && !comp.cargando && !comp.error && (
@@ -1480,7 +1481,7 @@ export default function AsignacionDocenteView({
             ) : comp.lista.length === 0 ? (
               <div className="asig-doc-comp-estado">
                 <BookOpen size={18} />
-                <span>Aún no hay electivas complementarias propuestas para {programaBase.code_program} en este período.</span>
+                <span>Aún no hay electivas complementarias propuestas por ti en este período.</span>
               </div>
             ) : (
               <div className="asig-doc-materias-grid">
@@ -1619,7 +1620,7 @@ export default function AsignacionDocenteView({
                   <h3 className="asig-modal-title">
                     {modalComp.cursoId ? 'Modificar electiva complementaria' : 'Proponer electiva complementaria'}
                   </h3>
-                  <div className="asig-modal-target">Programa {codigoProgramaComp}</div>
+                  <div className="asig-modal-target"></div>
                 </div>
                 <button
                   type="button"
