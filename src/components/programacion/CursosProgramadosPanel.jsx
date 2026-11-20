@@ -15,6 +15,9 @@ const MSG_CUPOS_GUARDADOS = 'Cupos de estudiantes registrados correctamente'
 const MSG_ERROR_CUPOS = 'No se pudo registrar la información de cupos. Intente de nuevo'
 const MSG_PLAZO_CERRADO = 'El plazo de edición ya cerró'
 
+// Electiva complementaria que propone el coordinador: no tiene semestre de malla y va al final del consolidado
+const esComplementaria = (curso) => String(curso?.codigoEspacio || '').toUpperCase() === 'COMPLEMENTARIA'
+
 /**
  * HU-047: submódulo 3 «Cursos Programados».
  * Consolida los cursos del periodo con filtros, resalta los que requieren revisión y permite excluir
@@ -137,7 +140,7 @@ export default function CursosProgramadosPanel({
 
   const filtrados = useMemo(() => {
     const q = busqueda.toLowerCase().trim()
-    return cursos.filter((c) => {
+    const lista = cursos.filter((c) => {
       if (filtroPrograma && c.codeProgram !== filtroPrograma) return false
       if (filtroAsignatura && c.codeCourse !== filtroAsignatura) return false
       if (filtroJornada && c.jornada !== filtroJornada) return false
@@ -149,6 +152,8 @@ export default function CursosProgramadosPanel({
         c.nombrePrograma?.toLowerCase().includes(q)
       )
     })
+    // Las complementarias propuestas van al final del consolidado (el orden del resto no cambia)
+    return [...lista.filter((c) => !esComplementaria(c)), ...lista.filter(esComplementaria)]
   }, [cursos, busqueda, filtroPrograma, filtroAsignatura, filtroJornada])
 
   const totalRevision = cursos.filter((c) => c.requiereRevision).length
@@ -377,6 +382,9 @@ export default function CursosProgramadosPanel({
                     </td>
                     <td>
                       <strong>{curso.nombreAsignatura}</strong>
+                      {esComplementaria(curso) && (
+                        <div><span className="pc-badge pc-badge-purple">Electiva complementaria</span></div>
+                      )}
                       {curso.requiereRevision && (
                         <div className="pc-revision-motivo">
                           <AlertTriangle size={12} /> {curso.motivoRevision}
@@ -391,7 +399,11 @@ export default function CursosProgramadosPanel({
                         </div>
                       )}
                     </td>
-                    <td>{curso.semestre}º</td>
+                    <td>
+                      {esComplementaria(curso)
+                        ? <span className="pc-text-muted" title="No pertenece a un semestre de la malla">—</span>
+                        : `${curso.semestre}º`}
+                    </td>
                     <td>
                       <span className={`pc-badge ${curso.jornada === 'NOCTURNA' ? 'pc-badge-purple' : 'pc-badge-blue'}`}>
                         {curso.jornada}

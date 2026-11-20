@@ -8,6 +8,7 @@ import {
     Mail,
     Phone,
     Smartphone,
+    MapPin,
     IdCard,
     BookOpen,
     CheckCircle2,
@@ -49,6 +50,7 @@ const EMPTY_FORM = {
     correo_institucional: '',
     telefono: '',
     celular: '',
+    direccion: '',
     tipo_docente: '',
     categoria: '',
     code_program: ''
@@ -88,6 +90,9 @@ function validate(f) {
     if (f.celular.trim() && !/^[0-9]{7,10}$/.test(f.celular.trim())) {
         e.celular = 'El celular solo admite de 7 a 10 dígitos'
     }
+    if (f.direccion.length > 150) {
+        e.direccion = 'La dirección no puede exceder 150 caracteres'
+    }
 
     if (!f.correo_institucional.trim()) e.correo_institucional = 'El correo institucional es obligatorio'
     else if (f.correo_institucional.length > 50) e.correo_institucional = 'El correo no puede exceder 50 caracteres'
@@ -113,6 +118,7 @@ function buildPayload(f) {
         correo_institucional: f.correo_institucional.trim().toLowerCase(),
         telefono: opt(f.telefono),
         celular: opt(f.celular),
+        direccion: opt(f.direccion),
         tipo_docente: f.tipo_docente,
         categoria: f.categoria,
         code_program: f.code_program
@@ -512,6 +518,12 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                         <span>{d.celular}</span>
                                     </div>
                                 )}
+                                {d.direccion && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <MapPin size={14} style={{ color: '#71717a', flexShrink: 0 }} />
+                                        <span>{d.direccion}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}
@@ -608,6 +620,16 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                         placeholder="Ej. 3001234567"
                                         value={formData.celular}
                                         onChange={(e) => update('celular', e.target.value)}
+                                    />
+                                </Field>
+
+                                <Field label="Dirección de vivienda (opcional)" error={errors.direccion}>
+                                    <input
+                                        type="text"
+                                        maxLength={150}
+                                        placeholder="Ej. Calle 30 # 25-10, Palmira"
+                                        value={formData.direccion}
+                                        onChange={(e) => update('direccion', e.target.value)}
                                     />
                                 </Field>
 

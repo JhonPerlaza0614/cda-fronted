@@ -1732,7 +1732,7 @@ export default function PensumView({
       {!canEdit && (
         <div className="info-banner print-hide">
           <BookOpen size={18} />
-          <span>Modo consulta: puedes visualizar la malla vigente y consultar su historial, pero no modificarla.</span>
+          <span>Modo consulta: puedes visualizar la malla vigente y consultar su historial, pero no modificarla. Solo puedes programar las electivas profesionales en sus espacios.</span>
         </div>
       )}
 
@@ -2093,9 +2093,11 @@ export default function PensumView({
                     {electivasEspecializadas.length === 0 ? (
                       <div className="dock-empty-state">
                         <p>No hay electivas profesionales registradas para la facultad de esta carrera.</p>
-                        <button className="btn-link" onClick={onNavigateToAsignaturas}>
-                          + Crear electiva profesional en Asignaturas
-                        </button>
+                        {canEdit && (
+                          <button className="btn-link" onClick={onNavigateToAsignaturas}>
+                            + Crear electiva profesional en Asignaturas
+                          </button>
+                        )}
                       </div>
                     ) : (
                       electivasEspecializadas.map(el => {
