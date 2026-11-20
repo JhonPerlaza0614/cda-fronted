@@ -9,12 +9,12 @@ import { getFacultades } from '../../services/academicService'
 const MSG_SIN_CAMBIOS = 'No hay cambios para guardar'
 const MSG_ACTUALIZADO = 'Perfil actualizado'
 const MSG_ERROR_GUARDAR = 'No se pudo guardar. Intente de nuevo'
-// Celular (2026-11-10): opcional, distinto del teléfono, de 7 a 10 dígitos.
-const MSG_CELULAR_INVALIDO = 'Por favor complete este campo correctamente'
+// Celular: opcional, distinto del teléfono, 10 dígitos y empieza por 3.
+const MSG_CELULAR_INVALIDO = 'El celular debe tener 10 dígitos y empezar por 3'
 
 const CORREO_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/
 const TELEFONO_REGEX = /^[0-9]{7,10}$/
-const CELULAR_REGEX = /^[0-9]{7,10}$/
+const CELULAR_REGEX = /^3[0-9]{9}$/
 const CAMPOS_NUMERICOS = new Set(['telefono', 'celular'])
 
 // Mismas reglas que el backend (docs/contratos/HU-015.md)
@@ -285,7 +285,7 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
                 />
                 {errores.celular
                     ? <span id="perfil-celular-error" className="field-error">{errores.celular}</span>
-                    : <span id="perfil-celular-ayuda" className="form-hint">Solo números, de 7 a 10 dígitos. Puedes dejarlo vacío.</span>}
+                    : <span id="perfil-celular-ayuda" className="form-hint">Solo números: 10 dígitos y empieza por 3. Puedes dejarlo vacío.</span>}
             </div>
             <div className="form-group">
                 <label htmlFor="perfil-direccion">Dirección de vivienda (opcional)</label>
