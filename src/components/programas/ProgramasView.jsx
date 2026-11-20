@@ -21,7 +21,6 @@ export default function ProgramasView({
   const [facultadesList, setFacultadesList] = useState([])
   const [coordinadoresList, setCoordinadoresList] = useState([])
   const [loadingCoordinadores, setLoadingCoordinadores] = useState(false)
-  const [currentCoordinatorId, setCurrentCoordinatorId] = useState(null)
   const [assignedCoordinator, setAssignedCoordinator] = useState(null)
 
   // Modal independiente para crear facultad (al lado de Nuevo Programa)
@@ -121,7 +120,7 @@ export default function ProgramasView({
       apertura: '',
       id_coordinador_nuevo: '',
     })
-    setCurrentCoordinatorId(null)
+    setAssignedCoordinator(null)
     setLoadingCoordinadores(false)
     setIsModalOpen(true)
   }

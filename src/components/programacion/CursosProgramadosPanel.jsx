@@ -1,7 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, Ban, Check, Filter, Pencil, RefreshCw, RotateCcw, Search, UserX } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowRight,
+  Ban,
+  Check,
+  Download,
+  FileSpreadsheet,
+  Filter,
+  Pencil,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  UserX
+} from 'lucide-react'
 import {
   actualizarCupos,
+  descargarProgramacionExcel,
   excluirCurso,
   getVistaPreviaExclusion,
   reactivarCurso
@@ -29,6 +43,7 @@ export default function CursosProgramadosPanel({
   onCambio,
   onShowToast,
   periodoId,
+  periodoNombre = '',
   maxCupos = 60,
   puedeEditarCupos = true,
   plazoAbierto = true,
@@ -54,6 +69,35 @@ export default function CursosProgramadosPanel({
   const [erroresCupos, setErroresCupos] = useState({})
   const [filaEditando, setFilaEditando] = useState(null)
   const [guardandoCupos, setGuardandoCupos] = useState(false)
+
+  // Exportación a Excel con confirmación
+  const [mostrarModalExportar, setMostrarModalExportar] = useState(false)
+  const [confirmacionChecked, setConfirmacionChecked] = useState(false)
+  const [exportando, setExportando] = useState(false)
+
+  const handleExportarExcel = async () => {
+    if (!periodoId || exportando) return
+    setExportando(true)
+    try {
+      const { blob, filename } = await descargarProgramacionExcel(periodoId, filtroPrograma)
+      const url = URL.createObjectURL(blob)
+      const enlace = document.createElement('a')
+      enlace.href = url
+      enlace.download = filename || `programacion-academica-${periodoId}.xlsx`
+      enlace.style.display = 'none'
+      document.body.appendChild(enlace)
+      enlace.click()
+      enlace.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 0)
+      setMostrarModalExportar(false)
+      setConfirmacionChecked(false)
+      onShowToast?.('Programación académica exportada exitosamente a Excel', 'success')
+    } catch (err) {
+      onShowToast?.(err.message || 'No se pudo exportar la programación académica', 'error')
+    } finally {
+      setExportando(false)
+    }
+  }
 
   // Sincroniza el formulario con los cupos persistidos cuando el padre recarga los cursos.
   useEffect(() => {
@@ -305,6 +349,24 @@ export default function CursosProgramadosPanel({
             <option value="NOCTURNA">Nocturna</option>
           </select>
         </div>
+
+        <button
+          type="button"
+          className="pc-btn pc-btn-success pc-btn-exportar"
+          onClick={() => {
+            setConfirmacionChecked(false)
+            setMostrarModalExportar(true)
+          }}
+          disabled={!periodoId || cursos.length === 0 || exportando}
+          title="Exportar programación académica oficial a Excel"
+        >
+          {exportando ? (
+            <RefreshCw size={16} className="pc-spin" />
+          ) : (
+            <FileSpreadsheet size={16} />
+          )}
+          <span>Exportar Excel</span>
+        </button>
       </div>
 
       {!cargandoCuposConfig && !puedeEditarCupos && !plazoAbierto && (
@@ -679,6 +741,107 @@ export default function CursosProgramadosPanel({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal de Confirmación para Exportar Programación a Excel */}
+      {mostrarModalExportar && (
+        <div className="pc-modal-backdrop">
+          <div className="pc-modal" role="dialog" aria-modal="true" style={{ maxWidth: '520px' }}>
+            <div className="pc-modal-header">
+              <div className="pc-modal-title-with-icon">
+                <FileSpreadsheet size={22} style={{ color: '#16a34a' }} />
+                <h3>Confirmar Exportación a Excel</h3>
+              </div>
+            </div>
+            <div className="pc-modal-body">
+              <p style={{ marginBottom: '1rem', lineHeight: '1.5', color: '#334155' }}>
+                Está a punto de exportar la programación académica oficial del período{' '}
+                <strong>{periodoNombre || `ID ${periodoId}`}</strong> a un libro de Microsoft Excel (.xlsx).
+              </p>
+
+              <div className="pc-export-summary-box">
+                <div className="pc-export-summary-row">
+                  <span className="pc-export-summary-label">Alcance del Programa:</span>
+                  <span className="pc-export-summary-val">
+                    {filtroPrograma
+                      ? (programas.find((p) => p.code_program === filtroPrograma)?.name_program || filtroPrograma)
+                      : 'Todos los programas académicos'}
+                  </span>
+                </div>
+                <div className="pc-export-summary-row">
+                  <span className="pc-export-summary-label">Total Cursos Activos:</span>
+                  <span className="pc-export-summary-val">
+                    {filtrados.filter((c) => c.estado !== 'EXCLUIDO').length} cursos
+                  </span>
+                </div>
+                <div className="pc-export-summary-row">
+                  <span className="pc-export-summary-label">Cursos con Docente Asignado:</span>
+                  <span className="pc-export-summary-val">
+                    {filtrados.filter((c) => c.estado !== 'EXCLUIDO' && c.idDocente).length} de{' '}
+                    {filtrados.filter((c) => c.estado !== 'EXCLUIDO').length}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '8px',
+                padding: '0.75rem 1rem',
+                marginBottom: '1rem',
+                display: 'flex',
+                gap: '0.5rem',
+                alignItems: 'flex-start'
+              }}>
+                <AlertTriangle size={18} style={{ color: '#2563eb', flexShrink: 0, marginTop: '2px' }} />
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#1e40af' }}>
+                  El archivo generado incluirá: Plan (Código), Jornada, Semestre, Código y Nombre de Asignatura, Grupo,
+                  Intensidad Horaria, Cédula, Nombre, Categoría y Vinculación del Docente, y Horario completo en 1 o 2 días.
+                </p>
+              </div>
+
+              <label className="pc-export-checkbox-label">
+                <input
+                  type="checkbox"
+                  className="pc-export-checkbox"
+                  checked={confirmacionChecked}
+                  onChange={(e) => setConfirmacionChecked(e.target.checked)}
+                />
+                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#1e293b' }}>
+                  Confirmo que la información de la programación está completa y correcta.
+                </span>
+              </label>
+            </div>
+            <div className="pc-modal-footer">
+              <button
+                type="button"
+                className="pc-btn pc-btn-secondary"
+                onClick={() => setMostrarModalExportar(false)}
+                disabled={exportando}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="pc-btn pc-btn-success"
+                disabled={!confirmacionChecked || exportando}
+                onClick={handleExportarExcel}
+              >
+                {exportando ? (
+                  <>
+                    <RefreshCw size={16} className="pc-spin" />
+                    <span>Generando Excel...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={16} />
+                    <span>Descargar Excel</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

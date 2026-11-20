@@ -1356,6 +1356,31 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                               <CalendarPlus size={15} />
                               <span>Registrar disponibilidad</span>
                             </button>
+
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => handleOpenEvaluation(profile)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.55rem',
+                                width: '100%',
+                                padding: '0.6rem 0.65rem',
+                                border: 0,
+                                borderRadius: '6px',
+                                background: 'transparent',
+                                color: '#e5e7eb',
+                                textAlign: 'left',
+                                fontSize: '0.82rem',
+                                cursor: 'pointer',
+                              }}
+                              onMouseEnter={(event) => { event.currentTarget.style.backgroundColor = '#1f2937' }}
+                              onMouseLeave={(event) => { event.currentTarget.style.backgroundColor = 'transparent' }}
+                            >
+                              <Star size={15} />
+                              <span>Evaluar docente</span>
+                            </button>
                           </div>
                         )}
                       </div>

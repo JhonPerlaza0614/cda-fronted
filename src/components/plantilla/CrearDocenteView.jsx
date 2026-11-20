@@ -21,12 +21,6 @@ import {
 import { getDocentes, createDocente, updateDocente } from '../../services/docenteService'
 
 // Opciones (value = lo que espera el backend)
-const TIPOS_DOCUMENTO = [
-    { value: 'CC', label: 'CC - Cédula de ciudadanía' },
-    { value: 'CE', label: 'CE - Cédula de extranjería' },
-    { value: 'PP', label: 'PP - Pasaporte' }
-]
-
 const TIPOS_DOCENTE = [
     { value: 'NOMBRADO', label: 'Nombrado' },
     { value: 'HORA_CATEDRA', label: 'Hora cátedra' }
