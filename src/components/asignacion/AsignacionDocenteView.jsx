@@ -806,7 +806,7 @@ export default function AsignacionDocenteView({
   }, [docentesList, soloDelPrograma, programaModal, facultadModal, materiaParaDesignar, disponibilidadesMap, busquedaDocente, evaluacionesMap])
 
   // Abrir modal de asignación
-  const handleAbrirDesignacion = (materia) => {
+  const handleAbrirDesignacion = async (materia) => {
     if (!puedeAsignar) return
     setMateriaParaDesignar(materia)
     setFranjasSeleccionadas({})
@@ -815,20 +815,25 @@ export default function AsignacionDocenteView({
     setBusquedaDocente('')
     setSoloDelPrograma(true) // Siempre inicia enfocado a los docentes del programa
     setEvaluacionesMap({})
+
+    const promesas = []
+
     if (periodoActivo?.id && materia?.codeCourse) {
-      getEvaluacionesDocentes(periodoActivo.id, materia.codeCourse)
-        .then(evaluaciones => {
-          const mapa = {}
-          const lista = Array.isArray(evaluaciones) ? evaluaciones : []
-          lista.forEach(evaluacion => {
-            mapa[String(evaluacion.docente_id ?? evaluacion.docenteId)] = evaluacion
+      promesas.push(
+        getEvaluacionesDocentes(periodoActivo.id, materia.codeCourse)
+          .then(evaluaciones => {
+            const mapa = {}
+            const lista = Array.isArray(evaluaciones) ? evaluaciones : []
+            lista.forEach(evaluacion => {
+              mapa[String(evaluacion.docente_id ?? evaluacion.docenteId)] = evaluacion
+            })
+            setEvaluacionesMap(mapa)
           })
-          setEvaluacionesMap(mapa)
-        })
-        .catch(err => {
-          console.error('Error al cargar evaluaciones docentes:', err)
-          onShowToast?.('No fue posible cargar las calificaciones docentes', 'error')
-        })
+          .catch(err => {
+            console.error('Error al cargar evaluaciones docentes:', err)
+            onShowToast?.('No fue posible cargar las calificaciones docentes', 'error')
+          })
+      )
     }
 
     // Docentes, disponibilidades y carga: solo la primera vez que se abre el modal
@@ -1018,6 +1023,7 @@ export default function AsignacionDocenteView({
     jornada: normalizarJornada(c.jornada),
     idDocente: c.idDocente,
     nombreDocente: c.nombreDocente,
+    horario: c.horario,
     esComplementaria: true
   })
 
