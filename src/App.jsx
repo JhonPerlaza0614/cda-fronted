@@ -266,7 +266,7 @@ export default function App({ user, onLogout }) {
                 onShowToast={showToast}
                 onNavigateToAsignaturas={() => setActiveTab('asignaturas')}
                 onNavigateToProgramas={() => setActiveTab('programas')}
-                canEdit
+                canEdit={!isCoordinador}
                 isProgramLocked={isCoordinador}
               />
             )}

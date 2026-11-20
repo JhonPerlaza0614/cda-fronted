@@ -3,7 +3,7 @@ import { AlertTriangle } from 'lucide-react'
 import { updateMiContacto } from '../../services/docenteService'
 import { getFacultades } from '../../services/academicService'
 
-// HU-015: el docente edita su facultad, correo personal, teléfono y celular desde "Mi perfil".
+// HU-015: el docente edita su facultad, correo personal, teléfono, celular y dirección desde "Mi perfil".
 // Nombres, apellidos y correo institucional son de solo lectura.
 
 const MSG_SIN_CAMBIOS = 'No hay cambios para guardar'
@@ -83,6 +83,7 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
         correoPersonal: normalizar(docente.correo_personal),
         telefono: normalizar(docente.telefono),
         celular: normalizar(docente.celular),
+        direccion: normalizar(docente.direccion),
         idFacultad: docente.id_facultad != null ? String(docente.id_facultad) : ''
     })
     const [form, setForm] = useState(original)
@@ -124,6 +125,7 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
         normalizar(form.correoPersonal).toLowerCase() !== original.correoPersonal.toLowerCase() ||
         normalizar(form.telefono) !== original.telefono ||
         normalizar(form.celular) !== original.celular ||
+        normalizar(form.direccion) !== original.direccion ||
         String(form.idFacultad || '') !== String(original.idFacultad || '')
 
     const handleChange = (campo) => (e) => {
@@ -151,6 +153,7 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
                 correo_personal: normalizar(form.correoPersonal) || null,
                 telefono: normalizar(form.telefono) || null,
                 celular: normalizar(form.celular) || null,
+                direccion: form.direccion.trim() || null,
                 id_facultad: form.idFacultad ? parseInt(form.idFacultad, 10) : null
             })
             setConfirmacion(null)
@@ -165,6 +168,7 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
                     correoPersonal: erroresBackend.correoPersonal || erroresBackend.correo_personal,
                     telefono: erroresBackend.telefono,
                     celular: erroresBackend.celular,
+                    direccion: erroresBackend.direccion,
                     idFacultad: erroresBackend.idFacultad || erroresBackend.id_facultad
                 })
             } else if (err.status === 400 && err.message === MSG_SIN_CAMBIOS) {
@@ -282,6 +286,21 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
                 {errores.celular
                     ? <span id="perfil-celular-error" className="field-error">{errores.celular}</span>
                     : <span id="perfil-celular-ayuda" className="form-hint">Solo números, de 7 a 10 dígitos. Puedes dejarlo vacío.</span>}
+            </div>
+            <div className="form-group">
+                <label htmlFor="perfil-direccion">Dirección de vivienda (opcional)</label>
+                <input
+                    id="perfil-direccion"
+                    type="text"
+                    maxLength={150}
+                    value={form.direccion}
+                    onChange={(e) => setForm({ ...form, direccion: e.target.value })}
+                    placeholder="Ej. Calle 30 # 25-10, Palmira"
+                    aria-invalid={Boolean(errores.direccion)}
+                    className={errores.direccion ? 'input-error' : undefined}
+                    disabled={procesando}
+                />
+                {errores.direccion && <span className="field-error">{errores.direccion}</span>}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
