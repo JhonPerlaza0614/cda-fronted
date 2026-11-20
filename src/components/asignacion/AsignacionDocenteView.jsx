@@ -1443,8 +1443,8 @@ export default function AsignacionDocenteView({
                   type="button"
                   className="btn-primary btn-sm"
                   onClick={abrirProponerComp}
-                  disabled={comp.banco.length === 0}
-                  title={comp.banco.length === 0 ? 'No hay electivas complementarias disponibles para proponer' : undefined}
+                  disabled={!comp.banco.some(b => !b.programadaPor)}
+                  title={!comp.banco.some(b => !b.programadaPor) ? 'No hay electivas complementarias disponibles para proponer' : undefined}
                 >
                   <Plus size={14} />
                   <span>Proponer complementaria</span>
@@ -1481,7 +1481,7 @@ export default function AsignacionDocenteView({
             ) : comp.lista.length === 0 ? (
               <div className="asig-doc-comp-estado">
                 <BookOpen size={18} />
-                <span>Aún no hay electivas complementarias propuestas por ti en este período.</span>
+                <span>Aún no hay electivas complementarias propuestas en este período.</span>
               </div>
             ) : (
               <div className="asig-doc-materias-grid">
@@ -1620,7 +1620,7 @@ export default function AsignacionDocenteView({
                   <h3 className="asig-modal-title">
                     {modalComp.cursoId ? 'Modificar electiva complementaria' : 'Proponer electiva complementaria'}
                   </h3>
-                  <div className="asig-modal-target"></div>
+                  <div className="asig-modal-target">Programa {codigoProgramaComp}</div>
                 </div>
                 <button
                   type="button"
@@ -1642,11 +1642,15 @@ export default function AsignacionDocenteView({
                     required
                   >
                     <option value="">Seleccione una electiva...</option>
-                    {opcionesBancoComp.map(a => (
-                      <option key={a.codeCourse} value={a.codeCourse}>
-                        {a.codeCourse} - {a.nombre}
-                      </option>
-                    ))}
+                    {opcionesBancoComp.map(a => {
+                      // Ya programada por otro programa: se ve, pero no se puede elegir
+                      const ocupada = Boolean(a.programadaPor) && a.codeCourse !== modalComp.codeCourse
+                      return (
+                        <option key={a.codeCourse} value={a.codeCourse} disabled={ocupada}>
+                          {a.codeCourse} - {a.nombre}{ocupada ? ` (ya propuesta por ${a.programadaPor})` : ''}
+                        </option>
+                      )
+                    })}
                   </select>
                 </label>
 
