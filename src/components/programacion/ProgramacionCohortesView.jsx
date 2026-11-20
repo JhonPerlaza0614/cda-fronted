@@ -692,7 +692,7 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
 
             <div className="pc-modal-body">
               <p>
-                El sistema calcula la sucesión de cohortes rotando cada semestre <em>c $\to$ c + 1</em> y proponiendo
+                El sistema calcula la sucesión de cohortes rotando cada semestre y proponiendo
                 nuevo ingreso en primer semestre con la resolución vigente. Las cohortes avanzadas conservan su resolución
                 histórica hasta extinguirse.
               </p>
