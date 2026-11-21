@@ -8,6 +8,7 @@ import {
   BookOpen,
   Clock,
   AlertCircle,
+  AlertTriangle,
   RefreshCw,
   Info,
   X,
@@ -245,7 +246,7 @@ export default function AsignacionDocenteView({
   const [asignandoId, setAsignandoId] = useState(null)
 
   // 5. Electivas complementarias del período: las propone cada coordinador, no ocupan un espacio de la malla
-  const [comp, setComp] = useState({ lista: [], banco: [], puedeEditar: false, cargando: false, error: false })
+  const [comp, setComp] = useState({ lista: [], banco: [], pendientesObligatorias: [], puedeEditar: false, cargando: false, error: false })
   const [modalComp, setModalComp] = useState(null) // { cursoId, codeCourse, jornada, cupos }
   const [guardandoComp, setGuardandoComp] = useState(false)
 
@@ -433,7 +434,7 @@ export default function AsignacionDocenteView({
   const codigoProgramaComp = programaBase?.code_program || ''
   const cargarComplementarias = useCallback(async () => {
     if (!codigoProgramaComp) {
-      setComp({ lista: [], banco: [], puedeEditar: false, cargando: false, error: false })
+      setComp({ lista: [], banco: [], pendientesObligatorias: [], puedeEditar: false, cargando: false, error: false })
       return
     }
     setComp(prev => ({ ...prev, cargando: true, error: false }))
@@ -442,13 +443,14 @@ export default function AsignacionDocenteView({
       setComp({
         lista: Array.isArray(r?.complementarias) ? r.complementarias : [],
         banco: Array.isArray(r?.bancoComplementarias) ? r.bancoComplementarias : [],
+        pendientesObligatorias: Array.isArray(r?.pendientesObligatorias) ? r.pendientesObligatorias : [],
         puedeEditar: Boolean(r?.puedeEditar),
         cargando: false,
         error: false
       })
     } catch (err) {
       console.error('Error al cargar las electivas complementarias:', err)
-      setComp({ lista: [], banco: [], puedeEditar: false, cargando: false, error: true })
+      setComp({ lista: [], banco: [], pendientesObligatorias: [], puedeEditar: false, cargando: false, error: true })
     }
   }, [codigoProgramaComp])
 
@@ -625,6 +627,12 @@ export default function AsignacionDocenteView({
       !c.isExcluido
     )
 
+    const minutosATexto = (min) => {
+      const h = Math.floor(min / 60)
+      const m = min % 60
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    }
+
     const franjasAptas = []
 
     franjas.forEach((f, idx) => {
@@ -637,64 +645,72 @@ export default function AsignacionDocenteView({
 
       const iniMin = inicioArr[0] * 60 + inicioArr[1]
       const finMin = finArr[0] * 60 + finArr[1]
+      if (finMin <= iniMin) return
 
-      // Buscar solapamientos con cursos ya asignados en el mismo día (sesión 1 o sesión 2)
-      let minutosOcupados = 0
-
+      // Recolectar intervalos ocupados en este día (sesión 1 y sesión 2 de otros cursos)
+      const ocupados = []
       cursosDelDocente.forEach(c => {
-        // Solape con sesión 1 del curso asignado
         if (Number(c.dia) === Number(f.dia) && c.horaInicio && c.horaFin) {
           const cIni = String(c.horaInicio).slice(0, 5).split(':').map(Number)
           const cFin = String(c.horaFin).slice(0, 5).split(':').map(Number)
           const cIniMin = cIni[0] * 60 + cIni[1]
           const cFinMin = cFin[0] * 60 + cFin[1]
-          const solapeIni = Math.max(iniMin, cIniMin)
-          const solapeFin = Math.min(finMin, cFinMin)
-          if (solapeFin > solapeIni) {
-            minutosOcupados += (solapeFin - solapeIni)
+          if (cFinMin > iniMin && cIniMin < finMin) {
+            ocupados.push([Math.max(iniMin, cIniMin), Math.min(finMin, cFinMin)])
           }
-        } else if (Number(c.dia) === Number(f.dia) && c.horasSemanales) {
-          minutosOcupados += Number(c.horasSemanales) * 60
         }
-        // Solape con sesión 2 del curso asignado (si se dividió en 2 días)
         if (c.dia2 != null && Number(c.dia2) === Number(f.dia) && c.horaInicio2 && c.horaFin2) {
           const cIni2 = String(c.horaInicio2).slice(0, 5).split(':').map(Number)
           const cFin2 = String(c.horaFin2).slice(0, 5).split(':').map(Number)
           const cIniMin2 = cIni2[0] * 60 + cIni2[1]
           const cFinMin2 = cFin2[0] * 60 + cFin2[1]
-          const solapeIni2 = Math.max(iniMin, cIniMin2)
-          const solapeFin2 = Math.min(finMin, cFinMin2)
-          if (solapeFin2 > solapeIni2) {
-            minutosOcupados += (solapeFin2 - solapeIni2)
+          if (cFinMin2 > iniMin && cIniMin2 < finMin) {
+            ocupados.push([Math.max(iniMin, cIniMin2), Math.min(finMin, cFinMin2)])
           }
         }
       })
 
-      const minutosLibres = Math.max(0, (finMin - iniMin) - minutosOcupados)
-      const horasLibres = minutosLibres / 60.0
-
-      // Disponibilidad real limitada por el tope de 20h
-      const horasDisponiblesEfectivas = Math.min(horasLibres, horasRestantes20h)
-
-      // Regla: solo mostrar franjas con capacidad >= horas requeridas de la clase
-      if (horasDisponiblesEfectivas >= horasRequeridas && horasRequeridas > 0) {
-        const claseFinMin = iniMin + Math.round(horasRequeridas * 60)
-        const finH = Math.floor(claseFinMin / 60)
-        const finM = claseFinMin % 60
-        const horaFinClase = `${String(finH).padStart(2, '0')}:${String(finM).padStart(2, '0')}:00`
-
-        franjasAptas.push({
-          id: f.id || `${f.dia}-${iniStr}-${idx}`,
-          dia: f.dia,
-          diaNombre: diaNom,
-          horaInicio: f.horaInicio,
-          horaFin: f.horaFin,
-          horaFinClase,
-          horasDisponiblesEfectivas,
-          textoFranja: `${diaNom} ${iniStr} - ${finStr} (${horasDisponiblesEfectivas.toFixed(1)}h disp.)`,
-          textoHorarioAsignar: `${diaNom} ${iniStr} - ${horaFinClase.slice(0, 5)}`
-        })
+      // Ordenar intervalos ocupados y calcular los sub-intervalos realmente libres
+      ocupados.sort((a, b) => a[0] - b[0])
+      const tramosLibres = []
+      let cursor = iniMin
+      for (const [oIni, oFin] of ocupados) {
+        if (oIni > cursor) {
+          tramosLibres.push([cursor, oIni])
+        }
+        if (oFin > cursor) {
+          cursor = oFin
+        }
       }
+      if (cursor < finMin) {
+        tramosLibres.push([cursor, finMin])
+      }
+
+      // Evaluar cada sub-tramo libre contra las horas requeridas y el límite de 20h
+      tramosLibres.forEach(([subIni, subFin], subIdx) => {
+        const horasLibres = (subFin - subIni) / 60.0
+        const horasDisponiblesEfectivas = Math.min(horasLibres, horasRestantes20h)
+
+        if (horasDisponiblesEfectivas >= horasRequeridas && horasRequeridas > 0) {
+          const subIniStr = minutosATexto(subIni)
+          const subFinStr = minutosATexto(subFin)
+          const claseFinMin = subIni + Math.round(horasRequeridas * 60)
+          const claseFinStr = minutosATexto(claseFinMin)
+          const horaFinClase = `${claseFinStr}:00`
+
+          franjasAptas.push({
+            id: `${f.id || idx}-${f.dia}-${subIniStr}-${subFinStr}-${subIdx}`,
+            dia: f.dia,
+            diaNombre: diaNom,
+            horaInicio: `${subIniStr}:00`,
+            horaFin: `${subFinStr}:00`,
+            horaFinClase,
+            horasDisponiblesEfectivas,
+            textoFranja: `${diaNom} ${subIniStr} - ${subFinStr} (${horasDisponiblesEfectivas.toFixed(1)}h libres)`,
+            textoHorarioAsignar: `${diaNom} ${subIniStr} - ${claseFinStr}`
+          })
+        }
+      })
     })
 
     return franjasAptas
@@ -819,9 +835,11 @@ export default function AsignacionDocenteView({
     setMateriaParaDesignar(materia)
     setFranjasSeleccionadas({})
     setFranjasSeleccionadasDia2({})
-    setModoDistribucion('1_DIA')
+    setModoDistribucion(materia?.dia2 != null ? '2_DIAS' : '1_DIA')
     setBusquedaDocente('')
-    setSoloDelPrograma(true) // Siempre inicia enfocado a los docentes del programa
+    // En electivas complementarias, los docentes suelen pertenecer a otra facultad (artes, deporte, idiomas),
+    // por eso se abre mostrando todas las facultades por defecto.
+    setSoloDelPrograma(!materia?.esComplementaria)
     setEvaluacionesMap({})
 
     const promesas = []
@@ -1031,7 +1049,13 @@ export default function AsignacionDocenteView({
     jornada: normalizarJornada(c.jornada),
     idDocente: c.idDocente,
     nombreDocente: c.nombreDocente,
-    horario: c.horario,
+    dia: c.dia ?? null,
+    horaInicio: c.horaInicio ?? null,
+    horaFin: c.horaFin ?? null,
+    dia2: c.dia2 ?? null,
+    horaInicio2: c.horaInicio2 ?? null,
+    horaFin2: c.horaFin2 ?? null,
+    horario: c.horario ?? null,
     esComplementaria: true
   })
 
@@ -1213,6 +1237,56 @@ export default function AsignacionDocenteView({
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* Alerta de electivas obligatorias pendientes de escoger en el período vigente */}
+        {!sinProgramaEnJornada && Array.isArray(comp.pendientesObligatorias) && comp.pendientesObligatorias.length > 0 && (
+          <div
+            role="alert"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.75rem',
+              padding: '0.9rem 1.1rem',
+              marginBottom: '1rem',
+              borderRadius: '10px',
+              background: '#fffbeb',
+              border: '1px solid #f59e0b',
+              color: '#92400e',
+              fontSize: '0.88rem'
+            }}
+          >
+            <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px', color: '#d97706' }} />
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>
+                Electivas obligatorias pendientes de selección para este período ({comp.pendientesObligatorias.length})
+              </div>
+              <div style={{ marginBottom: '0.45rem' }}>
+                Para asignar docente a estas electivas, primero debe escoger la asignatura correspondiente desde <strong>Malla Curricular</strong>. Al iniciar un nuevo período académico, estos espacios se limpian automáticamente.
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {comp.pendientesObligatorias.map((p) => (
+                  <span
+                    key={`${p.codeEspacio}-${p.semestre}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      padding: '0.2rem 0.55rem',
+                      borderRadius: '999px',
+                      background: '#fef3c7',
+                      border: '1px solid #fcd34d',
+                      fontWeight: 600,
+                      fontSize: '0.8rem',
+                      color: '#78350f'
+                    }}
+                  >
+                    {p.nombreEspacio} · Semestre {p.semestre}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
@@ -1537,6 +1611,21 @@ export default function AsignacionDocenteView({
                                 <UserCheck size={14} style={{ display: 'inline', marginRight: '4px', color: '#16a34a' }} />
                                 {c.nombreDocente}
                               </div>
+                              {c.horario && (
+                                <div style={{
+                                  fontSize: '0.78rem',
+                                  fontWeight: 650,
+                                  color: '#065f46',
+                                  background: '#ecfdf5',
+                                  border: '1px solid #a7f3d0',
+                                  borderRadius: '6px',
+                                  padding: '0.25rem 0.55rem',
+                                  marginBottom: '0.4rem',
+                                  display: 'inline-block'
+                                }}>
+                                  Horario de clase: {c.horario}
+                                </div>
+                              )}
                               <div className="asig-doc-docente-horario-summary">
                                 <Clock size={13} style={{ flexShrink: 0, marginTop: '2px', color: '#2563eb' }} />
                                 <div>
@@ -1777,15 +1866,15 @@ export default function AsignacionDocenteView({
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <span style={{ fontSize: '0.8rem', color: '#475569' }}>
-                  Para asignar, las horas disponibles restantes deben cubrir las horas semanales de la materia. No se comparan días ni horarios de clase. La misma regla aplica a tu perfil docente como coordinador.
+                  Se muestran únicamente los tramos libres de cada docente (descontando sus cursos ya asignados) que cubran las horas semanales de la materia dentro del límite de 20 h.
                 </span>
                 <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
                   {docentesFiltrados.filter(d => capacidadDocente(d.id).valido).length} docentes elegibles
                 </span>
               </div>
 
-              {/* Aviso cuando no hay calificaciones previas registradas */}
-              {Object.keys(evaluacionesMap).length === 0 && (
+              {/* Aviso cuando no hay calificaciones previas registradas (> 0) */}
+              {!Object.values(evaluacionesMap).some(ev => ev?.calificacion != null && Number(ev.calificacion) > 0) && (
                 <div className="asig-modal-notice-info">
                   <Info size={16} style={{ flexShrink: 0 }} />
                   <span>
@@ -1872,6 +1961,20 @@ export default function AsignacionDocenteView({
                     const tieneFranjaValida = modoDistribucion === '2_DIAS'
                       ? Boolean(franjaElegida && franjaElegidaDia2 && Number(franjaElegida.dia) !== Number(franjaElegidaDia2.dia))
                       : Boolean(franjaElegida)
+
+                    const mismoHorarioActual = esElActual && (
+                      modoDistribucion === '2_DIAS'
+                        ? (Number(materiaParaDesignar.dia) === Number(franjaElegida?.dia)
+                            && String(materiaParaDesignar.horaInicio || '').slice(0, 5) === String(franjaElegida?.horaInicio || '').slice(0, 5)
+                            && String(materiaParaDesignar.horaFin || '').slice(0, 5) === String(franjaElegida?.horaFinClase || '').slice(0, 5)
+                            && Number(materiaParaDesignar.dia2) === Number(franjaElegidaDia2?.dia)
+                            && String(materiaParaDesignar.horaInicio2 || '').slice(0, 5) === String(franjaElegidaDia2?.horaInicio || '').slice(0, 5)
+                            && String(materiaParaDesignar.horaFin2 || '').slice(0, 5) === String(franjaElegidaDia2?.horaFinClase || '').slice(0, 5))
+                        : (materiaParaDesignar.dia2 == null
+                            && Number(materiaParaDesignar.dia) === Number(franjaElegida?.dia)
+                            && String(materiaParaDesignar.horaInicio || '').slice(0, 5) === String(franjaElegida?.horaInicio || '').slice(0, 5)
+                            && String(materiaParaDesignar.horaFin || '').slice(0, 5) === String(franjaElegida?.horaFinClase || '').slice(0, 5))
+                    )
 
                     const horasRequeridas = Number(materiaParaDesignar?.horasSemanales || 0)
                     const horasRequeridasSesion = modoDistribucion === '2_DIAS'
@@ -2120,21 +2223,27 @@ export default function AsignacionDocenteView({
                         <div>
                           <button
                             type="button"
-                            className={esElActual ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}
+                            className={mismoHorarioActual ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}
                             onClick={() => handleConfirmarDesignacion(docente, franjaElegida, franjaElegidaDia2)}
-                            disabled={estaAsignando || esElActual || !capacidad.valido || !tieneFranjaValida}
+                            disabled={estaAsignando || mismoHorarioActual || !capacidad.valido || !tieneFranjaValida}
                             title={
                               !capacidad.valido
                                 ? 'El docente no tiene horas suficientes'
                                 : (!tieneFranjaValida
                                   ? (modoDistribucion === '2_DIAS'
-                                    ? `El docente debe tener dos franjas disponibles de al menos ${horasRequeridasSesion}h en días diferentes`
-                                    : `El docente no tiene una franja disponible con al menos ${horasRequeridas}h`)
-                                  : 'Designar docente a este curso')
+                                    ? `El docente debe tener dos franjas libres de al menos ${horasRequeridasSesion}h en días diferentes`
+                                    : `El docente no tiene una franja libre con al menos ${horasRequeridas}h`)
+                                  : (esElActual ? 'Actualizar el horario del docente asignado' : 'Designar docente a este curso'))
                             }
                             style={{ minWidth: '100px', whiteSpace: 'nowrap' }}
                           >
-                            {estaAsignando ? 'Guardando...' : esElActual ? 'Asignado' : esElCoordinador ? 'Asignarme' : 'Designar'}
+                            {estaAsignando
+                              ? 'Guardando...'
+                              : esElActual
+                                ? (mismoHorarioActual ? 'Asignado' : 'Actualizar horario')
+                                : esElCoordinador
+                                  ? 'Asignarme'
+                                  : 'Designar'}
                           </button>
                         </div>
                       </div>

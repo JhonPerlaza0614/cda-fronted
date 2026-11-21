@@ -29,8 +29,14 @@ const MSG_CUPOS_GUARDADOS = 'Cupos de estudiantes registrados correctamente'
 const MSG_ERROR_CUPOS = 'No se pudo registrar la información de cupos. Intente de nuevo'
 const MSG_PLAZO_CERRADO = 'El plazo de edición ya cerró'
 
-// Electiva complementaria que propone el coordinador: no tiene semestre de malla y va al final del consolidado
+// Clasificación de electivas programadas en el período (se limpian automáticamente al cambiar de período)
 const esComplementaria = (curso) => String(curso?.codigoEspacio || '').toUpperCase() === 'COMPLEMENTARIA'
+const esComplementariaPrimerSemestre = (curso) => String(curso?.codigoEspacio || '').toUpperCase() === 'ELE-PROF-COMPLEMENTARIA'
+const esElectivaProfesional = (curso) => {
+  const cod = String(curso?.codigoEspacio || '').toUpperCase()
+  return cod.startsWith('ELE-PROF-') && cod !== 'ELE-PROF-COMPLEMENTARIA'
+}
+const esElectiva = (curso) => esComplementaria(curso) || esComplementariaPrimerSemestre(curso) || esElectivaProfesional(curso)
 
 /**
  * HU-047: submódulo 3 «Cursos Programados».
@@ -55,6 +61,7 @@ export default function CursosProgramadosPanel({
   const [filtroPrograma, setFiltroPrograma] = useState('')
   const [filtroAsignatura, setFiltroAsignatura] = useState('')
   const [filtroJornada, setFiltroJornada] = useState('')
+  const [filtroTipo, setFiltroTipo] = useState('')
 
   // Modal de ajuste: { tipo: 'excluir' | 'reactivar', curso, vistaPrevia }
   const [ajuste, setAjuste] = useState(null)
@@ -188,17 +195,23 @@ export default function CursosProgramadosPanel({
       if (filtroPrograma && c.codeProgram !== filtroPrograma) return false
       if (filtroAsignatura && c.codeCourse !== filtroAsignatura) return false
       if (filtroJornada && c.jornada !== filtroJornada) return false
+      if (filtroTipo === 'OBLIGATORIAS' && esElectiva(c)) return false
+      if (filtroTipo === 'ELECTIVAS' && !esElectiva(c)) return false
+      if (filtroTipo === 'PROFESIONALES' && !esElectivaProfesional(c)) return false
+      if (filtroTipo === 'COMPLEMENTARIAS' && !esComplementaria(c) && !esComplementariaPrimerSemestre(c)) return false
       if (!q) return true
       return (
         c.codeCourse?.toLowerCase().includes(q) ||
         c.codigoCurso?.toLowerCase().includes(q) ||
         c.nombreAsignatura?.toLowerCase().includes(q) ||
-        c.nombrePrograma?.toLowerCase().includes(q)
+        c.nombrePrograma?.toLowerCase().includes(q) ||
+        c.nombreEspacio?.toLowerCase().includes(q) ||
+        c.codigoEspacio?.toLowerCase().includes(q)
       )
     })
     // Las complementarias propuestas van al final del consolidado (el orden del resto no cambia)
     return [...lista.filter((c) => !esComplementaria(c)), ...lista.filter(esComplementaria)]
-  }, [cursos, busqueda, filtroPrograma, filtroAsignatura, filtroJornada])
+  }, [cursos, busqueda, filtroPrograma, filtroAsignatura, filtroJornada, filtroTipo])
 
   const totalRevision = cursos.filter((c) => c.requiereRevision).length
   const totalExcluidos = cursos.filter((c) => c.estado === 'EXCLUIDO').length
@@ -348,6 +361,19 @@ export default function CursosProgramadosPanel({
             <option value="DIURNA">Diurna</option>
             <option value="NOCTURNA">Nocturna</option>
           </select>
+
+          <select
+            value={filtroTipo}
+            onChange={(e) => setFiltroTipo(e.target.value)}
+            className="pc-select"
+            aria-label="Filtrar por tipo de curso"
+          >
+            <option value="">Todos los tipos</option>
+            <option value="OBLIGATORIAS">Obligatorias</option>
+            <option value="ELECTIVAS">Todas las electivas</option>
+            <option value="PROFESIONALES">Electivas profesionales</option>
+            <option value="COMPLEMENTARIAS">Electivas complementarias</option>
+          </select>
         </div>
 
         <button
@@ -445,7 +471,13 @@ export default function CursosProgramadosPanel({
                     <td>
                       <strong>{curso.nombreAsignatura}</strong>
                       {esComplementaria(curso) && (
-                        <div><span className="pc-badge pc-badge-purple">Electiva complementaria</span></div>
+                        <div><span className="pc-badge pc-badge-purple">Electiva complementaria general</span></div>
+                      )}
+                      {esComplementariaPrimerSemestre(curso) && (
+                        <div><span className="pc-badge pc-badge-purple">Electiva complementaria (1.º sem)</span></div>
+                      )}
+                      {esElectivaProfesional(curso) && (
+                        <div><span className="pc-badge pc-badge-blue">{curso.nombreEspacio || 'Electiva Profesional'}</span></div>
                       )}
                       {curso.requiereRevision && (
                         <div className="pc-revision-motivo">

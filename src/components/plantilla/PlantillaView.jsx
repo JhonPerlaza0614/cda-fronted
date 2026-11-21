@@ -386,29 +386,20 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
 
   // --- Manejo de Coordinador: Abrir Modal Crear / Editar ---
   const handleOpenCoordModal = (coord = null) => {
+    const docentesActivos = docentes.filter(d => d.estado !== false && d.activo !== false)
     if (coord) {
       setEditingCoord(coord)
       setCoordFormData({
-        identificacion: coord.identificacion || '',
-        nombre_completo: coord.nombre_completo || '',
-        categoria: coord.categoria || (categoriasList[0]?.nombre || 'Auxiliar'),
-        tipo_contrato: coord.tipo_contrato || (tiposContratoList[0]?.nombre || 'Nombrado'),
+        docente_id: coord.docente_id != null ? String(coord.docente_id) : '',
         correo_institucional: coord.correo_institucional || '',
-        correo: coord.correo || '',
-        telefono: coord.telefono || '',
         code_program: coord.code_program || '',
         activo: coord.activo !== false,
       })
     } else {
       setEditingCoord(null)
       setCoordFormData({
-        identificacion: '',
-        nombre_completo: '',
-        categoria: categoriasList[0]?.nombre || 'Auxiliar',
-        tipo_contrato: tiposContratoList[0]?.nombre || 'Nombrado',
+        docente_id: docentesActivos[0]?.id != null ? String(docentesActivos[0].id) : '',
         correo_institucional: '',
-        correo: '',
-        telefono: '',
         code_program: programas[0]?.code_program || '',
         activo: true,
       })
@@ -419,29 +410,25 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
   // Guardar Coordinador
   const handleSaveCoordinador = async (e) => {
     e.preventDefault()
-    if (!editingCoord && !/^[0-9]{1,10}$/.test(coordFormData.identificacion.trim())) {
-      onShowToast?.('El documento solo admite números, máximo 10 dígitos', 'warning')
+    if (!coordFormData.docente_id) {
+      onShowToast?.('Debe seleccionar un docente de la plantilla', 'warning')
       return
     }
-    if (coordFormData.telefono.trim() && !/^3[0-9]{9}$/.test(coordFormData.telefono.trim())) {
-      onShowToast?.('El celular debe tener 10 dígitos y empezar por 3', 'warning')
+    if (!coordFormData.code_program) {
+      onShowToast?.('Debe seleccionar el programa académico', 'warning')
+      return
+    }
+    if (!coordFormData.correo_institucional.trim()) {
+      onShowToast?.('El correo institucional de coordinación es obligatorio', 'warning')
       return
     }
     setSubmitting(true)
     try {
-      const catObj = categoriasList.find(
-        c => c.nombre?.toLowerCase() === coordFormData.categoria?.toLowerCase()
-      )
-      const tcObj = tiposContratoList.find(
-        t => t.nombre?.toLowerCase() === coordFormData.tipo_contrato?.toLowerCase()
-      )
-
       const payload = {
-        ...coordFormData,
-        id_categoria: catObj?.id || null,
-        categoria: catObj?.nombre || coordFormData.categoria,
-        id_tipo_contrato: tcObj?.id || null,
-        tipo_contrato: tcObj?.nombre || coordFormData.tipo_contrato,
+        docente_id: Number(coordFormData.docente_id),
+        code_program: coordFormData.code_program,
+        correo_institucional: coordFormData.correo_institucional.trim().toLowerCase(),
+        activo: Boolean(coordFormData.activo),
       }
 
       if (editingCoord) {
@@ -451,7 +438,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
       } else {
         const created = await createCoordinador(payload)
         setCoordinadores(prev => [created, ...prev])
-        if (onShowToast) onShowToast('Coordinador registrado correctamente', 'success')
+        if (onShowToast) onShowToast('Coordinador designado correctamente', 'success')
       }
 
       setIsCoordModalOpen(false)
@@ -1939,122 +1926,41 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
             </div>
 
             <form onSubmit={handleSaveCoordinador}>
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                {/* N. Documento */}
-                <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>N. Documento *</label>
-                  <input
-                    type="text"
-                    required
-                    disabled={!!editingCoord}
-                    placeholder="Ej. 1118234567"
-                    value={coordFormData.identificacion}
-                    maxLength={10}
-                    inputMode="numeric"
-                    onChange={(e) => setCoordFormData({ ...coordFormData, identificacion: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                  />
-                  {editingCoord && (
-                    <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
-                      El N. Documento no se puede modificar.
-                    </small>
-                  )}
-                </div>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af' }}>
+                  Seleccione el docente que asumirá la coordinación del programa y el correo institucional de coordinación asociado.
+                </p>
 
-                {/* Nombre completo */}
+                {/* Docente designado */}
                 <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Nombre Completo *</label>
-                  <input
-                    type="text"
+                  <label style={{ color: '#e5e7eb' }}>Docente designado como Coordinador *</label>
+                  <select
                     required
-                    placeholder="Ej. María Rodríguez Pérez"
-                    value={coordFormData.nombre_completo}
-                    onChange={(e) => setCoordFormData({ ...coordFormData, nombre_completo: e.target.value })}
+                    value={coordFormData.docente_id || ''}
+                    onChange={(e) => setCoordFormData({ ...coordFormData, docente_id: e.target.value })}
                     style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                  />
-                </div>
-
-                {/* Fila doble: Categoría y Tipo de Contrato */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-                  <div className="form-group">
-                    <label style={{ color: '#e5e7eb' }}>Categoría *</label>
-                    <select
-                      value={coordFormData.categoria}
-                      onChange={(e) => setCoordFormData({ ...coordFormData, categoria: e.target.value })}
-                      style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                    >
-                      {categoriasList.map(cat => (
-                        <option key={cat.id || cat.nombre} value={cat.nombre}>
-                          {cat.nombre}
+                  >
+                    <option value="">-- Seleccione un docente --</option>
+                    {docentes
+                      .filter(d => d.estado !== false && d.activo !== false)
+                      .map(d => (
+                        <option key={d.id} value={String(d.id)}>
+                          {d.nombres} {d.apellidos} — Doc. {d.numeroDocumento || d.numero_documento} ({d.correoInstitucional || d.correo_institucional})
                         </option>
                       ))}
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label style={{ color: '#e5e7eb' }}>Tipo de Contrato *</label>
-                    <select
-                      value={coordFormData.tipo_contrato}
-                      onChange={(e) => setCoordFormData({ ...coordFormData, tipo_contrato: e.target.value })}
-                      style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                    >
-                      {tiposContratoList.map(tc => (
-                        <option key={tc.id || tc.nombre} value={tc.nombre}>
-                          {tc.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Correo institucional */}
-                <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Correo Institucional *</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="Ej. maria.rodriguez@correounivalle.edu.co"
-                    value={coordFormData.correo_institucional}
-                    onChange={(e) => setCoordFormData({ ...coordFormData, correo_institucional: e.target.value })}
-                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                  />
-                </div>
-
-                {/* Correo personal */}
-                <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Correo Personal / Alternativo</label>
-                  <input
-                    type="email"
-                    placeholder="Ej. maria.rodriguez@gmail.com"
-                    value={coordFormData.correo}
-                    onChange={(e) => setCoordFormData({ ...coordFormData, correo: e.target.value })}
-                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                  />
-                </div>
-
-                {/* Teléfono */}
-                <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Teléfono de Contacto</label>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={10}
-                    placeholder="Ej. 3151234567"
-                    value={coordFormData.telefono}
-                    onChange={(e) => setCoordFormData({ ...coordFormData, telefono: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                  />
+                  </select>
                 </div>
 
                 {/* Programa vinculado */}
                 <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Programa Académico Vinculado</label>
+                  <label style={{ color: '#e5e7eb' }}>Programa Académico *</label>
                   <select
-                    value={coordFormData.code_program}
+                    required
+                    value={coordFormData.code_program || ''}
                     onChange={(e) => setCoordFormData({ ...coordFormData, code_program: e.target.value })}
                     style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
                   >
-                    <option value="">-- Sin programa asignado --</option>
+                    <option value="">-- Seleccione un programa --</option>
                     {programas.map(p => (
                       <option key={p.code_program} value={p.code_program}>
                         {p.name_program} ({p.code_program})
@@ -2063,12 +1969,28 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                   </select>
                 </div>
 
+                {/* Correo institucional de coordinación */}
+                <div className="form-group">
+                  <label style={{ color: '#e5e7eb' }}>Correo Institucional de Coordinación *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="Ej. coordinacion.sistemas@correounivalle.edu.co"
+                    value={coordFormData.correo_institucional || ''}
+                    onChange={(e) => setCoordFormData({ ...coordFormData, correo_institucional: e.target.value })}
+                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
+                  />
+                  <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
+                    Correo institucional con el que el coordinador inicia sesión en el sistema.
+                  </small>
+                </div>
+
                 {/* Activo checkbox */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.4rem' }}>
                   <input
                     type="checkbox"
                     id="coord-chk-activo"
-                    checked={coordFormData.activo}
+                    checked={Boolean(coordFormData.activo)}
                     onChange={(e) => setCoordFormData({ ...coordFormData, activo: e.target.checked })}
                     style={{ width: '18px', height: '18px' }}
                   />

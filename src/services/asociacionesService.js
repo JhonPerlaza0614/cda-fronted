@@ -1,22 +1,29 @@
 import { requestBackend } from './academicService'
 
-export async function listarAsociaciones({ docenteId, codeCourse, idFacultad, activo } = {}) {
+export async function listarEscuelas() {
+  return requestBackend('/docentes-asignaturas/escuelas')
+}
+
+export async function listarAsociaciones({ docenteId, codeCourse, idFacultad, codigoEscuela, activo } = {}) {
   const params = new URLSearchParams()
   if (docenteId) params.set('docenteId', docenteId)
   if (codeCourse) params.set('codeCourse', codeCourse)
   if (idFacultad) params.set('idFacultad', idFacultad)
+  if (codigoEscuela) params.set('codigoEscuela', codigoEscuela)
   if (activo !== undefined && activo !== null) params.set('activo', String(activo))
   const query = params.toString()
   return requestBackend(`/docentes-asignaturas${query ? `?${query}` : ''}`)
 }
 
-export async function crearAsociacion({ docenteId, codeCourse }) {
+export async function crearAsociacion({ docenteId, codeCourse, codigoEscuela }) {
+  const payload = {
+    docente_id: Number(docenteId),
+    code_course: codeCourse,
+  }
+  if (codigoEscuela) payload.codigo_escuela = codigoEscuela
   return requestBackend('/docentes-asignaturas', {
     method: 'POST',
-    body: JSON.stringify({
-      docente_id: Number(docenteId),
-      code_course: codeCourse,
-    }),
+    body: JSON.stringify(payload),
   })
 }
 

@@ -16,12 +16,13 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { getAllPensum, getAsignaturas, getDocentes, getPeriodos, getProgramas } from '../../services/academicService'
+import { getAsignaturas, getDocentes, getPeriodos } from '../../services/academicService'
 import { importarEvaluacionesExcel } from '../../services/docenteService'
 import {
   cambiarEstadoAsociacion,
   crearAsociacion,
   listarAsociaciones,
+  listarEscuelas,
   quitarAsociacion,
 } from '../../services/asociacionesService'
 import Dropdown from '../common/Dropdown'
@@ -32,14 +33,18 @@ const nombreDocente = (docente) =>
 
 const mismoId = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && String(a) === String(b)
 
+const prefijoEscuela = (codeCourse) => {
+  const clean = String(codeCourse || '').trim().toUpperCase()
+  return clean.length >= 3 ? clean.slice(0, 3) : ''
+}
+
 export default function AsociacionesDocentesView({ onShowToast }) {
   const [vista, setVista] = useState('docente')
   const [asociaciones, setAsociaciones] = useState([])
   const [asociacionesDocente, setAsociacionesDocente] = useState([])
   const [docentes, setDocentes] = useState([])
-  const [programas, setProgramas] = useState([])
   const [asignaturas, setAsignaturas] = useState([])
-  const [pensumList, setPensumList] = useState([])
+  const [escuelas, setEscuelas] = useState([])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -48,12 +53,12 @@ export default function AsociacionesDocentesView({ onShowToast }) {
   const [busqueda, setBusqueda] = useState('')
   const [filtroDocente, setFiltroDocente] = useState('')
   const [filtroAsignatura, setFiltroAsignatura] = useState('')
-  const [filtroFacultad, setFiltroFacultad] = useState('')
+  const [filtroEscuela, setFiltroEscuela] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('todos')
 
   const [isAsociarOpen, setIsAsociarOpen] = useState(false)
   const [confirmQuitar, setConfirmQuitar] = useState(null)
-  const [form, setForm] = useState({ docenteId: '', codeCourses: [] })
+  const [form, setForm] = useState({ docenteId: '', codigoEscuela: '', codeCourses: [] })
   const [periodoActivo, setPeriodoActivo] = useState(null)
 
   // Modal de carga masiva de calificaciones docentes (Excel)
@@ -66,17 +71,15 @@ export default function AsociacionesDocentesView({ onShowToast }) {
 
   const cargarCatalogos = useCallback(async () => {
     try {
-      const [docs, progs, asigs, pensum, periodos] = await Promise.all([
+      const [docs, asigs, escs, periodos] = await Promise.all([
         getDocentes(),
-        getProgramas(),
         getAsignaturas(),
-        getAllPensum(),
+        listarEscuelas().catch(() => []),
         getPeriodos().catch(() => []),
       ])
       setDocentes(Array.isArray(docs) ? docs : [])
-      setProgramas(Array.isArray(progs) ? progs : [])
       setAsignaturas(Array.isArray(asigs) ? asigs : [])
-      setPensumList(Array.isArray(pensum) ? pensum : [])
+      setEscuelas(Array.isArray(escs) ? escs : [])
       const listaPeriodos = Array.isArray(periodos) ? periodos : []
       const vigente = listaPeriodos.find((p) => p.vigente || p.estado === 'VIGENTE') || listaPeriodos[0] || null
       setPeriodoActivo(vigente)
@@ -92,7 +95,7 @@ export default function AsociacionesDocentesView({ onShowToast }) {
       const data = await listarAsociaciones({
         docenteId: filtroDocente || undefined,
         codeCourse: filtroAsignatura || undefined,
-        idFacultad: filtroFacultad || undefined,
+        codigoEscuela: filtroEscuela || undefined,
         activo: filtroEstado === 'todos' ? undefined : filtroEstado === 'activo',
       })
       setAsociaciones(Array.isArray(data) ? data : [])
@@ -101,7 +104,7 @@ export default function AsociacionesDocentesView({ onShowToast }) {
     } finally {
       setLoading(false)
     }
-  }, [filtroDocente, filtroAsignatura, filtroFacultad, filtroEstado])
+  }, [filtroDocente, filtroAsignatura, filtroEscuela, filtroEstado])
 
   const cargarAsociacionesDelDocente = useCallback(async (docenteId) => {
     if (!docenteId) {
@@ -140,26 +143,33 @@ export default function AsociacionesDocentesView({ onShowToast }) {
     [asignaturas],
   )
 
-  const facultades = useMemo(() => {
+  const escuelasPorCodigo = useMemo(() => {
     const mapa = new Map()
-    docentes.forEach((docente) => {
-      if (docente.id_facultad !== null && docente.id_facultad !== undefined) {
-        mapa.set(
-          String(docente.id_facultad),
-          docente.nombre_facultad || `Facultad ${docente.id_facultad}`,
-        )
+    escuelas.forEach((e) => {
+      if (e?.codigo) {
+        mapa.set(String(e.codigo).trim().toUpperCase(), e.nombre || `Escuela ${e.codigo}`)
       }
     })
-    asignaturas.forEach((asignatura) => {
-      const id = asignatura.id_facultad
-      if (id !== null && id !== undefined && !mapa.has(String(id))) {
-        mapa.set(String(id), asignatura.facultad || `Facultad ${id}`)
-      }
-    })
-    return [...mapa.entries()]
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => a.label.localeCompare(b.label))
-  }, [docentes, asignaturas])
+    return mapa
+  }, [escuelas])
+
+  const escuelasConAsignaturas = useMemo(() => {
+    const prefijosPresentes = new Set(
+      asignaturasDisponibles.map((a) => prefijoEscuela(a.code_course)).filter(Boolean),
+    )
+    const lista = escuelas
+      .filter((e) => prefijosPresentes.size === 0 || prefijosPresentes.has(String(e.codigo).trim().toUpperCase()))
+      .map((e) => ({
+        value: String(e.codigo).trim().toUpperCase(),
+        label: `${e.codigo} - ${e.nombre}`,
+      }))
+    return lista.length > 0
+      ? lista
+      : escuelas.map((e) => ({
+          value: String(e.codigo).trim().toUpperCase(),
+          label: `${e.codigo} - ${e.nombre}`,
+        }))
+  }, [escuelas, asignaturasDisponibles])
 
   const asignaturasPorCodigo = useMemo(
     () => new Map(asignaturas.map((a) => [a.code_course, a])),
@@ -171,24 +181,10 @@ export default function AsociacionesDocentesView({ onShowToast }) {
     [docentesDisponibles, form.docenteId],
   )
 
-  const facultadDocente =
-    docenteSeleccionado?.id_facultad ?? docenteSeleccionado?.facultad?.id ?? null
-  const nombreFacultadDocente =
-    docenteSeleccionado?.nombre_facultad ||
-    facultades.find((facultad) => mismoId(facultad.value, facultadDocente))?.label ||
-    ''
-
   const opcionesAsignatura = useMemo(() => {
-    if (!docenteSeleccionado || !facultadDocente) return []
+    if (!docenteSeleccionado || !form.codigoEscuela) return []
 
-    const programasFacultad = programas
-      .filter((programa) => mismoId(programa.id_facultad_programa, facultadDocente))
-      .map((programa) => programa.code_program)
-    const codigosMalla = new Set(
-      pensumList
-        .filter((item) => programasFacultad.includes(item.code_program))
-        .map((item) => item.code_course),
-    )
+    const prefijo = String(form.codigoEscuela).trim().toUpperCase()
     const yaActivas = new Set(
       asociacionesDocente
         .filter((asociacion) => asociacion.activo)
@@ -198,22 +194,20 @@ export default function AsociacionesDocentesView({ onShowToast }) {
     return asignaturasDisponibles
       .filter(
         (asignatura) =>
-          (mismoId(asignatura.id_facultad, facultadDocente) ||
-            codigosMalla.has(asignatura.code_course)) &&
+          prefijoEscuela(asignatura.code_course) === prefijo &&
           !yaActivas.has(asignatura.code_course),
       )
       .map((asignatura) => ({
         value: asignatura.code_course,
         label: `${asignatura.code_course} - ${asignatura.name_course}`,
-        description: asignatura.facultad || '',
+        description: escuelasPorCodigo.get(prefijo) || '',
       }))
   }, [
     asignaturasDisponibles,
     asociacionesDocente,
-    facultadDocente,
     docenteSeleccionado,
-    pensumList,
-    programas,
+    form.codigoEscuela,
+    escuelasPorCodigo,
   ])
 
   const docenteOptions = useMemo(
@@ -238,9 +232,9 @@ export default function AsociacionesDocentesView({ onShowToast }) {
     [asignaturas],
   )
 
-  const facultadOptions = useMemo(
-    () => [{ value: '', label: 'Todas las facultades' }, ...facultades],
-    [facultades],
+  const escuelaOptions = useMemo(
+    () => [{ value: '', label: 'Todas las escuelas' }, ...escuelasConAsignaturas],
+    [escuelasConAsignaturas],
   )
 
   const estadoOptions = useMemo(
@@ -273,12 +267,14 @@ export default function AsociacionesDocentesView({ onShowToast }) {
         asociacion.numero_documento,
         asociacion.code_course,
         asociacion.name_course,
-        asociacion.nombre_facultad,
+        asociacion.codigo_escuela,
+        asociacion.nombre_escuela,
+        escuelasPorCodigo.get(prefijoEscuela(asociacion.code_course)),
       ]
         .filter(Boolean)
         .some((valor) => String(valor).toLowerCase().includes(texto)),
     )
-  }, [asociaciones, busqueda])
+  }, [asociaciones, busqueda, escuelasPorCodigo])
 
   const ordenadas = useMemo(() => {
     const copia = [...filtradas]
@@ -310,21 +306,21 @@ export default function AsociacionesDocentesView({ onShowToast }) {
   const limpiarFiltros = () => {
     setFiltroDocente('')
     setFiltroAsignatura('')
-    setFiltroFacultad('')
+    setFiltroEscuela('')
     setFiltroEstado('todos')
     setBusqueda('')
   }
 
   const abrirAsociar = () => {
-    setForm({ docenteId: '', codeCourses: [] })
+    setForm({ docenteId: '', codigoEscuela: '', codeCourses: [] })
     setAsociacionesDocente([])
     setIsAsociarOpen(true)
   }
 
   const handleAsociar = async (event) => {
     event.preventDefault()
-    if (!form.docenteId || form.codeCourses.length === 0) {
-      onShowToast?.('Selecciona un docente y al menos una asignatura', 'error')
+    if (!form.docenteId || !form.codigoEscuela || form.codeCourses.length === 0) {
+      onShowToast?.('Selecciona un docente, una escuela y al menos una asignatura', 'error')
       return
     }
 
@@ -333,7 +329,11 @@ export default function AsociacionesDocentesView({ onShowToast }) {
 
     for (const codeCourse of form.codeCourses) {
       try {
-        await crearAsociacion({ docenteId: form.docenteId, codeCourse })
+        await crearAsociacion({
+          docenteId: form.docenteId,
+          codeCourse,
+          codigoEscuela: form.codigoEscuela,
+        })
       } catch (err) {
         errores.push(`${codeCourse}: ${err.message || 'No fue posible asociar'}`)
       }
@@ -483,7 +483,7 @@ export default function AsociacionesDocentesView({ onShowToast }) {
           <Search size={18} className="search-icon" />
           <input
             type="search"
-            placeholder="Buscar por docente, documento, asignatura o facultad..."
+            placeholder="Buscar por docente, documento, asignatura o escuela..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
@@ -506,10 +506,12 @@ export default function AsociacionesDocentesView({ onShowToast }) {
         />
         <Dropdown
           className="aso-filter-dropdown"
-          value={filtroFacultad}
-          options={facultadOptions}
-          onChange={setFiltroFacultad}
-          ariaLabel="Filtrar por facultad"
+          value={filtroEscuela}
+          options={escuelaOptions}
+          onChange={setFiltroEscuela}
+          ariaLabel="Filtrar por escuela"
+          searchable
+          searchPlaceholder="Buscar escuela..."
         />
         <Dropdown
           className="aso-filter-dropdown aso-filter-dropdown-sm"
@@ -548,7 +550,7 @@ export default function AsociacionesDocentesView({ onShowToast }) {
                   <th>Docente</th>
                 </>
               )}
-              <th>Facultad</th>
+              <th>Escuela</th>
               <th>Origen</th>
               <th>Estado</th>
               <th className="aso-actions-col">Acciones</th>
@@ -597,11 +599,17 @@ export default function AsociacionesDocentesView({ onShowToast }) {
                         <td data-label="Docente">{celdaDocente}</td>
                       </>
                     )}
-                    <td data-label="Facultad">
+                    <td data-label="Escuela">
                       <div className="aso-person">
-                        <strong>{asociacion.nombre_facultad || 'Sin facultad'}</strong>
-                        {asociacion.id_facultad && (
-                          <span className="aso-code">ID {asociacion.id_facultad}</span>
+                        <strong>
+                          {asociacion.nombre_escuela ||
+                            escuelasPorCodigo.get(prefijoEscuela(asociacion.code_course)) ||
+                            'Sin escuela'}
+                        </strong>
+                        {(asociacion.codigo_escuela || prefijoEscuela(asociacion.code_course)) && (
+                          <span className="aso-code">
+                            Cód. {asociacion.codigo_escuela || prefijoEscuela(asociacion.code_course)}
+                          </span>
                         )}
                       </div>
                     </td>
@@ -666,18 +674,29 @@ export default function AsociacionesDocentesView({ onShowToast }) {
                       value={form.docenteId}
                       options={formDocenteOptions}
                       onChange={(docenteId) =>
-                        setForm({ docenteId, codeCourses: [] })
+                        setForm((prev) => ({ ...prev, docenteId, codeCourses: [] }))
                       }
                       placeholder="Selecciona un docente"
                       ariaLabel="Docente"
+                      searchable
+                      searchPlaceholder="Buscar docente..."
                       emptyMessage="No hay docentes activos"
                     />
                   </div>
                   <div className="aso-field">
-                    <span>Facultad de adscripción</span>
-                    <div className={`aso-static-value ${!nombreFacultadDocente ? 'is-empty' : ''}`}>
-                      {nombreFacultadDocente || 'Selecciona un docente'}
-                    </div>
+                    <span>Escuela</span>
+                    <Dropdown
+                      value={form.codigoEscuela}
+                      options={escuelasConAsignaturas}
+                      onChange={(codigoEscuela) =>
+                        setForm((prev) => ({ ...prev, codigoEscuela, codeCourses: [] }))
+                      }
+                      placeholder="Selecciona una escuela"
+                      ariaLabel="Escuela"
+                      searchable
+                      searchPlaceholder="Buscar escuela por código o nombre..."
+                      emptyMessage="No hay escuelas disponibles"
+                    />
                   </div>
                 </div>
 
@@ -693,28 +712,23 @@ export default function AsociacionesDocentesView({ onShowToast }) {
                     placeholder={
                       !docenteSeleccionado
                         ? 'Primero selecciona un docente'
-                        : !facultadDocente
-                          ? 'El docente no tiene facultad de adscripción'
+                        : !form.codigoEscuela
+                          ? 'Selecciona una escuela'
                           : 'Selecciona una o varias asignaturas'
                     }
                     ariaLabel="Asignaturas"
-                    disabled={!docenteSeleccionado || !facultadDocente || opcionesAsignatura.length === 0}
-                    emptyMessage="No hay asignaturas disponibles para la facultad del docente"
+                    disabled={!docenteSeleccionado || !form.codigoEscuela || opcionesAsignatura.length === 0}
+                    emptyMessage="No hay asignaturas disponibles para la escuela seleccionada"
                   />
                 </div>
 
-                {docenteSeleccionado && !facultadDocente && (
-                  <p className="aso-hint aso-hint-error">
-                    El docente no tiene facultad ni programa de adscripción. Actualiza su perfil antes de asociarlo.
-                  </p>
-                )}
-                {docenteSeleccionado && facultadDocente && opcionesAsignatura.length === 0 && (
+                {docenteSeleccionado && form.codigoEscuela && opcionesAsignatura.length === 0 && (
                   <p className="aso-hint">
-                    No quedan asignaturas de esta facultad por asociar. Revisa el histórico o la malla académica.
+                    No quedan asignaturas de esta escuela por asociar al docente seleccionado.
                   </p>
                 )}
                 <p className="aso-hint">
-                  Solo se muestran asignaturas de la facultad del docente que aún no están activas en su histórico.
+                  Solo se muestran asignaturas pertenecientes a la escuela seleccionada que aún no están activas en el histórico del docente.
                   Puedes seleccionar varias.
                 </p>
               </div>
@@ -725,7 +739,7 @@ export default function AsociacionesDocentesView({ onShowToast }) {
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={submitting || !form.docenteId || form.codeCourses.length === 0}
+                  disabled={submitting || !form.docenteId || !form.codigoEscuela || form.codeCourses.length === 0}
                 >
                   {submitting
                     ? 'Guardando...'
@@ -753,7 +767,11 @@ export default function AsociacionesDocentesView({ onShowToast }) {
               <p>
                 Se desactivará la asociación de <strong>{confirmQuitar.docente_nombre}</strong> con{' '}
                 <strong>{confirmQuitar.code_course}</strong> en{' '}
-                <strong>{confirmQuitar.nombre_facultad || 'su facultad'}</strong>.
+                <strong>
+                  {confirmQuitar.nombre_escuela ||
+                    escuelasPorCodigo.get(prefijoEscuela(confirmQuitar.code_course)) ||
+                    'su escuela'}
+                </strong>.
               </p>
               <p className="aso-hint">El registro se conserva en el histórico y puede reactivarse después.</p>
             </div>
