@@ -115,6 +115,39 @@ export const guardarEvaluacionDocente = (docenteId, periodoId, codeCourse, calif
         }),
     })
 
+export async function importarEvaluacionesExcel(periodoId, file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    let res
+    try {
+        res = await fetch(
+            `${BACKEND_URL}/docentes/evaluaciones/importar-excel?periodoId=${encodeURIComponent(periodoId)}`,
+            {
+                method: 'POST',
+                headers: authHeaders(),
+                body: formData,
+            }
+        )
+    } catch {
+        throw new ApiError('No se pudo conectar con el servidor', 0, null)
+    }
+
+    let body = null
+    try {
+        body = await res.json()
+    } catch {
+        // sin cuerpo JSON
+    }
+
+    if (!res.ok) {
+        if (res.status === 401) {
+            notifySessionExpired('Tu sesión ha expirado o ya no es válida. Inicia sesión de nuevo.')
+        }
+        throw new ApiError(body?.message || `Error ${res.status}`, res.status, body)
+    }
+    return body
+}
+
 // POST /api/docentes
 export const createDocente = (payload) =>
     request('/docentes', { method: 'POST', body: JSON.stringify(payload) })
@@ -151,7 +184,7 @@ async function errorDe(res) {
 // GET /api/docentes/me (HU-022). El backend identifica al docente por el token de sesión.
 export const getMiPerfil = () => request('/docentes/me')
 
-// PUT /api/docentes/me/contacto (HU-015): correo personal, teléfono, celular y facultad
+// PUT /api/docentes/me/contacto (HU-015): correo personal, teléfono, celular, dirección y facultad
 export const updateMiContacto = (payload) =>
     request('/docentes/me/contacto', { method: 'PUT', body: JSON.stringify(payload) })
 

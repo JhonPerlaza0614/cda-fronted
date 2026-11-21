@@ -1,21 +1,28 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AlertCircle,
   AlertTriangle,
   BookOpen,
+  CheckCircle2,
+  FileSpreadsheet,
+  Info,
   Link2,
   Plus,
   RefreshCw,
   RotateCcw,
   Search,
   Trash2,
+  Upload,
   Users,
   X,
 } from 'lucide-react'
-import { getAllPensum, getAsignaturas, getDocentes, getProgramas } from '../../services/academicService'
+import { getAsignaturas, getDocentes, getPeriodos } from '../../services/academicService'
+import { importarEvaluacionesExcel } from '../../services/docenteService'
 import {
   cambiarEstadoAsociacion,
   crearAsociacion,
   listarAsociaciones,
+  listarEscuelas,
   quitarAsociacion,
 } from '../../services/asociacionesService'
 import Dropdown from '../common/Dropdown'
@@ -26,14 +33,18 @@ const nombreDocente = (docente) =>
 
 const mismoId = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && String(a) === String(b)
 
+const prefijoEscuela = (codeCourse) => {
+  const clean = String(codeCourse || '').trim().toUpperCase()
+  return clean.length >= 3 ? clean.slice(0, 3) : ''
+}
+
 export default function AsociacionesDocentesView({ onShowToast }) {
   const [vista, setVista] = useState('docente')
   const [asociaciones, setAsociaciones] = useState([])
   const [asociacionesDocente, setAsociacionesDocente] = useState([])
   const [docentes, setDocentes] = useState([])
-  const [programas, setProgramas] = useState([])
   const [asignaturas, setAsignaturas] = useState([])
-  const [pensumList, setPensumList] = useState([])
+  const [escuelas, setEscuelas] = useState([])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -42,25 +53,36 @@ export default function AsociacionesDocentesView({ onShowToast }) {
   const [busqueda, setBusqueda] = useState('')
   const [filtroDocente, setFiltroDocente] = useState('')
   const [filtroAsignatura, setFiltroAsignatura] = useState('')
-  const [filtroFacultad, setFiltroFacultad] = useState('')
+  const [filtroEscuela, setFiltroEscuela] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('todos')
 
   const [isAsociarOpen, setIsAsociarOpen] = useState(false)
   const [confirmQuitar, setConfirmQuitar] = useState(null)
-  const [form, setForm] = useState({ docenteId: '', codeCourses: [] })
+  const [form, setForm] = useState({ docenteId: '', codigoEscuela: '', codeCourses: [] })
+  const [periodoActivo, setPeriodoActivo] = useState(null)
+
+  // Modal de carga masiva de calificaciones docentes (Excel)
+  const [modalImportarExcel, setModalImportarExcel] = useState(false)
+  const [archivoExcel, setArchivoExcel] = useState(null)
+  const [subiendoExcel, setSubiendoExcel] = useState(false)
+  const [resultadoExcel, setResultadoExcel] = useState(null)
+  const [errorExcel, setErrorExcel] = useState('')
+  const inputExcelRef = useRef(null)
 
   const cargarCatalogos = useCallback(async () => {
     try {
-      const [docs, progs, asigs, pensum] = await Promise.all([
+      const [docs, asigs, escs, periodos] = await Promise.all([
         getDocentes(),
-        getProgramas(),
         getAsignaturas(),
-        getAllPensum(),
+        listarEscuelas().catch(() => []),
+        getPeriodos().catch(() => []),
       ])
       setDocentes(Array.isArray(docs) ? docs : [])
-      setProgramas(Array.isArray(progs) ? progs : [])
       setAsignaturas(Array.isArray(asigs) ? asigs : [])
-      setPensumList(Array.isArray(pensum) ? pensum : [])
+      setEscuelas(Array.isArray(escs) ? escs : [])
+      const listaPeriodos = Array.isArray(periodos) ? periodos : []
+      const vigente = listaPeriodos.find((p) => p.vigente || p.estado === 'VIGENTE') || listaPeriodos[0] || null
+      setPeriodoActivo(vigente)
     } catch (err) {
       onShowToast?.(err.message || 'No fue posible cargar los catálogos', 'error')
     }
@@ -73,7 +95,7 @@ export default function AsociacionesDocentesView({ onShowToast }) {
       const data = await listarAsociaciones({
         docenteId: filtroDocente || undefined,
         codeCourse: filtroAsignatura || undefined,
-        idFacultad: filtroFacultad || undefined,
+        codigoEscuela: filtroEscuela || undefined,
         activo: filtroEstado === 'todos' ? undefined : filtroEstado === 'activo',
       })
       setAsociaciones(Array.isArray(data) ? data : [])
@@ -82,7 +104,7 @@ export default function AsociacionesDocentesView({ onShowToast }) {
     } finally {
       setLoading(false)
     }
-  }, [filtroDocente, filtroAsignatura, filtroFacultad, filtroEstado])
+  }, [filtroDocente, filtroAsignatura, filtroEscuela, filtroEstado])
 
   const cargarAsociacionesDelDocente = useCallback(async (docenteId) => {
     if (!docenteId) {
@@ -121,26 +143,33 @@ export default function AsociacionesDocentesView({ onShowToast }) {
     [asignaturas],
   )
 
-  const facultades = useMemo(() => {
+  const escuelasPorCodigo = useMemo(() => {
     const mapa = new Map()
-    docentes.forEach((docente) => {
-      if (docente.id_facultad !== null && docente.id_facultad !== undefined) {
-        mapa.set(
-          String(docente.id_facultad),
-          docente.nombre_facultad || `Facultad ${docente.id_facultad}`,
-        )
+    escuelas.forEach((e) => {
+      if (e?.codigo) {
+        mapa.set(String(e.codigo).trim().toUpperCase(), e.nombre || `Escuela ${e.codigo}`)
       }
     })
-    asignaturas.forEach((asignatura) => {
-      const id = asignatura.id_facultad
-      if (id !== null && id !== undefined && !mapa.has(String(id))) {
-        mapa.set(String(id), asignatura.facultad || `Facultad ${id}`)
-      }
-    })
-    return [...mapa.entries()]
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => a.label.localeCompare(b.label))
-  }, [docentes, asignaturas])
+    return mapa
+  }, [escuelas])
+
+  const escuelasConAsignaturas = useMemo(() => {
+    const prefijosPresentes = new Set(
+      asignaturasDisponibles.map((a) => prefijoEscuela(a.code_course)).filter(Boolean),
+    )
+    const lista = escuelas
+      .filter((e) => prefijosPresentes.size === 0 || prefijosPresentes.has(String(e.codigo).trim().toUpperCase()))
+      .map((e) => ({
+        value: String(e.codigo).trim().toUpperCase(),
+        label: `${e.codigo} - ${e.nombre}`,
+      }))
+    return lista.length > 0
+      ? lista
+      : escuelas.map((e) => ({
+          value: String(e.codigo).trim().toUpperCase(),
+          label: `${e.codigo} - ${e.nombre}`,
+        }))
+  }, [escuelas, asignaturasDisponibles])
 
   const asignaturasPorCodigo = useMemo(
     () => new Map(asignaturas.map((a) => [a.code_course, a])),
@@ -152,24 +181,10 @@ export default function AsociacionesDocentesView({ onShowToast }) {
     [docentesDisponibles, form.docenteId],
   )
 
-  const facultadDocente =
-    docenteSeleccionado?.id_facultad ?? docenteSeleccionado?.facultad?.id ?? null
-  const nombreFacultadDocente =
-    docenteSeleccionado?.nombre_facultad ||
-    facultades.find((facultad) => mismoId(facultad.value, facultadDocente))?.label ||
-    ''
-
   const opcionesAsignatura = useMemo(() => {
-    if (!docenteSeleccionado || !facultadDocente) return []
+    if (!docenteSeleccionado || !form.codigoEscuela) return []
 
-    const programasFacultad = programas
-      .filter((programa) => mismoId(programa.id_facultad_programa, facultadDocente))
-      .map((programa) => programa.code_program)
-    const codigosMalla = new Set(
-      pensumList
-        .filter((item) => programasFacultad.includes(item.code_program))
-        .map((item) => item.code_course),
-    )
+    const prefijo = String(form.codigoEscuela).trim().toUpperCase()
     const yaActivas = new Set(
       asociacionesDocente
         .filter((asociacion) => asociacion.activo)
@@ -179,22 +194,20 @@ export default function AsociacionesDocentesView({ onShowToast }) {
     return asignaturasDisponibles
       .filter(
         (asignatura) =>
-          (mismoId(asignatura.id_facultad, facultadDocente) ||
-            codigosMalla.has(asignatura.code_course)) &&
+          prefijoEscuela(asignatura.code_course) === prefijo &&
           !yaActivas.has(asignatura.code_course),
       )
       .map((asignatura) => ({
         value: asignatura.code_course,
         label: `${asignatura.code_course} - ${asignatura.name_course}`,
-        description: asignatura.facultad || '',
+        description: escuelasPorCodigo.get(prefijo) || '',
       }))
   }, [
     asignaturasDisponibles,
     asociacionesDocente,
-    facultadDocente,
     docenteSeleccionado,
-    pensumList,
-    programas,
+    form.codigoEscuela,
+    escuelasPorCodigo,
   ])
 
   const docenteOptions = useMemo(
@@ -219,9 +232,9 @@ export default function AsociacionesDocentesView({ onShowToast }) {
     [asignaturas],
   )
 
-  const facultadOptions = useMemo(
-    () => [{ value: '', label: 'Todas las facultades' }, ...facultades],
-    [facultades],
+  const escuelaOptions = useMemo(
+    () => [{ value: '', label: 'Todas las escuelas' }, ...escuelasConAsignaturas],
+    [escuelasConAsignaturas],
   )
 
   const estadoOptions = useMemo(
@@ -254,12 +267,14 @@ export default function AsociacionesDocentesView({ onShowToast }) {
         asociacion.numero_documento,
         asociacion.code_course,
         asociacion.name_course,
-        asociacion.nombre_facultad,
+        asociacion.codigo_escuela,
+        asociacion.nombre_escuela,
+        escuelasPorCodigo.get(prefijoEscuela(asociacion.code_course)),
       ]
         .filter(Boolean)
         .some((valor) => String(valor).toLowerCase().includes(texto)),
     )
-  }, [asociaciones, busqueda])
+  }, [asociaciones, busqueda, escuelasPorCodigo])
 
   const ordenadas = useMemo(() => {
     const copia = [...filtradas]
@@ -291,21 +306,21 @@ export default function AsociacionesDocentesView({ onShowToast }) {
   const limpiarFiltros = () => {
     setFiltroDocente('')
     setFiltroAsignatura('')
-    setFiltroFacultad('')
+    setFiltroEscuela('')
     setFiltroEstado('todos')
     setBusqueda('')
   }
 
   const abrirAsociar = () => {
-    setForm({ docenteId: '', codeCourses: [] })
+    setForm({ docenteId: '', codigoEscuela: '', codeCourses: [] })
     setAsociacionesDocente([])
     setIsAsociarOpen(true)
   }
 
   const handleAsociar = async (event) => {
     event.preventDefault()
-    if (!form.docenteId || form.codeCourses.length === 0) {
-      onShowToast?.('Selecciona un docente y al menos una asignatura', 'error')
+    if (!form.docenteId || !form.codigoEscuela || form.codeCourses.length === 0) {
+      onShowToast?.('Selecciona un docente, una escuela y al menos una asignatura', 'error')
       return
     }
 
@@ -314,7 +329,11 @@ export default function AsociacionesDocentesView({ onShowToast }) {
 
     for (const codeCourse of form.codeCourses) {
       try {
-        await crearAsociacion({ docenteId: form.docenteId, codeCourse })
+        await crearAsociacion({
+          docenteId: form.docenteId,
+          codeCourse,
+          codigoEscuela: form.codigoEscuela,
+        })
       } catch (err) {
         errores.push(`${codeCourse}: ${err.message || 'No fue posible asociar'}`)
       }
@@ -360,6 +379,42 @@ export default function AsociacionesDocentesView({ onShowToast }) {
     }
   }
 
+  const abrirModalImportarExcel = () => {
+    setArchivoExcel(null)
+    setResultadoExcel(null)
+    setErrorExcel('')
+    setModalImportarExcel(true)
+  }
+
+  const cerrarModalImportarExcel = () => {
+    if (subiendoExcel) return
+    setModalImportarExcel(false)
+    setArchivoExcel(null)
+    setResultadoExcel(null)
+    setErrorExcel('')
+  }
+
+  const handleSubirExcel = async () => {
+    if (!periodoActivo?.id || !archivoExcel || subiendoExcel) return
+    setSubiendoExcel(true)
+    setErrorExcel('')
+    try {
+      const resp = await importarEvaluacionesExcel(periodoActivo.id, archivoExcel)
+      setResultadoExcel(resp)
+      onShowToast?.(
+        `Calificaciones cargadas: ${resp.total_registros_guardados} registros guardados (${resp.total_promediados} promediados, ${resp.total_no_evaluados} no evaluados).`,
+        'success'
+      )
+      await cargarAsociaciones()
+    } catch (err) {
+      const msg = err?.message || 'No se pudo procesar el archivo Excel de calificaciones'
+      setErrorExcel(msg)
+      onShowToast?.(msg, 'error')
+    } finally {
+      setSubiendoExcel(false)
+    }
+  }
+
   return (
     <div className="aso-container">
       <div className="aso-header">
@@ -376,6 +431,16 @@ export default function AsociacionesDocentesView({ onShowToast }) {
           <button type="button" className="btn-secondary" onClick={cargarAsociaciones} disabled={loading}>
             <RefreshCw size={16} className={loading ? 'spin' : ''} />
             Actualizar
+          </button>
+          <button
+            type="button"
+            className="btn-primary aso-btn-subir-excel"
+            onClick={abrirModalImportarExcel}
+            disabled={!periodoActivo}
+            title="Subir archivo Excel con las calificaciones docentes"
+          >
+            <Upload size={16} />
+            Subir Calificaciones (Excel)
           </button>
           <button type="button" className="btn-primary" onClick={abrirAsociar}>
             <Plus size={16} />
@@ -418,7 +483,7 @@ export default function AsociacionesDocentesView({ onShowToast }) {
           <Search size={18} className="search-icon" />
           <input
             type="search"
-            placeholder="Buscar por docente, documento, asignatura o facultad..."
+            placeholder="Buscar por docente, documento, asignatura o escuela..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
@@ -441,10 +506,12 @@ export default function AsociacionesDocentesView({ onShowToast }) {
         />
         <Dropdown
           className="aso-filter-dropdown"
-          value={filtroFacultad}
-          options={facultadOptions}
-          onChange={setFiltroFacultad}
-          ariaLabel="Filtrar por facultad"
+          value={filtroEscuela}
+          options={escuelaOptions}
+          onChange={setFiltroEscuela}
+          ariaLabel="Filtrar por escuela"
+          searchable
+          searchPlaceholder="Buscar escuela..."
         />
         <Dropdown
           className="aso-filter-dropdown aso-filter-dropdown-sm"
@@ -483,7 +550,7 @@ export default function AsociacionesDocentesView({ onShowToast }) {
                   <th>Docente</th>
                 </>
               )}
-              <th>Facultad</th>
+              <th>Escuela</th>
               <th>Origen</th>
               <th>Estado</th>
               <th className="aso-actions-col">Acciones</th>
@@ -532,11 +599,17 @@ export default function AsociacionesDocentesView({ onShowToast }) {
                         <td data-label="Docente">{celdaDocente}</td>
                       </>
                     )}
-                    <td data-label="Facultad">
+                    <td data-label="Escuela">
                       <div className="aso-person">
-                        <strong>{asociacion.nombre_facultad || 'Sin facultad'}</strong>
-                        {asociacion.id_facultad && (
-                          <span className="aso-code">ID {asociacion.id_facultad}</span>
+                        <strong>
+                          {asociacion.nombre_escuela ||
+                            escuelasPorCodigo.get(prefijoEscuela(asociacion.code_course)) ||
+                            'Sin escuela'}
+                        </strong>
+                        {(asociacion.codigo_escuela || prefijoEscuela(asociacion.code_course)) && (
+                          <span className="aso-code">
+                            Cód. {asociacion.codigo_escuela || prefijoEscuela(asociacion.code_course)}
+                          </span>
                         )}
                       </div>
                     </td>
@@ -601,18 +674,29 @@ export default function AsociacionesDocentesView({ onShowToast }) {
                       value={form.docenteId}
                       options={formDocenteOptions}
                       onChange={(docenteId) =>
-                        setForm({ docenteId, codeCourses: [] })
+                        setForm((prev) => ({ ...prev, docenteId, codeCourses: [] }))
                       }
                       placeholder="Selecciona un docente"
                       ariaLabel="Docente"
+                      searchable
+                      searchPlaceholder="Buscar docente..."
                       emptyMessage="No hay docentes activos"
                     />
                   </div>
                   <div className="aso-field">
-                    <span>Facultad de adscripción</span>
-                    <div className={`aso-static-value ${!nombreFacultadDocente ? 'is-empty' : ''}`}>
-                      {nombreFacultadDocente || 'Selecciona un docente'}
-                    </div>
+                    <span>Escuela</span>
+                    <Dropdown
+                      value={form.codigoEscuela}
+                      options={escuelasConAsignaturas}
+                      onChange={(codigoEscuela) =>
+                        setForm((prev) => ({ ...prev, codigoEscuela, codeCourses: [] }))
+                      }
+                      placeholder="Selecciona una escuela"
+                      ariaLabel="Escuela"
+                      searchable
+                      searchPlaceholder="Buscar escuela por código o nombre..."
+                      emptyMessage="No hay escuelas disponibles"
+                    />
                   </div>
                 </div>
 
@@ -628,28 +712,23 @@ export default function AsociacionesDocentesView({ onShowToast }) {
                     placeholder={
                       !docenteSeleccionado
                         ? 'Primero selecciona un docente'
-                        : !facultadDocente
-                          ? 'El docente no tiene facultad de adscripción'
+                        : !form.codigoEscuela
+                          ? 'Selecciona una escuela'
                           : 'Selecciona una o varias asignaturas'
                     }
                     ariaLabel="Asignaturas"
-                    disabled={!docenteSeleccionado || !facultadDocente || opcionesAsignatura.length === 0}
-                    emptyMessage="No hay asignaturas disponibles para la facultad del docente"
+                    disabled={!docenteSeleccionado || !form.codigoEscuela || opcionesAsignatura.length === 0}
+                    emptyMessage="No hay asignaturas disponibles para la escuela seleccionada"
                   />
                 </div>
 
-                {docenteSeleccionado && !facultadDocente && (
-                  <p className="aso-hint aso-hint-error">
-                    El docente no tiene facultad ni programa de adscripción. Actualiza su perfil antes de asociarlo.
-                  </p>
-                )}
-                {docenteSeleccionado && facultadDocente && opcionesAsignatura.length === 0 && (
+                {docenteSeleccionado && form.codigoEscuela && opcionesAsignatura.length === 0 && (
                   <p className="aso-hint">
-                    No quedan asignaturas de esta facultad por asociar. Revisa el histórico o la malla académica.
+                    No quedan asignaturas de esta escuela por asociar al docente seleccionado.
                   </p>
                 )}
                 <p className="aso-hint">
-                  Solo se muestran asignaturas de la facultad del docente que aún no están activas en su histórico.
+                  Solo se muestran asignaturas pertenecientes a la escuela seleccionada que aún no están activas en el histórico del docente.
                   Puedes seleccionar varias.
                 </p>
               </div>
@@ -660,7 +739,7 @@ export default function AsociacionesDocentesView({ onShowToast }) {
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={submitting || !form.docenteId || form.codeCourses.length === 0}
+                  disabled={submitting || !form.docenteId || !form.codigoEscuela || form.codeCourses.length === 0}
                 >
                   {submitting
                     ? 'Guardando...'
@@ -688,7 +767,11 @@ export default function AsociacionesDocentesView({ onShowToast }) {
               <p>
                 Se desactivará la asociación de <strong>{confirmQuitar.docente_nombre}</strong> con{' '}
                 <strong>{confirmQuitar.code_course}</strong> en{' '}
-                <strong>{confirmQuitar.nombre_facultad || 'su facultad'}</strong>.
+                <strong>
+                  {confirmQuitar.nombre_escuela ||
+                    escuelasPorCodigo.get(prefijoEscuela(confirmQuitar.code_course)) ||
+                    'su escuela'}
+                </strong>.
               </p>
               <p className="aso-hint">El registro se conserva en el histórico y puede reactivarse después.</p>
             </div>
@@ -698,6 +781,205 @@ export default function AsociacionesDocentesView({ onShowToast }) {
               </button>
               <button type="button" className="btn-primary danger" onClick={handleQuitar} disabled={submitting}>
                 {submitting ? 'Quitando...' : 'Quitar asociación'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para subir calificaciones docentes desde Excel */}
+      {modalImportarExcel && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) cerrarModalImportarExcel()
+          }}
+        >
+          <div className="modal-card aso-excel-modal" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-with-icon">
+                <FileSpreadsheet size={22} style={{ color: '#16a34a' }} />
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Subir Calificaciones Docentes (Excel)</h2>
+                  <p style={{ margin: '0.15rem 0 0', fontSize: '0.8rem', color: '#64748b', fontWeight: 400 }}>
+                    Carga masiva de evaluaciones docentes {periodoActivo?.nombre ? `· Período activo: ${periodoActivo.nombre}` : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={cerrarModalImportarExcel}
+                disabled={subiendoExcel}
+                aria-label="Cerrar modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="aso-excel-info-box">
+                <div style={{ fontWeight: 600, marginBottom: '0.35rem', color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Info size={15} />
+                  <span>Orden requerido de columnas en el archivo Excel (.xlsx / .xls):</span>
+                </div>
+                <div className="aso-excel-columns-pill-list">
+                  <span>1. Número de identificación</span>
+                  <span>2. Nombre</span>
+                  <span>3. Código</span>
+                  <span>4. Grupo</span>
+                  <span>5. Nombre de asignatura</span>
+                  <span>6. Calificación</span>
+                </div>
+                <ul className="aso-excel-rules-list">
+                  <li>Si el docente dictó la misma asignatura en varios grupos, se calcula automáticamente el <strong>promedio</strong> de sus calificaciones.</li>
+                  <li>Si la calificación está vacía o es <strong>0</strong>, el docente quedará registrado como <strong>«No evaluado»</strong>.</li>
+                </ul>
+              </div>
+
+              <div className="aso-excel-dropzone">
+                <input
+                  ref={inputExcelRef}
+                  type="file"
+                  accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null
+                    setArchivoExcel(f)
+                    setErrorExcel('')
+                    setResultadoExcel(null)
+                  }}
+                />
+                <FileSpreadsheet size={28} style={{ color: archivoExcel ? '#16a34a' : '#64748b' }} />
+                {archivoExcel ? (
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.9rem' }}>{archivoExcel.name}</div>
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.15rem' }}>
+                      {(archivoExcel.size / 1024).toFixed(1)} KB
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', color: '#475569', fontSize: '0.88rem' }}>
+                    Seleccione el archivo Excel con las calificaciones docentes
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => inputExcelRef.current?.click()}
+                  disabled={subiendoExcel}
+                >
+                  <Upload size={14} />
+                  <span>{archivoExcel ? 'Cambiar archivo' : 'Seleccionar archivo Excel'}</span>
+                </button>
+              </div>
+
+              {errorExcel && (
+                <div className="aso-excel-error">
+                  <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                  <span>{errorExcel}</span>
+                </div>
+              )}
+
+              {resultadoExcel && (
+                <div className="aso-excel-result">
+                  <div className="aso-excel-result-header">
+                    <CheckCircle2 size={18} style={{ color: '#16a34a' }} />
+                    <span>
+                      Importación completada (Período registrado: <strong>{resultadoExcel.periodo_nombre}</strong>)
+                    </span>
+                  </div>
+                  <div className="aso-excel-stats">
+                    <div className="aso-excel-stat">
+                      <span>Filas leídas</span>
+                      <strong>{resultadoExcel.total_filas_leidas}</strong>
+                    </div>
+                    <div className="aso-excel-stat">
+                      <span>Guardados</span>
+                      <strong>{resultadoExcel.total_registros_guardados}</strong>
+                    </div>
+                    <div className="aso-excel-stat">
+                      <span>Promediados</span>
+                      <strong>{resultadoExcel.total_promediados}</strong>
+                    </div>
+                    <div className="aso-excel-stat">
+                      <span>No evaluados</span>
+                      <strong>{resultadoExcel.total_no_evaluados}</strong>
+                    </div>
+                  </div>
+
+                  {resultadoExcel.detalles?.length > 0 && (
+                    <div className="aso-excel-table-wrap">
+                      <table className="aso-excel-table">
+                        <thead>
+                          <tr>
+                            <th>Identificación</th>
+                            <th>Docente</th>
+                            <th>Asignatura</th>
+                            <th>Grupos</th>
+                            <th>Calificación</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {resultadoExcel.detalles.map((d, idx) => (
+                            <tr key={`${d.numero_documento}-${d.code_course}-${idx}`}>
+                              <td>{d.numero_documento}</td>
+                              <td>{d.nombre_docente}</td>
+                              <td>{d.code_course} - {d.nombre_asignatura}</td>
+                              <td style={{ textAlign: 'center' }}>{d.cantidad_grupos}</td>
+                              <td style={{ textAlign: 'center' }}>
+                                <span className={`aso-excel-grade-pill ${d.etiqueta === 'No evaluado' ? 'no-evaluado' : 'evaluado'}`}>
+                                  {d.etiqueta === 'No evaluado' ? 'No evaluado' : `${Number(d.calificacion).toFixed(2)} / 5.00`}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {resultadoExcel.errores?.length > 0 && (
+                    <div className="aso-excel-warnings">
+                      <strong>Observaciones ({resultadoExcel.errores.length}):</strong>
+                      <ul>
+                        {resultadoExcel.errores.map((errMsg, idx) => (
+                          <li key={idx}>{errMsg}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={cerrarModalImportarExcel}
+                disabled={subiendoExcel}
+              >
+                {resultadoExcel ? 'Cerrar' : 'Cancelar'}
+              </button>
+              <button
+                type="button"
+                className="btn-primary aso-btn-subir-excel"
+                onClick={handleSubirExcel}
+                disabled={!archivoExcel || subiendoExcel}
+              >
+                {subiendoExcel ? (
+                  <>
+                    <RefreshCw size={14} className="spin" />
+                    <span>Procesando Excel...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={14} />
+                    <span>Cargar Calificaciones</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

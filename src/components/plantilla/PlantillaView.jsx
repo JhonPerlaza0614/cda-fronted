@@ -7,6 +7,7 @@ import {
   Award,
   Mail,
   Phone,
+  MapPin,
   BookOpen,
   Plus,
   Edit2,
@@ -29,6 +30,7 @@ import {
   toggleCoordinadorActivo,
   getDocentes,
   createDocente,
+  updateDocente,
   toggleDocenteEstado,
   getCategorias,
   getTiposContrato,
@@ -39,6 +41,14 @@ import AccesoExtraordinario from '../accesoExtraordinario/AccesoExtraordinario'
 import { getCargaPorPeriodo } from '../../services/docenteService'
 import CargaDocente, { CargaBarra } from '../cargaDocente/CargaDocente'
 
+/**
+ * PlantillaView - Módulo de visualización y gestión unificada de
+ * Perfiles de Docentes y Coordinadores de Programa.
+ * 
+ * Permite filtrar por rol, programa académico, estado y categoría,
+ * visualizar la ficha detallada, alternar el estado (Activo/Inactivo)
+ * y registrar nuevos docentes o coordinadores.
+ */
 export default function PlantillaView({ programas = [], onShowToast, onRegistrarDisponibilidad }) {
   // --- Estados de datos ---
   const [coordinadores, setCoordinadores] = useState([])
@@ -67,6 +77,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
   const [editingCoord, setEditingCoord] = useState(null)
   const [deletingCoord, setDeletingCoord] = useState(null)
   const [isDocenteModalOpen, setIsDocenteModalOpen] = useState(false)
+  const [editingDocente, setEditingDocente] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [openActionsId, setOpenActionsId] = useState(null)
   const [evaluationProfile, setEvaluationProfile] = useState(null)
@@ -98,8 +109,9 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
     correo_institucional: '',
     telefono: '',
     celular: '',
-    tipo_docente: 'NOMBRADO',
-    categoria: 'AUXILIAR',
+    direccion: '',
+    tipo_docente: '',
+    categoria: '',
     id_facultad: '',
   })
 
@@ -213,6 +225,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
       correoPersonal: null,
       telefono: d.telefono,
       celular: d.celular,
+      direccion: d.direccion,
       codeProgram: d.code_program,
       idFacultad: d.id_facultad,
       nombreFacultad:
@@ -234,18 +247,18 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
   // --- Filtros combinados ---
   const filteredProfiles = useMemo(() => {
     return unifiedList.filter(item => {
-      // Filtro por subpestaña (Rol)
+      // Sub-tab
       if (activeSubTab === 'docentes' && item.tipoRol !== 'DOCENTE') return false
       if (activeSubTab === 'coordinadores' && item.tipoRol !== 'COORDINADOR') return false
 
-      // Filtro por Estado
+      // Estado
       if (filterEstado === 'activo' && !item.activo) return false
       if (filterEstado === 'inactivo' && item.activo) return false
 
-      // Filtro por Programa
+      // Programa
       if (filterPrograma && item.codeProgram !== filterPrograma) return false
 
-      // Filtro por Categoría
+      // Categoría
       if (filterCategoria && item.categoria.toLowerCase() !== filterCategoria.toLowerCase()) return false
 
       // Búsqueda textual
@@ -302,6 +315,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         )
       }
 
+      // Actualizar modal si está abierto para ese mismo perfil
       if (selectedProfile && selectedProfile.id === profile.id) {
         setSelectedProfile(prev => ({ ...prev, activo: nuevoEstado }))
       }
@@ -372,29 +386,20 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
 
   // --- Manejo de Coordinador: Abrir Modal Crear / Editar ---
   const handleOpenCoordModal = (coord = null) => {
+    const docentesActivos = docentes.filter(d => d.estado !== false && d.activo !== false)
     if (coord) {
       setEditingCoord(coord)
       setCoordFormData({
-        identificacion: coord.identificacion || '',
-        nombre_completo: coord.nombre_completo || '',
-        categoria: coord.categoria || (categoriasList[0]?.nombre || 'Auxiliar'),
-        tipo_contrato: coord.tipo_contrato || (tiposContratoList[0]?.nombre || 'Nombrado'),
+        docente_id: coord.docente_id != null ? String(coord.docente_id) : '',
         correo_institucional: coord.correo_institucional || '',
-        correo: coord.correo || '',
-        telefono: coord.telefono || '',
         code_program: coord.code_program || '',
         activo: coord.activo !== false,
       })
     } else {
       setEditingCoord(null)
       setCoordFormData({
-        identificacion: '',
-        nombre_completo: '',
-        categoria: categoriasList[0]?.nombre || 'Auxiliar',
-        tipo_contrato: tiposContratoList[0]?.nombre || 'Nombrado',
+        docente_id: docentesActivos[0]?.id != null ? String(docentesActivos[0].id) : '',
         correo_institucional: '',
-        correo: '',
-        telefono: '',
         code_program: programas[0]?.code_program || '',
         activo: true,
       })
@@ -405,21 +410,25 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
   // Guardar Coordinador
   const handleSaveCoordinador = async (e) => {
     e.preventDefault()
+    if (!coordFormData.docente_id) {
+      onShowToast?.('Debe seleccionar un docente de la plantilla', 'warning')
+      return
+    }
+    if (!coordFormData.code_program) {
+      onShowToast?.('Debe seleccionar el programa académico', 'warning')
+      return
+    }
+    if (!coordFormData.correo_institucional.trim()) {
+      onShowToast?.('El correo institucional de coordinación es obligatorio', 'warning')
+      return
+    }
     setSubmitting(true)
     try {
-      const catObj = categoriasList.find(
-        c => c.nombre?.toLowerCase() === coordFormData.categoria?.toLowerCase()
-      )
-      const tcObj = tiposContratoList.find(
-        t => t.nombre?.toLowerCase() === coordFormData.tipo_contrato?.toLowerCase()
-      )
-
       const payload = {
-        ...coordFormData,
-        id_categoria: catObj?.id || null,
-        categoria: catObj?.nombre || coordFormData.categoria,
-        id_tipo_contrato: tcObj?.id || null,
-        tipo_contrato: tcObj?.nombre || coordFormData.tipo_contrato,
+        docente_id: Number(coordFormData.docente_id),
+        code_program: coordFormData.code_program,
+        correo_institucional: coordFormData.correo_institucional.trim().toLowerCase(),
+        activo: Boolean(coordFormData.activo),
       }
 
       if (editingCoord) {
@@ -429,7 +438,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
       } else {
         const created = await createCoordinador(payload)
         setCoordinadores(prev => [created, ...prev])
-        if (onShowToast) onShowToast('Coordinador registrado correctamente', 'success')
+        if (onShowToast) onShowToast('Coordinador designado correctamente', 'success')
       }
 
       setIsCoordModalOpen(false)
@@ -459,27 +468,59 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
     }
   }
 
-  // --- Manejo de Docente: Abrir Modal Crear ---
-  const handleOpenDocenteModal = () => {
-    setDocenteFormData({
-      codigo: '',
-      nombres: '',
-      apellidos: '',
-      tipo_documento: 'CC',
-      numero_documento: '',
-      correo_institucional: '',
-      telefono: '',
-      celular: '',
-      tipo_docente: 'NOMBRADO',
-      categoria: 'AUXILIAR',
-      id_facultad: facultadesList[0]?.id ? String(facultadesList[0].id) : '',
-    })
+  // --- Manejo de Docente: Abrir Modal Crear / Editar ---
+  const handleOpenDocenteModal = (docente = null) => {
+    if (docente) {
+      setEditingDocente(docente)
+      setDocenteFormData({
+        codigo: docente.codigo || '',
+        nombres: docente.nombres || '',
+        apellidos: docente.apellidos || '',
+        tipo_documento: docente.tipo_documento || 'CC',
+        numero_documento: docente.numero_documento || '',
+        correo_institucional: docente.correo_institucional || '',
+        telefono: docente.telefono || '',
+        celular: docente.celular || '',
+        direccion: docente.direccion || '',
+        tipo_docente: docente.tipo_docente || '',
+        categoria: docente.categoria || '',
+        id_facultad: docente.id_facultad ? String(docente.id_facultad) : '',
+      })
+    } else {
+      setEditingDocente(null)
+      setDocenteFormData({
+        codigo: '',
+        nombres: '',
+        apellidos: '',
+        tipo_documento: 'CC',
+        numero_documento: '',
+        correo_institucional: '',
+        telefono: '',
+        celular: '',
+        direccion: '',
+        tipo_docente: '',
+        categoria: '',
+        id_facultad: '',
+      })
+    }
     setIsDocenteModalOpen(true)
   }
 
   // Guardar Docente
   const handleSaveDocente = async (e) => {
     e.preventDefault()
+    if (!/^[0-9]+$/.test(docenteFormData.codigo.trim())) {
+      onShowToast?.('El código del docente solo puede contener números', 'warning')
+      return
+    }
+    if (docenteFormData.telefono.trim() && !/^[0-9]{7,10}$/.test(docenteFormData.telefono.trim())) {
+      onShowToast?.('El teléfono solo admite de 7 a 10 dígitos', 'warning')
+      return
+    }
+    if (docenteFormData.celular.trim() && !/^3[0-9]{9}$/.test(docenteFormData.celular.trim())) {
+      onShowToast?.('El celular debe tener 10 dígitos y empezar por 3', 'warning')
+      return
+    }
     setSubmitting(true)
     try {
       const payload = {
@@ -491,15 +532,33 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         correo_institucional: docenteFormData.correo_institucional.trim().toLowerCase(),
         telefono: docenteFormData.telefono.trim() || null,
         celular: docenteFormData.celular.trim() || null,
-        tipo_docente: docenteFormData.tipo_docente,
-        categoria: docenteFormData.categoria,
+        direccion: docenteFormData.direccion.trim() || null,
+        tipo_docente: docenteFormData.tipo_docente || null,
+        categoria: docenteFormData.categoria || null,
         id_facultad: docenteFormData.id_facultad ? parseInt(docenteFormData.id_facultad, 10) : null,
       }
 
-      const created = await createDocente(payload)
-      setDocentes(prev => [created, ...prev])
-      if (onShowToast) onShowToast('Docente registrado exitosamente', 'success')
+      if (editingDocente) {
+        // El backend ignora los null; para borrar un dato opcional se envía cadena vacía.
+        const changes = {
+          ...payload,
+          telefono: docenteFormData.telefono.trim(),
+          celular: docenteFormData.celular.trim(),
+          direccion: docenteFormData.direccion.trim(),
+        }
+        if (!changes.tipo_docente) delete changes.tipo_docente
+        if (!changes.categoria) delete changes.categoria
+        if (!changes.id_facultad) delete changes.id_facultad
+        const updated = await updateDocente(editingDocente.id, changes)
+        setDocentes(prev => prev.map(d => (d.id === editingDocente.id ? { ...d, ...updated } : d)))
+        if (onShowToast) onShowToast('Docente actualizado con éxito', 'success')
+      } else {
+        const created = await createDocente(payload)
+        setDocentes(prev => [created, ...prev])
+        if (onShowToast) onShowToast('Docente registrado exitosamente', 'success')
+      }
       setIsDocenteModalOpen(false)
+      setEditingDocente(null)
     } catch (err) {
       console.error('Error al registrar docente:', err)
       if (onShowToast) onShowToast(err.message || 'Error al registrar docente', 'error')
@@ -571,7 +630,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
 
           <button
             className="btn-secondary"
-            onClick={handleOpenDocenteModal}
+            onClick={() => handleOpenDocenteModal(null)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -603,7 +662,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         </div>
       </div>
 
-      {/* 2. Tarjetas de Métricas (KPIs) en paleta de grises de alto contraste */}
+      {/* 2. Tarjetas de Métricas (KPIs) */}
       <div
         className="metrics-grid"
         style={{
@@ -613,7 +672,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
           marginBottom: '1.75rem',
         }}
       >
-        {/* Total Personal */}
         <div
           style={{
             backgroundColor: '#1f2937',
@@ -650,7 +708,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
           </div>
         </div>
 
-        {/* Docentes */}
         <div
           style={{
             backgroundColor: '#1f2937',
@@ -689,7 +746,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
           </div>
         </div>
 
-        {/* Coordinadores */}
         <div
           style={{
             backgroundColor: '#1f2937',
@@ -728,7 +784,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
           </div>
         </div>
 
-        {/* Programas con Cobertura */}
         <div
           style={{
             backgroundColor: '#1f2937',
@@ -766,7 +821,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         </div>
       </div>
 
-      {/* 3. Barra de Navegación por Sub-Pestañas (Todos | Docentes | Coordinadores) */}
+      {/* 3. Barra de Navegación por Sub-Pestañas */}
       <div
         style={{
           display: 'flex',
@@ -853,7 +908,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
           alignItems: 'center',
         }}
       >
-        {/* Buscador */}
         <div style={{ flex: '1 1 280px', position: 'relative' }}>
           <Search
             size={18}
@@ -882,7 +936,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
           />
         </div>
 
-        {/* Filtro por Programa */}
         <div style={{ flex: '1 1 200px' }}>
           <select
             value={filterPrograma}
@@ -906,7 +959,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
           </select>
         </div>
 
-        {/* Filtro por Estado */}
         <div style={{ flex: '0 1 160px' }}>
           <select
             value={filterEstado}
@@ -927,7 +979,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
           </select>
         </div>
 
-        {/* Filtro por Categoría */}
         <div style={{ flex: '0 1 160px' }}>
           <select
             value={filterCategoria}
@@ -951,7 +1002,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
           </select>
         </div>
 
-        {/* Período para la carga horaria */}
         <div style={{ flex: '0 1 200px' }}>
           <select
             value={periodoId}
@@ -976,7 +1026,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
           </select>
         </div>
 
-        {/* Reset filtros */}
         {(searchTerm || filterPrograma || filterEstado !== 'todos' || filterCategoria) && (
           <button
             onClick={() => {
@@ -1060,10 +1109,10 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                   transition: 'transform 0.15s ease, border-color 0.15s ease',
                 }}
               >
+                {/* Cabecera de la Tarjeta */}
                 <div>
-                  {/* Fila superior: Avatar, Nombre, Badges de Rol y Estado */}
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem', marginBottom: '1rem' }}>
-                    {/* Avatar con iniciales */}
+                    {/* Avatar */}
                     <div
                       style={{
                         width: '46px',
@@ -1085,6 +1134,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
 
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {/* Badge de Rol */}
                         <span
                           style={{
                             fontSize: '0.7rem',
@@ -1099,7 +1149,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                           {isCoord ? 'COORDINADOR' : 'DOCENTE'}
                         </span>
 
-                        {/* Botón interactivo de Estado (Activo / Inactivo) */}
+                        {/* Badge Estado */}
                         <button
                           onClick={(e) => handleToggleEstado(profile, e)}
                           title="Haga clic para alternar estado"
@@ -1162,7 +1212,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                       marginBottom: '1rem',
                     }}
                   >
-                    {/* Documento e Identificación */}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#9ca3af' }}>N. Documento:</span>
                       <span style={{ fontWeight: 500, color: '#f3f4f6' }}>
@@ -1170,7 +1219,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                       </span>
                     </div>
 
-                    {/* Código si es Docente */}
                     {profile.codigo && (
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: '#9ca3af' }}>Cód. Docente:</span>
@@ -1178,7 +1226,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                       </div>
                     )}
 
-                    {/* Programa Académico / Facultad */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
                       <span style={{ color: '#9ca3af', flexShrink: 0 }}>{isCoord ? 'Programa:' : 'Facultad:'}</span>
                       <span
@@ -1196,7 +1243,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                       </span>
                     </div>
 
-                    {/* Categoría y Contrato */}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#9ca3af' }}>Categoría:</span>
                       <span
@@ -1230,7 +1276,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                       </div>
                     )}
 
-                    {/* Correo institucional */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
                       <Mail size={14} style={{ color: '#9ca3af', flexShrink: 0 }} />
                       <a
@@ -1247,6 +1292,23 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                         {profile.correoInstitucional}
                       </a>
                     </div>
+
+                    {!isCoord && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <MapPin size={14} style={{ color: '#9ca3af', flexShrink: 0 }} />
+                        <span
+                          style={{
+                            color: profile.direccion ? '#f3f4f6' : '#9ca3af',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={profile.direccion || 'Sin dirección registrada'}
+                        >
+                          {profile.direccion || 'Sin dirección registrada'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1280,7 +1342,6 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                       <span>Ver Perfil</span>
                     </button>
 
-                    {/* Acciones de disponibilidad para perfiles docentes. */}
                     {!isCoord && onRegistrarDisponibilidad && (
                       <div style={{ position: 'relative' }}>
                         <button
@@ -1351,13 +1412,55 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                               <CalendarPlus size={15} />
                               <span>Registrar disponibilidad</span>
                             </button>
+
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => handleOpenEvaluation(profile)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.55rem',
+                                width: '100%',
+                                padding: '0.6rem 0.65rem',
+                                border: 0,
+                                borderRadius: '6px',
+                                background: 'transparent',
+                                color: '#e5e7eb',
+                                textAlign: 'left',
+                                fontSize: '0.82rem',
+                                cursor: 'pointer',
+                              }}
+                              onMouseEnter={(event) => { event.currentTarget.style.backgroundColor = '#1f2937' }}
+                              onMouseLeave={(event) => { event.currentTarget.style.backgroundColor = 'transparent' }}
+                            >
+                              <Star size={15} />
+                              <span>Evaluar docente</span>
+                            </button>
                           </div>
                         )}
                       </div>
                     )}
                   </div>
 
-                  {/* Acciones adicionales si es Coordinador */}
+                  {!isCoord && (
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <button
+                        className="btn-secondary"
+                        onClick={() => handleOpenDocenteModal(profile.rawObject)}
+                        title="Editar docente"
+                        style={{
+                          padding: '0.4rem 0.6rem',
+                          backgroundColor: '#374151',
+                          color: '#e5e7eb',
+                          border: '1px solid #4b5563',
+                        }}
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                    </div>
+                  )}
+
                   {isCoord && (
                     <div style={{ display: 'flex', gap: '0.4rem' }}>
                       <button
@@ -1468,9 +1571,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 7. MODAL DE PERFIL COMPLETO (CONSULTA DETALLADA)                         */}
-      {/* ========================================================================= */}
+      {/* 7. MODAL DE PERFIL COMPLETO */}
       {selectedProfile && (
         <div className="modal-backdrop">
           <div
@@ -1483,7 +1584,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
               borderRadius: '12px',
             }}
           >
-            {/* Header del Modal */}
+            {/* Header del modal */}
             <div
               className="modal-header"
               style={{
@@ -1549,9 +1650,9 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
               </button>
             </div>
 
-            {/* Cuerpo del Modal con detalles */}
+            {/* Body del modal */}
             <div className="modal-body" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {/* Sección 1: Identificación y Datos Básicos */}
+              {/* Sección: Identificación */}
               <div>
                 <h4
                   style={{
@@ -1602,7 +1703,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                 </div>
               </div>
 
-              {/* Sección 2: Vinculación Académica */}
+              {/* Sección: Vinculación Académica */}
               <div>
                 <h4
                   style={{
@@ -1639,7 +1740,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                 </div>
               </div>
 
-              {/* Sección 3: Contacto */}
+              {/* Sección: Información de Contacto */}
               <div>
                 <h4
                   style={{
@@ -1703,6 +1804,15 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                     </div>
                   )}
 
+                  {selectedProfile.tipoRol === 'DOCENTE' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <MapPin size={16} style={{ color: '#9ca3af' }} />
+                      <span style={{ color: '#9ca3af' }}>Dirección:</span>
+                      <span style={{ color: '#f3f4f6' }}>
+                        {selectedProfile.direccion || 'Sin registrar'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1731,7 +1841,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                 </div>
               )}
 
-              {/* Sección 4: Evaluación Docente (Solo para Docentes) */}
+              {/* Evaluación docente */}
               {selectedProfile.tipoRol === 'DOCENTE' && (
                 <div>
                   <h4
@@ -1754,7 +1864,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
               )}
             </div>
 
-            {/* Footer del Modal */}
+            {/* Footer del modal */}
             <div
               className="modal-footer"
               style={{
@@ -1790,9 +1900,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 8. MODAL DE CREACIÓN / EDICIÓN DE COORDINADOR                             */}
-      {/* ========================================================================= */}
+      {/* 8. MODAL DE CREACIÓN / EDICIÓN DE COORDINADOR */}
       {isCoordModalOpen && (
         <div className="modal-backdrop">
           <div
@@ -1818,118 +1926,41 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
             </div>
 
             <form onSubmit={handleSaveCoordinador}>
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                {/* N. Documento */}
-                <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>N. Documento *</label>
-                  <input
-                    type="text"
-                    required
-                    disabled={!!editingCoord}
-                    placeholder="Ej. 1118234567"
-                    value={coordFormData.identificacion}
-                    onChange={(e) => setCoordFormData({ ...coordFormData, identificacion: e.target.value })}
-                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                  />
-                  {editingCoord && (
-                    <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
-                      El N. Documento no se puede modificar.
-                    </small>
-                  )}
-                </div>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af' }}>
+                  Seleccione el docente que asumirá la coordinación del programa y el correo institucional de coordinación asociado.
+                </p>
 
-                {/* Nombre completo */}
+                {/* Docente designado */}
                 <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Nombre Completo *</label>
-                  <input
-                    type="text"
+                  <label style={{ color: '#e5e7eb' }}>Docente designado como Coordinador *</label>
+                  <select
                     required
-                    placeholder="Ej. Dra. María Rodríguez Pérez"
-                    value={coordFormData.nombre_completo}
-                    onChange={(e) => setCoordFormData({ ...coordFormData, nombre_completo: e.target.value })}
+                    value={coordFormData.docente_id || ''}
+                    onChange={(e) => setCoordFormData({ ...coordFormData, docente_id: e.target.value })}
                     style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                  />
-                </div>
-
-                {/* Fila doble: Categoría y Tipo de Contrato */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-                  <div className="form-group">
-                    <label style={{ color: '#e5e7eb' }}>Categoría *</label>
-                    <select
-                      value={coordFormData.categoria}
-                      onChange={(e) => setCoordFormData({ ...coordFormData, categoria: e.target.value })}
-                      style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                    >
-                      {categoriasList.map(cat => (
-                        <option key={cat.id || cat.nombre} value={cat.nombre}>
-                          {cat.nombre}
+                  >
+                    <option value="">-- Seleccione un docente --</option>
+                    {docentes
+                      .filter(d => d.estado !== false && d.activo !== false)
+                      .map(d => (
+                        <option key={d.id} value={String(d.id)}>
+                          {d.nombres} {d.apellidos} — Doc. {d.numeroDocumento || d.numero_documento} ({d.correoInstitucional || d.correo_institucional})
                         </option>
                       ))}
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label style={{ color: '#e5e7eb' }}>Tipo de Contrato *</label>
-                    <select
-                      value={coordFormData.tipo_contrato}
-                      onChange={(e) => setCoordFormData({ ...coordFormData, tipo_contrato: e.target.value })}
-                      style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                    >
-                      {tiposContratoList.map(tc => (
-                        <option key={tc.id || tc.nombre} value={tc.nombre}>
-                          {tc.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Correo institucional */}
-                <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Correo Institucional *</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="Ej. maria.rodriguez@correounivalle.edu.co"
-                    value={coordFormData.correo_institucional}
-                    onChange={(e) => setCoordFormData({ ...coordFormData, correo_institucional: e.target.value })}
-                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                  />
-                </div>
-
-                {/* Correo personal */}
-                <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Correo Personal / Alternativo</label>
-                  <input
-                    type="email"
-                    placeholder="Ej. maria.rodriguez@gmail.com"
-                    value={coordFormData.correo}
-                    onChange={(e) => setCoordFormData({ ...coordFormData, correo: e.target.value })}
-                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                  />
-                </div>
-
-                {/* Teléfono */}
-                <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Teléfono de Contacto</label>
-                  <input
-                    type="text"
-                    placeholder="Ej. +57 315 123 4567"
-                    value={coordFormData.telefono}
-                    onChange={(e) => setCoordFormData({ ...coordFormData, telefono: e.target.value })}
-                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
-                  />
+                  </select>
                 </div>
 
                 {/* Programa vinculado */}
                 <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Programa Académico Vinculado</label>
+                  <label style={{ color: '#e5e7eb' }}>Programa Académico *</label>
                   <select
-                    value={coordFormData.code_program}
+                    required
+                    value={coordFormData.code_program || ''}
                     onChange={(e) => setCoordFormData({ ...coordFormData, code_program: e.target.value })}
                     style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
                   >
-                    <option value="">-- Sin programa asignado --</option>
+                    <option value="">-- Seleccione un programa --</option>
                     {programas.map(p => (
                       <option key={p.code_program} value={p.code_program}>
                         {p.name_program} ({p.code_program})
@@ -1938,12 +1969,28 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                   </select>
                 </div>
 
+                {/* Correo institucional de coordinación */}
+                <div className="form-group">
+                  <label style={{ color: '#e5e7eb' }}>Correo Institucional de Coordinación *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="Ej. coordinacion.sistemas@correounivalle.edu.co"
+                    value={coordFormData.correo_institucional || ''}
+                    onChange={(e) => setCoordFormData({ ...coordFormData, correo_institucional: e.target.value })}
+                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
+                  />
+                  <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
+                    Correo institucional con el que el coordinador inicia sesión en el sistema.
+                  </small>
+                </div>
+
                 {/* Activo checkbox */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.4rem' }}>
                   <input
                     type="checkbox"
                     id="coord-chk-activo"
-                    checked={coordFormData.activo}
+                    checked={Boolean(coordFormData.activo)}
                     onChange={(e) => setCoordFormData({ ...coordFormData, activo: e.target.checked })}
                     style={{ width: '18px', height: '18px' }}
                   />
@@ -1977,9 +2024,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 9. MODAL DE CREACIÓN DE DOCENTE                                           */}
-      {/* ========================================================================= */}
+      {/* 9. MODAL DE CREACIÓN DE DOCENTE */}
       {isDocenteModalOpen && (
         <div className="modal-backdrop">
           <div
@@ -1992,10 +2037,10 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
             }}
           >
             <div className="modal-header" style={{ borderBottom: '1px solid #374151' }}>
-              <h3 style={{ margin: 0, color: '#f9fafb' }}>Registrar Nuevo Docente</h3>
+              <h3 style={{ margin: 0, color: '#f9fafb' }}>{editingDocente ? 'Editar Docente' : 'Registrar Nuevo Docente'}</h3>
               <button
                 className="btn-close"
-                onClick={() => setIsDocenteModalOpen(false)}
+                onClick={() => { setIsDocenteModalOpen(false); setEditingDocente(null) }}
                 style={{ color: '#9ca3af', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}
               >
                 ✕
@@ -2009,10 +2054,13 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                   <label style={{ color: '#e5e7eb' }}>Código Docente *</label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    maxLength={20}
                     required
-                    placeholder="Ej. DOC-2024-001"
+                    disabled={!!editingDocente}
+                    placeholder="Ej. 2456904"
                     value={docenteFormData.codigo}
-                    onChange={(e) => setDocenteFormData({ ...docenteFormData, codigo: e.target.value })}
+                    onChange={(e) => setDocenteFormData({ ...docenteFormData, codigo: e.target.value.replace(/\D/g, '').slice(0, 20) })}
                     style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
                   />
                 </div>
@@ -2049,6 +2097,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                   <input
                     type="text"
                     required
+                    disabled={!!editingDocente}
                     placeholder="Ej. 1118234567"
                     value={docenteFormData.numero_documento}
                     onChange={(e) => setDocenteFormData({ ...docenteFormData, numero_documento: e.target.value })}
@@ -2105,31 +2154,46 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                     style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
                   />
                   <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
-                    Opcional. De 7 a 10 dígitos, sin espacios ni +57.
+                    Opcional. Debe tener 10 dígitos y empezar por 3, sin espacios ni +57.
                   </small>
+                </div>
+
+                {/* Dirección de vivienda */}
+                <div className="form-group">
+                  <label style={{ color: '#e5e7eb' }}>Dirección de vivienda (opcional)</label>
+                  <input
+                    type="text"
+                    maxLength={150}
+                    value={docenteFormData.direccion}
+                    onChange={(e) => setDocenteFormData({ ...docenteFormData, direccion: e.target.value })}
+                    placeholder="Ej. Calle 30 # 25-10, Palmira"
+                    style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
+                  />
                 </div>
 
                 {/* Tipo de Docente y Categoría */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
                   <div className="form-group">
-                    <label style={{ color: '#e5e7eb' }}>Tipo de Docente *</label>
+                    <label style={{ color: '#e5e7eb' }}>Tipo de Docente</label>
                     <select
                       value={docenteFormData.tipo_docente}
                       onChange={(e) => setDocenteFormData({ ...docenteFormData, tipo_docente: e.target.value })}
                       style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
                     >
+                      <option value="">-- Sin especificar --</option>
                       <option value="NOMBRADO">NOMBRADO</option>
                       <option value="HORA_CATEDRA">HORA CÁTEDRA</option>
                     </select>
                   </div>
 
                   <div className="form-group">
-                    <label style={{ color: '#e5e7eb' }}>Categoría (Escalafón) *</label>
+                    <label style={{ color: '#e5e7eb' }}>Categoría (Escalafón)</label>
                     <select
                       value={docenteFormData.categoria}
                       onChange={(e) => setDocenteFormData({ ...docenteFormData, categoria: e.target.value })}
                       style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
                     >
+                      <option value="">-- Sin especificar --</option>
                       <option value="AUXILIAR">AUXILIAR</option>
                       <option value="ASISTENTE">ASISTENTE</option>
                       <option value="ASOCIADO">ASOCIADO</option>
@@ -2140,9 +2204,8 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
 
                 {/* Facultad de Adscripción */}
                 <div className="form-group">
-                  <label style={{ color: '#e5e7eb' }}>Facultad de Adscripción *</label>
+                  <label style={{ color: '#e5e7eb' }}>Facultad de Adscripción</label>
                   <select
-                    required
                     value={docenteFormData.id_facultad}
                     onChange={(e) => setDocenteFormData({ ...docenteFormData, id_facultad: e.target.value })}
                     style={{ backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb' }}
@@ -2161,7 +2224,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => setIsDocenteModalOpen(false)}
+                  onClick={() => { setIsDocenteModalOpen(false); setEditingDocente(null) }}
                   disabled={submitting}
                   style={{ backgroundColor: '#374151', border: '1px solid #4b5563', color: '#e5e7eb' }}
                 >
@@ -2173,7 +2236,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
                   disabled={submitting}
                   style={{ backgroundColor: '#3b82f6', border: '1px solid #2563eb' }}
                 >
-                  {submitting ? 'Registrando...' : 'Registrar Docente'}
+                  {submitting ? 'Guardando...' : editingDocente ? 'Guardar Cambios' : 'Registrar Docente'}
                 </button>
               </div>
             </form>
@@ -2181,9 +2244,7 @@ export default function PlantillaView({ programas = [], onShowToast, onRegistrar
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 10. MODAL DE ELIMINACIÓN DE COORDINADOR                                    */}
-      {/* ========================================================================= */}
+      {/* 10. MODAL DE ELIMINACIÓN DE COORDINADOR */}
       {deletingCoord && (
         <div className="modal-backdrop">
           <div

@@ -8,7 +8,6 @@ import {
   RefreshCw,
   Save,
   BookOpen,
-  Info,
   Sparkles,
   Check,
   RotateCcw,
@@ -101,10 +100,6 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
   const selectedPeriodo = useMemo(() => {
     return periodos.find(p => String(p.id) === String(selectedPeriodoId))
   }, [periodos, selectedPeriodoId])
-
-  const periodosVigentes = useMemo(() => {
-    return periodos.filter(periodo => periodo.vigente)
-  }, [periodos])
 
   const selectedPrograma = useMemo(() => {
     return programas.find(p => p.code_program === selectedProgramCode)
@@ -662,6 +657,7 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
             onCambio={loadPeriodoData}
             onShowToast={onShowToast}
             periodoId={selectedPeriodoId}
+            periodoNombre={selectedPeriodo?.nombre || ''}
             maxCupos={cuposConfig?.maxPorGrupo ?? 60}
             puedeEditarCupos={cuposConfig?.puedeEditar ?? isAdmin}
             plazoAbierto={cuposConfig?.plazoAbierto ?? false}
@@ -696,7 +692,7 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
 
             <div className="pc-modal-body">
               <p>
-                El sistema calcula la sucesión de cohortes rotando cada semestre <em>c $\to$ c + 1</em> y proponiendo
+                El sistema calcula la sucesión de cohortes rotando cada semestre y proponiendo
                 nuevo ingreso en primer semestre con la resolución vigente. Las cohortes avanzadas conservan su resolución
                 histórica hasta extinguirse.
               </p>

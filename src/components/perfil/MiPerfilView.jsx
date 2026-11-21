@@ -12,6 +12,7 @@ import {
     Shield,
     Phone,
     Smartphone,
+    MapPin,
     Pencil
 } from 'lucide-react'
 import { getMiPerfil, getMiPerfilCoordinador } from '../../services/docenteService'
@@ -166,7 +167,7 @@ export default function MiPerfilView({ user, onShowToast }) {
                     </h1>
                     <p className="view-subtitle">
                         {esDocente
-                            ? 'Información de tu cuenta. Puedes editar tu facultad, correo personal y teléfono.'
+                            ? 'Información de tu cuenta. Puedes editar tu facultad, correo personal, teléfono, celular y dirección.'
                             : 'Información de tu cuenta (solo lectura)'}
                     </p>
                 </div>
@@ -308,6 +309,7 @@ export default function MiPerfilView({ user, onShowToast }) {
                             <Row icon={<Mail size={15} />} label="Correo personal">{docente.correo_personal || '—'}</Row>
                             <Row icon={<Phone size={15} />} label="Teléfono">{docente.telefono || '—'}</Row>
                             <Row icon={<Smartphone size={15} />} label="Celular">{docente.celular || '—'}</Row>
+                            <Row icon={<MapPin size={15} />} label="Dirección">{docente.direccion || 'Sin registrar'}</Row>
                             <Row icon={<Briefcase size={15} />} label="Tipo de docente">
                                 {TIPO_DOCENTE_LABEL[docente.tipo_docente] || docente.tipo_docente}
                             </Row>

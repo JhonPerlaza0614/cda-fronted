@@ -302,7 +302,7 @@
 }
 
 .availability-table .availability-time-heading {
-  width: 94px;
+  width: 106px;
   color: #929caf;
   font-size: 9px;
   letter-spacing: .06em;
@@ -310,13 +310,14 @@
 }
 
 .availability-hour-label {
-  width: 94px;
+  width: 106px;
   padding-right: 7px !important;
   color: #77849a;
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 650;
   text-align: left;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .availability-day-name {
@@ -748,7 +749,7 @@
 
   .availability-table .availability-time-heading,
   .availability-hour-label {
-    width: 76px;
+    width: 88px;
   }
 
   .availability-hour-label {

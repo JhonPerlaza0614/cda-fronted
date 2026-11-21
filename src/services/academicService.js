@@ -644,6 +644,15 @@ export async function getPensumVersion(code_program, version) {
   }
 }
 
+// HU-035: descarga en Excel la malla que está en pantalla. Sin versión, la vigente.
+// Solo backend: no hay alternativa en Supabase. Devuelve { blob, filename }.
+export async function descargarMallaExcel(code_program, version = null) {
+  const query = version !== null && version !== undefined
+    ? `?version=${encodeURIComponent(version)}`
+    : ''
+  return requestBackendBlob(`/pensum/programa/${encodeURIComponent(code_program)}/excel${query}`)
+}
+
 export async function deactivatePensum(code_program) {
   try {
     return await requestBackend(`/pensum/programa/${encodeURIComponent(code_program)}/desactivar`, { method: 'PATCH' })
@@ -874,6 +883,8 @@ export async function createCoordinador(coordinador) {
       body: JSON.stringify(coordinador)
     })
   } catch (err) {
+    // Si el backend respondió (400 validación, 403, 409…) ese es el error real: no se reintenta en Supabase.
+    if (err?.status) throw err
     console.warn('Fallo backend en createCoordinador, fallback Supabase:', err.message)
     const { data, error } = await supabase
       .from('coordinadores')
@@ -891,6 +902,8 @@ export async function updateCoordinador(id, changes) {
       body: JSON.stringify(changes)
     })
   } catch (err) {
+    // Si el backend respondió (400 validación, 403, 409…) ese es el error real: no se reintenta en Supabase.
+    if (err?.status) throw err
     console.warn('Fallo backend en updateCoordinador, fallback Supabase:', err.message)
     const { data, error } = await supabase
       .from('coordinadores')
@@ -908,6 +921,8 @@ export async function deleteCoordinador(id) {
       method: 'DELETE'
     })
   } catch (err) {
+    // Si el backend respondió (400 validación, 403, 409…) ese es el error real: no se reintenta en Supabase.
+    if (err?.status) throw err
     console.warn('Fallo backend en deleteCoordinador, fallback Supabase:', err.message)
     const { error } = await supabase
       .from('coordinadores')
@@ -984,6 +999,8 @@ export async function toggleDocenteEstado(id, nuevoEstado) {
       method: 'PATCH'
     })
   } catch (err) {
+    // Si el backend respondió (400 validación, 403, 409…) ese es el error real: no se reintenta en Supabase.
+    if (err?.status) throw err
     console.warn('Fallo backend en toggleDocenteEstado, fallback Supabase:', err.message)
     const { data, error } = await supabase
       .from('docentes')
@@ -1001,6 +1018,8 @@ export async function toggleCoordinadorActivo(id, nuevoActivo) {
       method: 'PATCH'
     })
   } catch (err) {
+    // Si el backend respondió (400 validación, 403, 409…) ese es el error real: no se reintenta en Supabase.
+    if (err?.status) throw err
     console.warn('Fallo backend en toggleCoordinadorActivo, fallback Supabase:', err.message)
     const { data, error } = await supabase
       .from('coordinadores')
@@ -1019,6 +1038,8 @@ export async function createDocente(docente) {
       body: JSON.stringify(docente)
     })
   } catch (err) {
+    // Si el backend respondió (400 validación, 403, 409…) ese es el error real: no se reintenta en Supabase.
+    if (err?.status) throw err
     console.warn('Fallo backend en createDocente, fallback Supabase:', err.message)
     const { data, error } = await supabase
       .from('docentes')
@@ -1036,6 +1057,8 @@ export async function updateDocente(id, changes) {
       body: JSON.stringify(changes)
     })
   } catch (err) {
+    // Si el backend respondió (400 validación, 403, 409…) ese es el error real: no se reintenta en Supabase.
+    if (err?.status) throw err
     console.warn('Fallo backend en updateDocente, fallback Supabase:', err.message)
     const { data, error } = await supabase
       .from('docentes')

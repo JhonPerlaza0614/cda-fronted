@@ -25,17 +25,19 @@ import {
   AlertTriangle,
   Edit3,
   Eye,
-  FileText
+  FileText,
+  FileSpreadsheet,
+  RefreshCw
 } from 'lucide-react'
 import {
-  createAsignatura,
   getFacultades,
   savePensumVersion,
   updatePensumVersion,
   getPensumHistory,
   getPensumVersion,
   deactivatePensum,
-  reactivatePensum
+  reactivatePensum,
+  descargarMallaExcel
 } from '../../services/academicService'
 import {
   getElectivasProgramadas,
@@ -54,11 +56,23 @@ function inferTipoAsignatura(item) {
   return 'Profesional'
 }
 
-// Espacio «Electiva Profesional N» de la malla (la complementaria es de las básicas y no cuenta)
+// Espacio «Electiva Profesional N» de la malla (la complementaria se trata aparte)
 function esEspacioElectiva(code) {
   const c = String(code || '').toUpperCase()
   return c.startsWith('ELE-PROF-') && c !== 'ELE-PROF-COMPLEMENTARIA'
 }
+
+const ESPACIO_COMPLEMENTARIA = 'ELE-PROF-COMPLEMENTARIA'
+// Prefijos de escuela «todas las facultades»: sus electivas las ve cualquier programa
+const ESCUELAS_COMUNES = ['990', '999']
+
+// El coordinador solo programa la complementaria cuando su espacio está en el primer semestre;
+// en los demás semestres es un esqueleto que no se llena (los estudiantes escogen).
+function esEspacioComplementariaProgramable(item) {
+  return String(item?.code_course || '').toUpperCase() === ESPACIO_COMPLEMENTARIA && Number(item?.semestre) === 1
+}
+
+const esCodigoComplementaria = (code) => String(code || '').toUpperCase() === ESPACIO_COMPLEMENTARIA
 
 export default function PensumView({
   programas,
@@ -121,6 +135,8 @@ export default function PensumView({
   // Estado para la barra de electivas disponibles
   const [facultadesList, setFacultadesList] = useState([])
   const [programFacultyId, setProgramFacultyId] = useState('')
+  // Escuelas cuyas electivas profesionales ve el programa (vacío: se filtra por facultad)
+  const [escuelasBanco, setEscuelasBanco] = useState([])
   const [electivesSearch, setElectivesSearch] = useState('')
   const [isElectivesDockExpanded, setIsElectivesDockExpanded] = useState(true)
   const [electivesTabFilter, setElectivesTabFilter] = useState('all')
@@ -129,6 +145,9 @@ export default function PensumView({
   const [programSearch, setProgramSearch] = useState('')
   const [programDropdownOpen, setProgramDropdownOpen] = useState(false)
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
+  // HU-035: descarga de la malla en Excel
+  const [descargandoExcel, setDescargandoExcel] = useState(false)
+  const [errorExcel, setErrorExcel] = useState(null)
   const programInputRef = useRef(null)
   const comboboxRef = useRef(null)
   const actionsMenuRef = useRef(null)
@@ -138,33 +157,9 @@ export default function PensumView({
   const [draggingCode, setDraggingCode] = useState(null)
   const [dragOverSem, setDragOverSem] = useState(null)
 
-  // La barra de semestres se pega justo debajo del navbar, mida lo que mida (zoom, móvil)
-  const [stickyTop, setStickyTop] = useState(76)
-  useEffect(() => {
-    const measure = () => {
-      const nav = document.querySelector('.navbar')
-      if (nav) setStickyTop(nav.offsetHeight + 8)
-    }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [])
-
-  // Navegación de la malla: scroll horizontal, arrastre del fondo con el mouse y saltos por semestre
+  // Navegación de la malla: arrastre del fondo con el mouse
   const mallaRef = useRef(null)
   const panRef = useRef({ active: false, startX: 0, startLeft: 0 })
-
-  const scrollMalla = (direction) => {
-    mallaRef.current?.scrollBy({ left: direction * 300, behavior: 'smooth' })
-  }
-
-  const scrollToSemester = (num) => {
-    const wrapper = mallaRef.current
-    const column = wrapper?.querySelector(`[data-sem="${num}"]`)
-    if (wrapper && column) {
-      wrapper.scrollTo({ left: Math.max(0, column.offsetLeft - 16), behavior: 'smooth' })
-    }
-  }
 
   const handleMallaMouseDown = (e) => {
     const skip = canEdit
@@ -387,8 +382,17 @@ export default function PensumView({
     })
   }, [allElectivasDisponibles, electivesSearch])
 
+  // Pertenece al banco profesional del programa: por escuela (prefijo del código) o, sin escuela, por facultad
+  const delBancoProfesional = useCallback((a) => {
+    if (escuelasBanco.length > 0) {
+      const prefijo = String(a.code_course || '').slice(0, 3)
+      return escuelasBanco.some(e => e.codigo === prefijo) || ESCUELAS_COMUNES.includes(prefijo)
+    }
+    return Boolean(programFacultyId) && String(a.id_facultad) === String(programFacultyId)
+  }, [escuelasBanco, programFacultyId])
+
   const electivasEspecializadas = useMemo(() => {
-    if (!programFacultyId) return []
+    if (!programFacultyId && escuelasBanco.length === 0) return []
     return allElectivasDisponibles.filter(a => {
       const isComun = Boolean(
         a.es_complementaria ||
@@ -396,14 +400,14 @@ export default function PensumView({
         a.name_course?.toLowerCase().includes('complementar')
       )
       if (isComun) return false
-      if (String(a.id_facultad) !== String(programFacultyId)) return false
+      if (!delBancoProfesional(a)) return false
       if (electivesSearch.trim()) {
         const q = electivesSearch.toLowerCase()
         return a.code_course.toLowerCase().includes(q) || a.name_course.toLowerCase().includes(q)
       }
       return true
     })
-  }, [allElectivasDisponibles, programFacultyId, electivesSearch])
+  }, [allElectivasDisponibles, programFacultyId, escuelasBanco, delBancoProfesional, electivesSearch])
 
   // =========================================================================
   // LÓGICA DE RESOLUCIÓN (HU-017) Y EDICIÓN DE MALLA (HU-032) CON COLUMNAS
@@ -711,6 +715,7 @@ export default function PensumView({
   // de la malla. La malla no se modifica: al cambiar de período el espacio vuelve a verse vacío.
   // =========================================================================
   const [electivasProg, setElectivasProg] = useState([])
+  const [pendientesObligatorias, setPendientesObligatorias] = useState([])
   const [electivasMeta, setElectivasMeta] = useState({ periodoId: null, plazoAbierto: false, puedeEditar: false })
   const [electivaModal, setElectivaModal] = useState(null)
   const [electivaSaving, setElectivaSaving] = useState(false)
@@ -719,12 +724,16 @@ export default function PensumView({
     const code = currentProgram?.code_program
     if (!code) {
       setElectivasProg([])
+      setPendientesObligatorias([])
+      setEscuelasBanco([])
       setElectivasMeta({ periodoId: null, plazoAbierto: false, puedeEditar: false })
       return
     }
     try {
       const r = await getElectivasProgramadas(code)
       setElectivasProg(r?.electivas || [])
+      setPendientesObligatorias(Array.isArray(r?.pendientesObligatorias) ? r.pendientesObligatorias : [])
+      setEscuelasBanco(r?.escuelasBanco || [])
       setElectivasMeta({
         periodoId: r?.periodoId ?? null,
         plazoAbierto: Boolean(r?.plazoAbierto),
@@ -732,6 +741,8 @@ export default function PensumView({
       })
     } catch {
       setElectivasProg([])
+      setPendientesObligatorias([])
+      setEscuelasBanco([])
       setElectivasMeta({ periodoId: null, plazoAbierto: false, puedeEditar: false })
     }
   }, [currentProgram?.code_program])
@@ -751,13 +762,17 @@ export default function PensumView({
   // Espacios de la malla que todavía no tienen electiva programada
   const espaciosLibres = useMemo(() => {
     return currentPensum
-      .filter(i => esEspacioElectiva(i.code_course) && !electivaPorEspacio.has(String(i.code_course).toUpperCase()))
+      .filter(i => (esEspacioElectiva(i.code_course) || esEspacioComplementariaProgramable(i)) &&
+        !electivaPorEspacio.has(String(i.code_course).toUpperCase()))
       .sort((a, b) => (a.semestre - b.semestre) || String(a.code_course).localeCompare(String(b.code_course)))
   }, [currentPensum, electivaPorEspacio])
 
-  // Banco profesional: electivas de la facultad del programa (sin las comunes ni los espacios de la malla)
+  const hayEspacioProfesionalLibre = espaciosLibres.some(i => !esCodigoComplementaria(i.code_course))
+  const hayEspacioComplementariaLibre = espaciosLibres.some(i => esCodigoComplementaria(i.code_course))
+
+  // Banco profesional: electivas del banco del programa (por escuela o, sin escuela, por facultad),
+  // sin las comunes ni los espacios de la malla
   const bancoProfesional = useMemo(() => {
-    if (!programFacultyId) return []
     return allElectivasDisponibles.filter(a => {
       const esComun = Boolean(
         a.es_complementaria ||
@@ -765,9 +780,25 @@ export default function PensumView({
         a.name_course?.toLowerCase().includes('complementar')
       )
       return Boolean(a.is_elective) && !esComun && !esEspacioElectiva(a.code_course) &&
-        a.activo !== false && String(a.id_facultad) === String(programFacultyId)
+        a.activo !== false && delBancoProfesional(a)
     })
-  }, [allElectivasDisponibles, programFacultyId])
+  }, [allElectivasDisponibles, delBancoProfesional])
+
+  // Banco de la complementaria del primer semestre: todas las electivas complementarias activas
+  const bancoComplementaria = useMemo(
+    () => allElectivasDisponibles.filter(a => Boolean(a.es_complementaria) && a.activo !== false),
+    [allElectivasDisponibles]
+  )
+
+  const bancoDeEspacio = (codeEspacio) =>
+    esCodigoComplementaria(codeEspacio) ? bancoComplementaria : bancoProfesional
+
+  // Una electiva complementaria solo va en el espacio de complementaria y una profesional en los demás
+  const compatibles = (codeCourse, codeEspacio) => {
+    if (!codeCourse || !codeEspacio) return true
+    const esComp = bancoComplementaria.some(a => a.code_course === codeCourse)
+    return esComp === esCodigoComplementaria(codeEspacio)
+  }
 
   const abrirModalElectiva = (config) => {
     setElectivaModal({ cursoId: null, codeEspacio: '', codeCourse: '', cupos: '', ...config })
@@ -820,7 +851,8 @@ export default function PensumView({
 
   // Lo que se muestra dentro de la tarjeta de un espacio «Electiva Profesional N»
   const renderElectivaEspacio = (item) => {
-    if (!esEspacioElectiva(item.code_course) || isViewingInactive || electivasMeta.periodoId === null) return null
+    const programable = esEspacioElectiva(item.code_course) || esEspacioComplementariaProgramable(item)
+    if (!programable || isViewingInactive || electivasMeta.periodoId === null) return null
     const prog = electivaPorEspacio.get(String(item.code_course).toUpperCase())
     if (!prog) {
       if (!puedeProgramarElectivas) return null
@@ -830,7 +862,7 @@ export default function PensumView({
           className="btn-programar-electiva print-hide"
           onClick={() => abrirModalElectiva({ codeEspacio: item.code_course })}
         >
-          <Sparkles size={12} /> Programar electiva
+          <Sparkles size={12} /> {esCodigoComplementaria(item.code_course) ? 'Programar complementaria' : 'Programar electiva'}
         </button>
       )
     }
@@ -892,13 +924,6 @@ export default function PensumView({
     const roman = romanNumerals[count - 1] || `${count}`
     return `Electiva Profesional ${roman}`
   }, [currentProgram, currentPensum])
-
-  const handleSwitchToElective = () => {
-    setAddMode('elective')
-    setElectiveCode('')
-    setElectiveName(getConsecutiveElectiveName())
-    setElectiveCredits('')
-  }
 
   const handleOpenAddModal = (semesterNum = 1) => {
     if (!effectiveCanEdit) return
@@ -1135,6 +1160,39 @@ export default function PensumView({
 
   const handlePrint = () => {
     window.print()
+  }
+
+  // HU-035: exporta la versión que está en pantalla (vigente o del historial).
+  const handleDescargarExcel = async () => {
+    if (!currentProgram || descargandoExcel) return
+    setDescargandoExcel(true)
+    setErrorExcel(null)
+    try {
+      const version = isViewingInactive ? viewingInactiveVersion : null
+      const { blob, filename } = await descargarMallaExcel(currentProgram.code_program, version)
+      const url = URL.createObjectURL(blob)
+      const enlace = document.createElement('a')
+      enlace.href = url
+      enlace.download = filename || 'malla.xlsx'
+      document.body.appendChild(enlace)
+      enlace.click()
+      enlace.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      // 403, 404 y 409 traen un mensaje propio del backend; cualquier otra falla es el criterio 3.
+      const mensaje = [403, 404, 409].includes(err?.status) && err.message
+        ? err.message
+        : 'No se pudo generar el archivo'
+      // Se guarda con el programa y la versión para no mostrarlo al cambiar de malla.
+      setErrorExcel({
+        mensaje,
+        code_program: currentProgram.code_program,
+        version: isViewingInactive ? viewingInactiveVersion : null
+      })
+      onShowToast(mensaje, 'error')
+    } finally {
+      setDescargandoExcel(false)
+    }
   }
 
   if (programas.length === 0) {
@@ -1403,6 +1461,39 @@ export default function PensumView({
                 <span>Imprimir / Exportar Malla</span>
               </button>
 
+              <button
+                type="button"
+                onClick={() => {
+                  setActionsMenuOpen(false)
+                  handleDescargarExcel()
+                }}
+                disabled={descargandoExcel || currentPensum.length === 0 || hasUnsavedChanges}
+                title={hasUnsavedChanges
+                  ? 'Guarda primero los cambios pendientes'
+                  : (currentPensum.length === 0 ? 'La malla no tiene asignaturas' : 'Descargar la malla en Excel')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.65rem',
+                  width: '100%',
+                  padding: '0.6rem 0.75rem',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.88rem',
+                  fontWeight: 600,
+                  color: '#0f172a',
+                  cursor: descargandoExcel || currentPensum.length === 0 || hasUnsavedChanges ? 'not-allowed' : 'pointer',
+                  opacity: descargandoExcel || currentPensum.length === 0 || hasUnsavedChanges ? 0.55 : 1,
+                  textAlign: 'left'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+              >
+                {descargandoExcel ? <RefreshCw size={16} className="pc-spin" /> : <FileSpreadsheet size={16} />}
+                <span>{descargandoExcel ? 'Generando Excel...' : 'Descargar Excel'}</span>
+              </button>
+
               {canEdit && isActiveMalla && (
                 <>
                   <div style={{ height: '1px', background: '#e2e8f0', margin: '0.2rem 0' }} />
@@ -1442,6 +1533,31 @@ export default function PensumView({
         </div>
       </div>
 
+      {/* HU-035 criterio 3: error al generar el Excel, con reintento */}
+      {errorExcel
+        && errorExcel.code_program === currentProgram?.code_program
+        && errorExcel.version === (isViewingInactive ? viewingInactiveVersion : null) && (
+          <div className="warning-banner print-hide" role="alert" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <AlertTriangle size={18} />
+              <span>{errorExcel.mensaje}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn-primary btn-sm"
+                onClick={handleDescargarExcel}
+                disabled={descargandoExcel}
+              >
+                <RefreshCw size={14} className={descargandoExcel ? 'pc-spin' : undefined} /> Reintentar
+              </button>
+              <button type="button" className="btn-secondary btn-sm" onClick={() => setErrorExcel(null)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        )}
+
       {/* Banner de Malla Inactiva — Solo Consulta (HU-032 Criterio 1) */}
       {isViewingInactive && (
         <div className="warning-banner print-hide" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -1472,6 +1588,66 @@ export default function PensumView({
             >
               Volver a malla activa
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Alerta de electivas obligatorias pendientes para el período académico vigente */}
+      {!isViewingInactive && electivasMeta.periodoId !== null && pendientesObligatorias.length > 0 && (
+        <div
+          className="warning-banner print-hide"
+          role="alert"
+          style={{
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: '0.65rem',
+            background: '#fffbeb',
+            borderColor: '#f59e0b',
+            color: '#92400e'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem' }}>
+            <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px', color: '#d97706' }} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.93rem' }}>
+                Selección obligatoria de electivas pendiente para el período vigente ({pendientesObligatorias.length})
+              </div>
+              <div style={{ fontSize: '0.84rem', marginTop: '0.15rem' }}>
+                Los siguientes espacios de electiva pertenecen a semestres activos de este período y deben escogerse obligatoriamente. Al iniciar un nuevo período académico, las selecciones se limpian automáticamente.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', paddingLeft: '1.85rem' }}>
+            {pendientesObligatorias.map((p) => (
+              <div
+                key={`${p.codeEspacio}-${p.semestre}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.55rem',
+                  padding: '0.35rem 0.65rem',
+                  borderRadius: '8px',
+                  background: '#fef3c7',
+                  border: '1px solid #fcd34d',
+                  fontSize: '0.82rem',
+                  color: '#78350f'
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>
+                  {p.nombreEspacio} · Semestre {p.semestre}
+                </span>
+                {puedeProgramarElectivas && (
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm"
+                    style={{ padding: '0.2rem 0.55rem', fontSize: '0.76rem' }}
+                    onClick={() => abrirModalElectiva({ codeEspacio: p.codeEspacio })}
+                  >
+                    Escoger ahora
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -1732,7 +1908,7 @@ export default function PensumView({
       {!canEdit && (
         <div className="info-banner print-hide">
           <BookOpen size={18} />
-          <span>Modo consulta: puedes visualizar la malla vigente y consultar su historial, pero no modificarla.</span>
+          <span>Modo consulta: puedes visualizar la malla vigente y consultar su historial, pero no modificarla. Solo puedes programar las electivas profesionales en sus espacios.</span>
         </div>
       )}
 
@@ -2084,7 +2260,11 @@ export default function PensumView({
                       <span className="dock-pill-tag tag-especializada">
                         <Layers size={13} /> Profesionales
                       </span>
-                      <h4>{currentFacultyObj ? `Facultad de ${currentFacultyObj.nombre || currentFacultyObj.Nombre}` : 'Profesionales de la Carrera'}</h4>
+                      <h4>
+                        {escuelasBanco.length > 0
+                          ? escuelasBanco.map(e => e.nombre).join(' · ')
+                          : (currentFacultyObj ? `Facultad de ${currentFacultyObj.nombre || currentFacultyObj.Nombre}` : 'Profesionales de la Carrera')}
+                      </h4>
                     </div>
                     <span className="dock-count-badge">{electivasEspecializadas.length} materias</span>
                   </div>
@@ -2092,10 +2272,14 @@ export default function PensumView({
                   <div className="dock-cards-scroll">
                     {electivasEspecializadas.length === 0 ? (
                       <div className="dock-empty-state">
-                        <p>No hay electivas profesionales registradas para la facultad de esta carrera.</p>
-                        <button className="btn-link" onClick={onNavigateToAsignaturas}>
-                          + Crear electiva profesional en Asignaturas
-                        </button>
+                        <p>{escuelasBanco.length > 0
+                          ? 'No hay electivas profesionales registradas para la escuela de esta carrera.'
+                          : 'No hay electivas profesionales registradas para la facultad de esta carrera.'}</p>
+                        {canEdit && (
+                          <button className="btn-link" onClick={onNavigateToAsignaturas}>
+                            + Crear electiva profesional en Asignaturas
+                          </button>
+                        )}
                       </div>
                     ) : (
                       electivasEspecializadas.map(el => {
@@ -2117,7 +2301,7 @@ export default function PensumView({
                               ) : (
                                 <span className="dock-available-badge">Disponible</span>
                               )}
-                              {puedeProgramarElectivas && espaciosLibres.length > 0 &&
+                              {puedeProgramarElectivas && hayEspacioProfesionalLibre &&
                                 !electivasProg.some(p => p.codeCourse === el.code_course) && (
                                   <button
                                     type="button"
@@ -2176,6 +2360,16 @@ export default function PensumView({
                               ) : (
                                 <span className="dock-available-badge">Disponible</span>
                               )}
+                              {puedeProgramarElectivas && hayEspacioComplementariaLibre && el.es_complementaria &&
+                                !electivasProg.some(p => p.codeCourse === el.code_course) && (
+                                  <button
+                                    type="button"
+                                    className="btn-programar-electiva"
+                                    onClick={() => abrirModalElectiva({ codeCourse: el.code_course })}
+                                  >
+                                    Programar
+                                  </button>
+                                )}
                             </div>
                           </div>
                         )
@@ -2527,7 +2721,7 @@ export default function PensumView({
         <div className="modal-backdrop">
           <div className="modal-card">
             <div className="modal-header">
-              <h2>{electivaModal.cursoId ? 'Modificar electiva programada' : 'Programar electiva profesional'}</h2>
+              <h2>{electivaModal.cursoId ? 'Modificar electiva programada' : 'Programar electiva'}</h2>
               <button className="modal-close-btn" onClick={() => setElectivaModal(null)} disabled={electivaSaving}>
                 <X size={20} />
               </button>
@@ -2539,22 +2733,42 @@ export default function PensumView({
                 </p>
 
                 <div className="form-group" style={{ marginTop: '1rem' }}>
-                  <label htmlFor="electiva-asignatura">Electiva profesional:</label>
+                  <label htmlFor="electiva-asignatura">Electiva:</label>
                   <select
                     id="electiva-asignatura"
                     className="select-input"
                     value={electivaModal.codeCourse}
-                    onChange={(e) => setElectivaModal(m => ({ ...m, codeCourse: e.target.value }))}
+                    onChange={(e) => setElectivaModal(m => ({
+                      ...m,
+                      codeCourse: e.target.value,
+                      codeEspacio: compatibles(e.target.value, m.codeEspacio) ? m.codeEspacio : ''
+                    }))}
                   >
                     <option value="">Selecciona una electiva…</option>
-                    {bancoProfesional
-                      .filter(a => a.code_course === electivaModal.codeCourse ||
+                    {(() => {
+                      const libres = (lista) => lista.filter(a => a.code_course === electivaModal.codeCourse ||
                         !electivasProg.some(p => p.codeCourse === a.code_course))
-                      .map(a => (
+                      const opcion = (a) => (
                         <option key={a.code_course} value={a.code_course}>
                           {a.code_course} · {a.name_course}
                         </option>
-                      ))}
+                      )
+                      if (electivaModal.codeEspacio) {
+                        return libres(bancoDeEspacio(electivaModal.codeEspacio)).map(opcion)
+                      }
+                      return (
+                        <>
+                          <optgroup label="Electivas profesionales">
+                            {libres(bancoProfesional).map(opcion)}
+                          </optgroup>
+                          {hayEspacioComplementariaLibre && (
+                            <optgroup label="Electivas complementarias (primer semestre)">
+                              {libres(bancoComplementaria).map(opcion)}
+                            </optgroup>
+                          )}
+                        </>
+                      )
+                    })()}
                   </select>
                 </div>
 
@@ -2565,12 +2779,16 @@ export default function PensumView({
                     className="select-input"
                     value={electivaModal.codeEspacio}
                     disabled={Boolean(electivaModal.cursoId)}
-                    onChange={(e) => setElectivaModal(m => ({ ...m, codeEspacio: e.target.value }))}
+                    onChange={(e) => setElectivaModal(m => ({
+                      ...m,
+                      codeEspacio: e.target.value,
+                      codeCourse: compatibles(m.codeCourse, e.target.value) ? m.codeCourse : ''
+                    }))}
                   >
                     <option value="">Selecciona el espacio de la malla…</option>
                     {(electivaModal.cursoId
                       ? currentPensum.filter(i => i.code_course === electivaModal.codeEspacio)
-                      : espaciosLibres
+                      : espaciosLibres.filter(i => compatibles(electivaModal.codeCourse, i.code_course))
                     ).map(i => (
                       <option key={i.code_course} value={i.code_course}>
                         {i.name_course} · Semestre {i.semestre}

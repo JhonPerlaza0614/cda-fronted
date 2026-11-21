@@ -8,6 +8,7 @@ import {
     Mail,
     Phone,
     Smartphone,
+    MapPin,
     IdCard,
     BookOpen,
     CheckCircle2,
@@ -49,6 +50,7 @@ const EMPTY_FORM = {
     correo_institucional: '',
     telefono: '',
     celular: '',
+    direccion: '',
     tipo_docente: '',
     categoria: '',
     code_program: ''
@@ -57,6 +59,7 @@ const EMPTY_FORM = {
 const SOLO_LETRAS = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/
 const SOLO_NUMEROS = /^[0-9]+$/
 const CORREO_UNIVALLE = /^[a-zA-Z0-9._%+-]+@correounivalle\.edu\.co$/
+const soloDigitos = (v, max) => v.replace(/\D/g, '').slice(0, max)
 
 // El backend (Spring) devuelve las claves de validación en camelCase
 // (p. ej. "correoInstitucional"); el formulario usa snake_case.
@@ -67,6 +70,7 @@ function validate(f) {
 
     if (!f.codigo.trim()) e.codigo = 'El código del docente es obligatorio'
     else if (f.codigo.length > 20) e.codigo = 'El código no puede exceder 20 caracteres'
+    else if (!SOLO_NUMEROS.test(f.codigo.trim())) e.codigo = 'El código del docente solo puede contener números'
 
     if (!f.nombres.trim()) e.nombres = 'Los nombres son obligatorios'
     else if (f.nombres.length > 30) e.nombres = 'Los nombres no pueden exceder 30 caracteres'
@@ -85,19 +89,18 @@ function validate(f) {
     if (f.telefono.trim() && !/^[0-9]{7,10}$/.test(f.telefono.trim())) {
         e.telefono = 'El teléfono solo admite de 7 a 10 dígitos'
     }
-    if (f.celular.trim() && !/^[0-9]{7,10}$/.test(f.celular.trim())) {
-        e.celular = 'El celular solo admite de 7 a 10 dígitos'
+    if (f.celular.trim() && !/^3[0-9]{9}$/.test(f.celular.trim())) {
+        e.celular = 'El celular debe tener 10 dígitos y empezar por 3'
     }
 
     if (!f.correo_institucional.trim()) e.correo_institucional = 'El correo institucional es obligatorio'
     else if (f.correo_institucional.length > 50) e.correo_institucional = 'El correo no puede exceder 50 caracteres'
     else if (!CORREO_UNIVALLE.test(f.correo_institucional.trim())) e.correo_institucional = 'El correo debe tener dominio @correounivalle.edu.co'
 
-    if (f.telefono.length > 20) e.telefono = 'El teléfono no puede exceder 20 caracteres'
-
-    if (!f.tipo_docente) e.tipo_docente = 'El tipo de docente es obligatorio'
-    if (!f.categoria) e.categoria = 'La categoría es obligatoria'
-    if (!f.code_program) e.code_program = 'El programa de adscripción es obligatorio'
+    if (f.direccion.length > 150) e.direccion = 'La dirección no puede exceder 150 caracteres'
+    else if (f.direccion.trim() && !/^[\p{L}\p{N}\s#\-.,°ºª/]+$/u.test(f.direccion)) {
+        e.direccion = 'La dirección solo admite letras, números y los signos # - . , / °'
+    }
 
     return e
 }
@@ -113,9 +116,10 @@ function buildPayload(f) {
         correo_institucional: f.correo_institucional.trim().toLowerCase(),
         telefono: opt(f.telefono),
         celular: opt(f.celular),
-        tipo_docente: f.tipo_docente,
-        categoria: f.categoria,
-        code_program: f.code_program
+        direccion: opt(f.direccion),
+        tipo_docente: f.tipo_docente || null,
+        categoria: f.categoria || null,
+        code_program: f.code_program || null
     }
 }
 
@@ -466,7 +470,7 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                     { icon: <Award size={13} />, text: labelOf(CATEGORIAS, d.categoria), title: 'Categoría' },
                                     { icon: <Briefcase size={13} />, text: labelOf(TIPOS_DOCENTE, d.tipo_docente), title: 'Tipo de docente' },
                                     { icon: <BookOpen size={13} />, text: d.nombre_programa || d.code_program, title: 'Programa' }
-                                ].map((b) => (
+                                ].filter((b) => b.text).map((b) => (
                                     <span
                                         key={b.title}
                                         title={b.title}
@@ -506,6 +510,12 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                         <span>{d.telefono}</span>
                                     </div>
                                 )}
+                                {d.direccion && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <MapPin size={14} style={{ color: '#71717a', flexShrink: 0 }} />
+                                        <span>{d.direccion}</span>
+                                    </div>
+                                )}
                                 {d.celular && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                         <Smartphone size={14} style={{ color: '#71717a', flexShrink: 0 }} />
@@ -543,10 +553,11 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                 <Field label="Código de docente" required error={errors.codigo}>
                                     <input
                                         type="text"
+                                        inputMode="numeric"
                                         maxLength={20}
                                         placeholder="Ej. 1001"
                                         value={formData.codigo}
-                                        onChange={(e) => update('codigo', e.target.value)}
+                                        onChange={(e) => update('codigo', soloDigitos(e.target.value, 20))}
                                     />
                                 </Field>
 
@@ -577,7 +588,7 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                         maxLength={11}
                                         placeholder="Ej. 10234567"
                                         value={formData.numero_documento}
-                                        onChange={(e) => update('numero_documento', e.target.value)}
+                                        onChange={(e) => update('numero_documento', soloDigitos(e.target.value, 11))}
                                     />
                                 </Field>
 
@@ -593,25 +604,37 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
 
                                 <Field label="Teléfono" error={errors.telefono}>
                                     <input
-                                        type="text"
-                                        maxLength={20}
+                                        type="tel"
+                                        inputMode="numeric"
+                                        maxLength={10}
                                         placeholder="Ej. 6023212100"
                                         value={formData.telefono}
-                                        onChange={(e) => update('telefono', e.target.value)}
+                                        onChange={(e) => update('telefono', soloDigitos(e.target.value, 10))}
                                     />
                                 </Field>
 
                                 <Field label="Celular" error={errors.celular}>
                                     <input
-                                        type="text"
-                                        maxLength={20}
+                                        type="tel"
+                                        inputMode="numeric"
+                                        maxLength={10}
                                         placeholder="Ej. 3001234567"
                                         value={formData.celular}
-                                        onChange={(e) => update('celular', e.target.value)}
+                                        onChange={(e) => update('celular', soloDigitos(e.target.value, 10))}
                                     />
                                 </Field>
 
-                                <Field label="Tipo de docente" required error={errors.tipo_docente}>
+                                <Field label="Dirección de vivienda" error={errors.direccion}>
+                                    <input
+                                        type="text"
+                                        maxLength={150}
+                                        placeholder="Ej. Calle 30 # 25-10, Palmira"
+                                        value={formData.direccion}
+                                        onChange={(e) => update('direccion', e.target.value)}
+                                    />
+                                </Field>
+
+                                <Field label="Tipo de docente" error={errors.tipo_docente}>
                                     <select value={formData.tipo_docente} onChange={(e) => update('tipo_docente', e.target.value)}>
                                         <option value="">-- Selecciona --</option>
                                         {TIPOS_DOCENTE.map((t) => (
@@ -622,7 +645,7 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                     </select>
                                 </Field>
 
-                                <Field label="Categoría" required error={errors.categoria}>
+                                <Field label="Categoría" error={errors.categoria}>
                                     <select value={formData.categoria} onChange={(e) => update('categoria', e.target.value)}>
                                         <option value="">-- Selecciona --</option>
                                         {CATEGORIAS.map((c) => (
@@ -633,7 +656,7 @@ export default function CrearDocenteView({ programas = [], onShowToast, onSaved 
                                     </select>
                                 </Field>
 
-                                <Field label="Programa de adscripción" required error={errors.code_program}>
+                                <Field label="Programa de adscripción" error={errors.code_program}>
                                     <select value={formData.code_program} onChange={(e) => update('code_program', e.target.value)}>
                                         <option value="">-- Selecciona --</option>
                                         {programas.map((p) => (

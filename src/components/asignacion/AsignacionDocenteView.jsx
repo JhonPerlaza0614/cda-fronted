@@ -7,23 +7,35 @@ import {
   Search,
   BookOpen,
   Clock,
-  CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   RefreshCw,
+  Info,
   X,
   Layers,
-  ChevronRight,
   UserPlus,
-  Building2
+  Building2,
+  Plus,
+  Trash2,
+  Pencil
 } from 'lucide-react'
-import { getDocentes, getEvaluacionesDocentes, getCargaPorPeriodo } from '../../services/docenteService'
+import {
+  getDocentes,
+  getEvaluacionesDocentes,
+  getCargaPorPeriodo
+} from '../../services/docenteService'
 import { getPeriodos, getFacultades } from '../../services/academicService'
 import {
   getProgramacion,
   asignarDocenteACurso,
+  getElectivasProgramadas,
+  programarElectiva,
+  modificarElectiva,
+  quitarElectiva
 } from '../../services/programacionService'
 import { consultarDisponibilidadesPeriodo } from '../../services/DisponibilidadService'
 import './AsignacionDocenteView.css'
+import './AsignacionDocenteComplementarias.css'
 
 const DIAS_SEMANA = {
   1: 'Lunes',
@@ -179,9 +191,6 @@ function horasRegistradas(franjas) {
 }
 
 
-// Cache en memoria entre visitas para mostrar materias de inmediato sin spinner
-const cacheCursosGlobal = new Map()
-
 export default function AsignacionDocenteView({
   user,
   isAdmin = false,
@@ -192,7 +201,6 @@ export default function AsignacionDocenteView({
   // (al coordinador `programas` le llega solo con el suyo).
   programasTodos = null,
   pensumList = [],
-  periodoActivoProp = null,
   onShowToast
 }) {
   // 1. Estado de selección de Programa y Período
@@ -202,33 +210,27 @@ export default function AsignacionDocenteView({
     : (programas[0]?.code_program || '')
 
   const [selectedProgramCode, setSelectedProgramCode] = useState(defaultProgramCode)
-  const [periodos, setPeriodos] = useState([])
-  const [periodoActivo, setPeriodoActivo] = useState(periodoActivoProp)
+  const [periodoActivo, setPeriodoActivo] = useState(null)
   const [facultadesList, setFacultadesList] = useState([])
 
   // 2. Semestre seleccionado (donde escojan un semestre)
   const [selectedSemestre, setSelectedSemestre] = useState(1)
 
-  // Cache inicial si ya se consultó antes este programa
-  const cacheKeyInicial = `${periodoActivoProp?.id || ''}_${defaultProgramCode}_${FILTRO_JORNADA_DEFECTO}`
-  const cursosIniciales = cacheCursosGlobal.get(cacheKeyInicial) || {}
-
   // 3. Datos de cursos programados (por programa visible), docentes y sus disponibilidades
-  const [cursosPorPrograma, setCursosPorPrograma] = useState(cursosIniciales)
+  const [cursosPorPrograma, setCursosPorPrograma] = useState({}) // { codeProgram: [cursos, incluidos excluidos] }
   const [docentesList, setDocentesList] = useState([])
   const [disponibilidadesMap, setDisponibilidadesMap] = useState({}) // { docenteId: [items] }
   const [cargaPorDocente, setCargaPorDocente] = useState({})
   const [cargaDisponible, setCargaDisponible] = useState(false)
   const [evaluacionesMap, setEvaluacionesMap] = useState({}) // { docenteId: evaluation }
-  const [loading, setLoading] = useState(Object.keys(cursosIniciales).length === 0)
+  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [periodosCargando, setPeriodosCargando] = useState(!periodoActivoProp)
+  const [periodosCargando, setPeriodosCargando] = useState(true)
   const [errorCarga, setErrorCarga] = useState(false)
   // Número de la última carga: una respuesta de una carga anterior (otra jornada) se ignora.
   const cargaSeq = useRef(0)
   // Datos del modal (docentes, disps, carga): se cargan solo la primera vez
   const datosModalCargados = useRef(false)
-  const [cargandoModal, setCargandoModal] = useState(false)
 
   // HU-016: filtros (no se guardan en localStorage)
   const [filtroJornada, setFiltroJornada] = useState(FILTRO_JORNADA_DEFECTO)
@@ -236,9 +238,17 @@ export default function AsignacionDocenteView({
 
   // 4. Modal de designación de docente
   const [materiaParaDesignar, setMateriaParaDesignar] = useState(null)
+  const [franjasSeleccionadas, setFranjasSeleccionadas] = useState({}) // { [docenteId]: franjaObj }
+  const [franjasSeleccionadasDia2, setFranjasSeleccionadasDia2] = useState({}) // { [docenteId]: franjaObj } (segundo día)
+  const [modoDistribucion, setModoDistribucion] = useState('1_DIA') // '1_DIA' | '2_DIAS'
   const [busquedaDocente, setBusquedaDocente] = useState('')
   const [soloDelPrograma, setSoloDelPrograma] = useState(true) // Por defecto solo docentes del programa/facultad
   const [asignandoId, setAsignandoId] = useState(null)
+
+  // 5. Electivas complementarias del período: las propone cada coordinador, no ocupan un espacio de la malla
+  const [comp, setComp] = useState({ lista: [], banco: [], pendientesObligatorias: [], puedeEditar: false, cargando: false, error: false })
+  const [modalComp, setModalComp] = useState(null) // { cursoId, codeCourse, jornada, cupos }
+  const [guardandoComp, setGuardandoComp] = useState(false)
 
   // Sincronizar código de programa cuando se carga el perfil del coordinador
   useEffect(() => {
@@ -300,19 +310,13 @@ export default function AsignacionDocenteView({
     setLoading(true)
   }
 
-  // Cargar períodos (solo si no vino del padre como prop)
+  // Cargar períodos
   const cargarPeriodos = useCallback(async () => {
-    if (periodoActivoProp) {
-      setPeriodoActivo(periodoActivoProp)
-      setPeriodosCargando(false)
-      return
-    }
     setPeriodosCargando(true)
     setErrorCarga(false)
     try {
       const data = await getPeriodos()
       const lista = Array.isArray(data) ? data : []
-      setPeriodos(lista)
       const vigente = lista.find(p => p.vigente) || lista[0]
       setPeriodoActivo(vigente || null)
     } catch (err) {
@@ -321,7 +325,7 @@ export default function AsignacionDocenteView({
     } finally {
       setPeriodosCargando(false)
     }
-  }, [periodoActivoProp])
+  }, [])
 
   useEffect(() => {
     cargarPeriodos()
@@ -336,6 +340,21 @@ export default function AsignacionDocenteView({
       .catch(() => { })
   }, [])
 
+  // Cargar lista de docentes
+  const cargarDocentes = useCallback(async () => {
+    try {
+      const data = await getDocentes()
+      const lista = Array.isArray(data) ? data.filter(d => d.estado !== false) : []
+      setDocentesList(lista)
+    } catch (err) {
+      console.warn('Error al cargar docentes:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    cargarDocentes()
+  }, [cargarDocentes])
+
   // Cargar los cursos de cada programa visible (con la jornada elegida) y las disponibilidades
   const cargarDatosProgramacion = useCallback(async (silencioso = false) => {
     const seq = ++cargaSeq.current
@@ -349,34 +368,28 @@ export default function AsignacionDocenteView({
       return
     }
 
-    const cacheKey = `${periodoActivo.id}_${codigosVisibles}_${filtroJornada}`
-    const enCache = cacheCursosGlobal.get(cacheKey)
-
-    // Si ya está en memoria, mostrar de inmediato y revalidar en segundo plano
-    if (enCache && Object.keys(enCache).length > 0) {
-      setCursosPorPrograma(enCache)
-      setLoading(false)
-      silencioso = true
-    }
-
     if (!silencioso) setLoading(true)
     else setRefreshing(true)
 
     try {
-      // HU-016 criterio 7: solo se carga la programación; docentes/disponibilidades/carga
-      // se cargan de forma diferida al abrir el modal de asignación (lazy load).
-      const listas = await Promise.all(
-        codigos.map(codeProgram =>
-          getProgramacion(periodoActivo.id, { codeProgram, jornada: consultaJornada(filtroJornada) }))
-      )
+      // HU-016 criterio 7: el error de la programación no se oculta; la disponibilidad sí puede faltar.
+      const [listas, disps, cargas] = await Promise.all([
+        Promise.all(codigos.map(codeProgram =>
+          getProgramacion(periodoActivo.id, { codeProgram, jornada: consultaJornada(filtroJornada) }))),
+        consultarDisponibilidadesPeriodo(periodoActivo.id).catch(() => ({})),
+        getCargaPorPeriodo(periodoActivo.id).catch(() => null)
+      ])
       if (seq !== cargaSeq.current) return // llegó tarde: el usuario ya cambió de jornada
 
       const mapa = {}
       codigos.forEach((codeProgram, i) => {
         mapa[codeProgram] = Array.isArray(listas[i]) ? listas[i] : []
       })
-      cacheCursosGlobal.set(cacheKey, mapa)
       setCursosPorPrograma(mapa)
+      setDisponibilidadesMap(disps || {})
+      setCargaPorDocente(Array.isArray(cargas)
+        ? Object.fromEntries(cargas.map(c => [String(c.docente_id), c])) : {})
+      setCargaDisponible(Array.isArray(cargas))
       setErrorCarga(false)
     } catch (err) {
       if (seq !== cargaSeq.current) return
@@ -416,6 +429,34 @@ export default function AsignacionDocenteView({
       if (seq === cargaSeq.current) setRefreshing(false)
     }
   }, [periodoActivo, filtroJornada])
+
+  // Complementarias del programa elegido (no dependen de la jornada ni del semestre)
+  const codigoProgramaComp = programaBase?.code_program || ''
+  const cargarComplementarias = useCallback(async () => {
+    if (!codigoProgramaComp) {
+      setComp({ lista: [], banco: [], pendientesObligatorias: [], puedeEditar: false, cargando: false, error: false })
+      return
+    }
+    setComp(prev => ({ ...prev, cargando: true, error: false }))
+    try {
+      const r = await getElectivasProgramadas(codigoProgramaComp)
+      setComp({
+        lista: Array.isArray(r?.complementarias) ? r.complementarias : [],
+        banco: Array.isArray(r?.bancoComplementarias) ? r.bancoComplementarias : [],
+        pendientesObligatorias: Array.isArray(r?.pendientesObligatorias) ? r.pendientesObligatorias : [],
+        puedeEditar: Boolean(r?.puedeEditar),
+        cargando: false,
+        error: false
+      })
+    } catch (err) {
+      console.error('Error al cargar las electivas complementarias:', err)
+      setComp({ lista: [], banco: [], pendientesObligatorias: [], puedeEditar: false, cargando: false, error: true })
+    }
+  }, [codigoProgramaComp])
+
+  useEffect(() => {
+    cargarComplementarias()
+  }, [cargarComplementarias, periodoActivo?.id])
 
   // Reintentar (criterio 7): si fallaron los períodos, se recargan; si no, la programación.
   const handleReintentar = () => {
@@ -502,6 +543,13 @@ export default function AsignacionDocenteView({
             nombreEspacio: c.nombreEspacio || null,
             idDocente: c.idDocente,
             nombreDocente: c.nombreDocente,
+            dia: c.dia,
+            horaInicio: c.horaInicio,
+            horaFin: c.horaFin,
+            dia2: c.dia2,
+            horaInicio2: c.horaInicio2,
+            horaFin2: c.horaFin2,
+            horario: c.horario,
             estado: c.idDocente ? 'ASIGNADO' : 'PROGRAMADO',
             existeEnProgramacion: true,
           })
@@ -547,6 +595,126 @@ export default function AsignacionDocenteView({
       horas: horas.join(', ')
     }))
   }, [disponibilidadesMap])
+
+  /**
+   * Calcula las franjas horarias disponibles de un docente para la materia seleccionada:
+   * 1. Descuenta horas y tiempos ya ocupados por otros cursos del docente en el mismo período.
+   * 2. Respeta el límite máximo de 20 horas totales.
+   * 3. Filtra únicamente aquellas franjas con horas disponibles >= horas presenciales de la materia.
+   */
+  const calcularFranjasDisponibles = useCallback((docenteId) => {
+    const franjas = disponibilidadesMap[docenteId]
+    if (!Array.isArray(franjas) || franjas.length === 0) return []
+
+    const carga = cargaPorDocente[String(docenteId)]
+    const totalAsignadas = Number(carga?.total_horas || 0)
+    const limite = Number(carga?.limite ?? 20)
+
+    const esActual = materiaParaDesignar?.idDocente != null &&
+      Number(materiaParaDesignar.idDocente) === Number(docenteId)
+    const propias = esActual ? Number(materiaParaDesignar.horasSemanales || 0) : 0
+    const ocupadasOtras = Math.max(0, totalAsignadas - propias)
+    const horasRestantes20h = Math.max(0, limite - ocupadasOtras)
+    const horasRequeridas = modoDistribucion === '2_DIAS'
+      ? (Number(materiaParaDesignar?.horasSemanales || 0) / 2.0)
+      : Number(materiaParaDesignar?.horasSemanales || 0)
+
+    // Cursos ya asignados a este docente en el período (excluyendo el actual)
+    const cursosDelDocente = cursosProgramados.filter(c =>
+      c.idDocente != null &&
+      Number(c.idDocente) === Number(docenteId) &&
+      c.id !== materiaParaDesignar?.id &&
+      !c.isExcluido
+    )
+
+    const minutosATexto = (min) => {
+      const h = Math.floor(min / 60)
+      const m = min % 60
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    }
+
+    const franjasAptas = []
+
+    franjas.forEach((f, idx) => {
+      const diaNom = DIAS_SEMANA[f.dia] || `Día ${f.dia}`
+      const iniStr = f.horaInicio ? f.horaInicio.slice(0, 5) : ''
+      const finStr = f.horaFin ? f.horaFin.slice(0, 5) : ''
+      const inicioArr = iniStr.split(':').map(Number)
+      const finArr = finStr.split(':').map(Number)
+      if (inicioArr.length < 2 || finArr.length < 2) return
+
+      const iniMin = inicioArr[0] * 60 + inicioArr[1]
+      const finMin = finArr[0] * 60 + finArr[1]
+      if (finMin <= iniMin) return
+
+      // Recolectar intervalos ocupados en este día (sesión 1 y sesión 2 de otros cursos)
+      const ocupados = []
+      cursosDelDocente.forEach(c => {
+        if (Number(c.dia) === Number(f.dia) && c.horaInicio && c.horaFin) {
+          const cIni = String(c.horaInicio).slice(0, 5).split(':').map(Number)
+          const cFin = String(c.horaFin).slice(0, 5).split(':').map(Number)
+          const cIniMin = cIni[0] * 60 + cIni[1]
+          const cFinMin = cFin[0] * 60 + cFin[1]
+          if (cFinMin > iniMin && cIniMin < finMin) {
+            ocupados.push([Math.max(iniMin, cIniMin), Math.min(finMin, cFinMin)])
+          }
+        }
+        if (c.dia2 != null && Number(c.dia2) === Number(f.dia) && c.horaInicio2 && c.horaFin2) {
+          const cIni2 = String(c.horaInicio2).slice(0, 5).split(':').map(Number)
+          const cFin2 = String(c.horaFin2).slice(0, 5).split(':').map(Number)
+          const cIniMin2 = cIni2[0] * 60 + cIni2[1]
+          const cFinMin2 = cFin2[0] * 60 + cFin2[1]
+          if (cFinMin2 > iniMin && cIniMin2 < finMin) {
+            ocupados.push([Math.max(iniMin, cIniMin2), Math.min(finMin, cFinMin2)])
+          }
+        }
+      })
+
+      // Ordenar intervalos ocupados y calcular los sub-intervalos realmente libres
+      ocupados.sort((a, b) => a[0] - b[0])
+      const tramosLibres = []
+      let cursor = iniMin
+      for (const [oIni, oFin] of ocupados) {
+        if (oIni > cursor) {
+          tramosLibres.push([cursor, oIni])
+        }
+        if (oFin > cursor) {
+          cursor = oFin
+        }
+      }
+      if (cursor < finMin) {
+        tramosLibres.push([cursor, finMin])
+      }
+
+      // Evaluar cada sub-tramo libre contra las horas requeridas y el límite de 20h
+      tramosLibres.forEach(([subIni, subFin], subIdx) => {
+        const horasLibres = (subFin - subIni) / 60.0
+        const horasDisponiblesEfectivas = Math.min(horasLibres, horasRestantes20h)
+
+        if (horasDisponiblesEfectivas >= horasRequeridas && horasRequeridas > 0) {
+          const subIniStr = minutosATexto(subIni)
+          const subFinStr = minutosATexto(subFin)
+          const claseFinMin = subIni + Math.round(horasRequeridas * 60)
+          const claseFinStr = minutosATexto(claseFinMin)
+          const horaFinClase = `${claseFinStr}:00`
+
+          franjasAptas.push({
+            id: `${f.id || idx}-${f.dia}-${subIniStr}-${subFinStr}-${subIdx}`,
+            dia: f.dia,
+            diaNombre: diaNom,
+            horaInicio: `${subIniStr}:00`,
+            horaFin: `${subFinStr}:00`,
+            horaFinClase,
+            horasDisponiblesEfectivas,
+            textoFranja: `${diaNom} ${subIniStr} - ${subFinStr} (${horasDisponiblesEfectivas.toFixed(1)}h libres)`,
+            textoHorarioAsignar: `${diaNom} ${subIniStr} - ${claseFinStr}`
+          })
+        }
+      })
+    })
+
+    return franjasAptas
+  }, [disponibilidadesMap, cargaPorDocente, materiaParaDesignar, cursosProgramados, modoDistribucion])
 
   // La carga del API incluye TODOS los programas; si el curso ya pertenece al mismo
   // docente, se excluyen sus horas para no contarlas dos veces al volver a guardar.
@@ -637,27 +805,54 @@ export default function AsignacionDocenteView({
       })
     }
 
-    return lista
-  }, [docentesList, soloDelPrograma, programaModal, facultadModal, materiaParaDesignar, disponibilidadesMap, busquedaDocente])
+    // 4. Si hay historial de calificaciones previas (> 0) para esta asignatura, priorizar al inicio
+    // a los docentes evaluados en ella (ordenados por mayor calificación).
+    // Quienes no tienen calificación o tienen 0 ("No evaluado") se ordenan alfabéticamente después.
+    const tieneHistorialEvaluacion = Object.values(evaluacionesMap).some(
+      ev => ev?.calificacion != null && Number(ev.calificacion) > 0
+    )
+    if (tieneHistorialEvaluacion) {
+      lista.sort((a, b) => {
+        const notaA = Number(evaluacionesMap[String(a.id)]?.calificacion || 0)
+        const notaB = Number(evaluacionesMap[String(b.id)]?.calificacion || 0)
+        const evalA = notaA > 0
+        const evalB = notaB > 0
+        if (evalA && !evalB) return -1
+        if (!evalA && evalB) return 1
+        if (evalA && evalB && notaB !== notaA) return notaB - notaA
+        return (a.nombres || '').localeCompare(b.nombres || '')
+      })
+    } else {
+      lista.sort((a, b) => (a.nombres || '').localeCompare(b.nombres || ''))
+    }
 
-  // Abrir modal de asignación — carga docentes/disponibilidades/carga de forma diferida
+    return lista
+  }, [docentesList, soloDelPrograma, programaModal, facultadModal, materiaParaDesignar, disponibilidadesMap, busquedaDocente, evaluacionesMap])
+
+  // Abrir modal de asignación
   const handleAbrirDesignacion = async (materia) => {
     if (!puedeAsignar) return
     setMateriaParaDesignar(materia)
+    setFranjasSeleccionadas({})
+    setFranjasSeleccionadasDia2({})
+    setModoDistribucion(materia?.dia2 != null ? '2_DIAS' : '1_DIA')
     setBusquedaDocente('')
-    setSoloDelPrograma(true)
+    // En electivas complementarias, los docentes suelen pertenecer a otra facultad (artes, deporte, idiomas),
+    // por eso se abre mostrando todas las facultades por defecto.
+    setSoloDelPrograma(!materia?.esComplementaria)
     setEvaluacionesMap({})
 
     const promesas = []
 
-    // Evaluaciones: siempre se recargan por materia (específicas del curso)
     if (periodoActivo?.id && materia?.codeCourse) {
       promesas.push(
         getEvaluacionesDocentes(periodoActivo.id, materia.codeCourse)
           .then(evaluaciones => {
             const mapa = {}
             const lista = Array.isArray(evaluaciones) ? evaluaciones : []
-            lista.forEach(e => { mapa[String(e.docente_id ?? e.docenteId)] = e })
+            lista.forEach(evaluacion => {
+              mapa[String(evaluacion.docente_id ?? evaluacion.docenteId)] = evaluacion
+            })
             setEvaluacionesMap(mapa)
           })
           .catch(err => {
@@ -669,7 +864,6 @@ export default function AsignacionDocenteView({
 
     // Docentes, disponibilidades y carga: solo la primera vez que se abre el modal
     if (!datosModalCargados.current && periodoActivo?.id) {
-      setCargandoModal(true)
       promesas.push(
         Promise.all([
           getDocentes().catch(() => []),
@@ -683,20 +877,37 @@ export default function AsignacionDocenteView({
             ? Object.fromEntries(cargas.map(c => [String(c.docente_id), c])) : {})
           setCargaDisponible(Array.isArray(cargas))
           datosModalCargados.current = true
-        }).finally(() => setCargandoModal(false))
+        })
       )
     }
 
     await Promise.all(promesas)
   }
 
-  // Ejecutar asignación de docente
-  const handleConfirmarDesignacion = async (docente) => {
+  // Ejecutar asignación de docente con la franja horaria elegida (1 día o 2 días)
+  const handleConfirmarDesignacion = async (docente, franja1, franja2 = null) => {
     if (!capacidadDocente(docente.id).valido) {
       onShowToast?.('Este docente no tiene suficientes horas semanales restantes para la materia', 'error')
       return
     }
     if (!materiaParaDesignar || !periodoActivo?.id || !puedeAsignar) return
+
+    if (modoDistribucion === '2_DIAS') {
+      if (!franja1 || !franja2) {
+        onShowToast?.('Por favor elija las dos sesiones de clase en días diferentes', 'warning')
+        return
+      }
+      if (Number(franja1.dia) === Number(franja2.dia)) {
+        onShowToast?.('Los dos días de clase deben ser diferentes', 'warning')
+        return
+      }
+    } else {
+      if (!franja1) {
+        onShowToast?.('Por favor elija una franja horaria disponible para la clase', 'warning')
+        return
+      }
+    }
+
     const reemplazando = materiaParaDesignar.idDocente
       && Number(materiaParaDesignar.idDocente) !== Number(docente.id)
     if (reemplazando) {
@@ -709,12 +920,36 @@ export default function AsignacionDocenteView({
     setAsignandoId(docente.id)
 
     try {
-      await asignarDocenteACurso(materiaParaDesignar.id, docente.id, Boolean(reemplazando))
+      let horarioData = null
+      let textoHorarioCompleto = ''
+      if (modoDistribucion === '2_DIAS' && franja1 && franja2) {
+        textoHorarioCompleto = `${franja1.textoHorarioAsignar} / ${franja2.textoHorarioAsignar}`
+        horarioData = {
+          dia: franja1.dia,
+          horaInicio: franja1.horaInicio,
+          horaFin: franja1.horaFinClase,
+          dia2: franja2.dia,
+          horaInicio2: franja2.horaInicio,
+          horaFin2: franja2.horaFinClase,
+          horario: textoHorarioCompleto
+        }
+      } else if (franja1) {
+        textoHorarioCompleto = franja1.textoHorarioAsignar
+        horarioData = {
+          dia: franja1.dia,
+          horaInicio: franja1.horaInicio,
+          horaFin: franja1.horaFinClase,
+          horario: franja1.textoHorarioAsignar
+        }
+      }
 
-      onShowToast?.(`Docente ${docente.nombres} ${docente.apellidos} asignado correctamente a ${materiaParaDesignar.nameCourse}`, 'success')
+      await asignarDocenteACurso(materiaParaDesignar.id, docente.id, Boolean(reemplazando), horarioData)
+
+      onShowToast?.(`Docente ${docente.nombres} ${docente.apellidos} asignado correctamente a ${materiaParaDesignar.nameCourse} (${textoHorarioCompleto})`, 'success')
       const programaDelCurso = materiaParaDesignar.codeProgram
       setMateriaParaDesignar(null)
       await recargarCursosDePrograma(programaDelCurso)
+      await cargarComplementarias()
     } catch (err) {
       console.error('Error al designar docente:', err)
       onShowToast?.(`Error: ${err.message || 'No fue posible asignar el docente a la materia'}`, 'error')
@@ -734,11 +969,103 @@ export default function AsignacionDocenteView({
       onShowToast?.(`Docente desasignado de ${materia.nameCourse}`, 'info')
       if (materiaParaDesignar?.id === materia.id) setMateriaParaDesignar(null)
       await recargarCursosDePrograma(materia.codeProgram)
+      await cargarComplementarias()
     } catch (err) {
       console.error('Error al desasignar docente:', err)
       onShowToast?.(`Error al desasignar: ${err.message || 'Error desconocido'}`, 'error')
     }
   }
+
+  // ---- Electivas complementarias: proponer, modificar y quitar (solo sin docente) ----
+  const abrirProponerComp = () => setModalComp({ cursoId: null, codeCourse: '', jornada: '', cupos: '' })
+
+  const abrirEditarComp = (c) => setModalComp({
+    cursoId: c.cursoId,
+    codeCourse: c.codeCourse,
+    jornada: c.jornada,
+    cupos: c.cupos != null ? String(c.cupos) : ''
+  })
+
+  const guardarComp = async (e) => {
+    e.preventDefault()
+    if (!modalComp || guardandoComp) return
+    const { cursoId, codeCourse, jornada, cupos } = modalComp
+    if (!codeCourse) {
+      onShowToast?.('Escoja la electiva complementaria', 'error')
+      return
+    }
+    if (!cursoId && !jornada) {
+      onShowToast?.('Debe indicar la jornada (diurna o nocturna)', 'error')
+      return
+    }
+    if (!/^\d+$/.test(String(cupos).trim()) || Number(cupos) <= 0) {
+      onShowToast?.('Debe ingresar un número de cupos válido', 'error')
+      return
+    }
+    setGuardandoComp(true)
+    try {
+      if (cursoId) {
+        await modificarElectiva(cursoId, { codeCourse, cupos })
+        onShowToast?.('Electiva complementaria actualizada', 'success')
+      } else {
+        const r = await programarElectiva({
+          codeProgram: codigoProgramaComp,
+          codeEspacio: 'COMPLEMENTARIA',
+          codeCourse,
+          cupos,
+          jornada
+        })
+        onShowToast?.('Electiva complementaria programada', 'success')
+        if (r?.alerta) onShowToast?.(r.alerta, 'info')
+      }
+      setModalComp(null)
+      await cargarComplementarias()
+    } catch (err) {
+      onShowToast?.(err.message || 'No se pudo guardar la electiva complementaria', 'error')
+    } finally {
+      setGuardandoComp(false)
+    }
+  }
+
+  const quitarComp = async (c) => {
+    if (!window.confirm(`¿Desea quitar ${c.nombreAsignatura} de las electivas complementarias del período?`)) return
+    try {
+      await quitarElectiva(c.cursoId)
+      onShowToast?.('Electiva complementaria quitada', 'info')
+      await cargarComplementarias()
+    } catch (err) {
+      onShowToast?.(err.message || 'No se pudo quitar la electiva complementaria', 'error')
+    }
+  }
+
+  // Misma forma que una materia del semestre, para reutilizar la designación de docente
+  const comoMateria = (c) => ({
+    id: c.cursoId,
+    codeProgram: c.codeProgram,
+    codeCourse: c.codeCourse,
+    nameCourse: c.nombreAsignatura,
+    horasSemanales: c.horasSemanales,
+    grupo: c.grupo ?? null,
+    jornada: normalizarJornada(c.jornada),
+    idDocente: c.idDocente,
+    nombreDocente: c.nombreDocente,
+    dia: c.dia ?? null,
+    horaInicio: c.horaInicio ?? null,
+    horaFin: c.horaFin ?? null,
+    dia2: c.dia2 ?? null,
+    horaInicio2: c.horaInicio2 ?? null,
+    horaFin2: c.horaFin2 ?? null,
+    horario: c.horario ?? null,
+    esComplementaria: true
+  })
+
+  // Al editar, la propia asignatura sigue en la lista aunque ya no esté en el banco
+  const opcionesBancoComp = useMemo(() => {
+    if (!modalComp?.cursoId) return comp.banco
+    const actual = comp.lista.find(c => c.cursoId === modalComp.cursoId)
+    if (!actual || comp.banco.some(b => b.codeCourse === actual.codeCourse)) return comp.banco
+    return [{ codeCourse: actual.codeCourse, nombre: actual.nombreAsignatura }, ...comp.banco]
+  }, [modalComp, comp])
 
   // Conteo por semestre para los botones superiores. Usa el mismo filtro de la lista:
   // siempre la jornada elegida; los pendientes son las materias sin docente.
@@ -913,6 +1240,56 @@ export default function AsignacionDocenteView({
           </div>
         )}
 
+        {/* Alerta de electivas obligatorias pendientes de escoger en el período vigente */}
+        {!sinProgramaEnJornada && Array.isArray(comp.pendientesObligatorias) && comp.pendientesObligatorias.length > 0 && (
+          <div
+            role="alert"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.75rem',
+              padding: '0.9rem 1.1rem',
+              marginBottom: '1rem',
+              borderRadius: '10px',
+              background: '#fffbeb',
+              border: '1px solid #f59e0b',
+              color: '#92400e',
+              fontSize: '0.88rem'
+            }}
+          >
+            <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px', color: '#d97706' }} />
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>
+                Electivas obligatorias pendientes de selección para este período ({comp.pendientesObligatorias.length})
+              </div>
+              <div style={{ marginBottom: '0.45rem' }}>
+                Para asignar docente a estas electivas, primero debe escoger la asignatura correspondiente desde <strong>Malla Curricular</strong>. Al iniciar un nuevo período académico, estos espacios se limpian automáticamente.
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {comp.pendientesObligatorias.map((p) => (
+                  <span
+                    key={`${p.codeEspacio}-${p.semestre}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      padding: '0.2rem 0.55rem',
+                      borderRadius: '999px',
+                      background: '#fef3c7',
+                      border: '1px solid #fcd34d',
+                      fontWeight: 600,
+                      fontSize: '0.8rem',
+                      color: '#78350f'
+                    }}
+                  >
+                    {p.nombreEspacio} · Semestre {p.semestre}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 4. Barra de Selección de Semestre (ancho completo) */}
         {!sinProgramaEnJornada && (
           <div className="asig-doc-semestres-bar" role="tablist" aria-label="Semestres del programa">
@@ -1059,18 +1436,29 @@ export default function AsignacionDocenteView({
                               {mat.nombreDocente}
                             </div>
 
-                            {/* Horario de disponibilidad del docente */}
-                            <div className="asig-doc-docente-horario-summary">
-                              <Clock size={13} style={{ flexShrink: 0, marginTop: '2px', color: '#2563eb' }} />
-                              <div>
-                                <strong>Disponibilidad registrada:</strong>{' '}
-                                {horariosDoc && horariosDoc.length > 0 ? (
-                                  <span>{horariosDoc.map(h => `${h.dia}: ${h.horas}`).join(' | ')}</span>
-                                ) : (
-                                  <span style={{ color: '#64748b', fontStyle: 'italic' }}>Sin horario registrado en este período</span>
-                                )}
+                            {/* Horario asignado a la clase */}
+                            {mat.horario ? (
+                              <div className="asig-doc-horario-asignado">
+                                <Clock size={13} style={{ flexShrink: 0, color: '#16a34a' }} />
+                                <div>
+                                  <strong>Horario de clase:</strong>{' '}
+                                  <span>{mat.horario}</span>
+                                </div>
                               </div>
-                            </div>
+                            ) : (
+                              /* Horario de disponibilidad del docente */
+                              <div className="asig-doc-docente-horario-summary">
+                                <Clock size={13} style={{ flexShrink: 0, marginTop: '2px', color: '#2563eb' }} />
+                                <div>
+                                  <strong>Disponibilidad registrada:</strong>{' '}
+                                  {horariosDoc && horariosDoc.length > 0 ? (
+                                    <span>{horariosDoc.map(h => `${h.dia}: ${h.horas}`).join(' | ')}</span>
+                                  ) : (
+                                    <span style={{ color: '#64748b', fontStyle: 'italic' }}>Sin horario registrado en este período</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </>
                         ) : (
                           <div style={{ color: '#64748b', fontSize: '0.85rem', fontStyle: 'italic' }}>
@@ -1123,7 +1511,294 @@ export default function AsignacionDocenteView({
             </div>
           )}
         </div>
+
+        {/* 7. Electivas complementarias del período: las propone cada coordinador y no ocupan un espacio de la malla */}
+        {programaBase && (
+          <div className="asig-doc-comp-section">
+            <div className="asig-doc-materias-header">
+              <div className="asig-doc-materias-title">
+                <Layers size={18} style={{ color: '#7e22ce' }} />
+                <span>Electivas complementarias del período</span>
+              </div>
+              {comp.puedeEditar && (
+                <button
+                  type="button"
+                  className="btn-primary btn-sm"
+                  onClick={abrirProponerComp}
+                  disabled={!comp.banco.some(b => !b.programadaPor)}
+                  title={!comp.banco.some(b => !b.programadaPor) ? 'No hay electivas complementarias disponibles para proponer' : undefined}
+                >
+                  <Plus size={14} />
+                  <span>Proponer complementaria</span>
+                </button>
+              )}
+            </div>
+            <p className="asig-doc-comp-ayuda">
+              Aquí se proponen las electivas complementarias generales del período: no pertenecen a la malla de ningún
+              programa ni ocupan un espacio de ella. Se programan una sola vez en el período y salen en la programación
+              académica al final del consolidado. El coordinador que la propone asigna su docente.
+            </p>
+
+            {!comp.puedeEditar && !comp.cargando && !comp.error && (
+              <div className="asig-doc-aviso-consulta" role="status">
+                <AlertCircle size={16} />
+                <span>Fuera del período habilitado: solo consulta</span>
+              </div>
+            )}
+
+            {comp.cargando ? (
+              <div className="asig-doc-comp-estado">
+                <RefreshCw size={18} className="spin" style={{ color: '#7e22ce' }} />
+                <span>Cargando electivas complementarias...</span>
+              </div>
+            ) : comp.error ? (
+              <div className="asig-doc-comp-estado" role="alert">
+                <AlertCircle size={18} />
+                <span>No se pudieron cargar las electivas complementarias</span>
+                <button type="button" className="btn-secondary btn-sm" onClick={cargarComplementarias}>
+                  <RefreshCw size={14} />
+                  <span>Reintentar</span>
+                </button>
+              </div>
+            ) : comp.lista.length === 0 ? (
+              <div className="asig-doc-comp-estado">
+                <BookOpen size={18} />
+                <span>Aún no hay electivas complementarias propuestas en este período.</span>
+              </div>
+            ) : (
+              <div className="asig-doc-materias-grid">
+                {comp.lista.map(c => {
+                  const tieneDocente = Boolean(c.idDocente)
+                  const horariosDoc = tieneDocente ? formatearHorariosDocente(c.idDocente) : null
+                  const materia = comoMateria(c)
+                  return (
+                    <div
+                      key={`comp-${c.cursoId}`}
+                      className={`asig-doc-materia-card ${tieneDocente ? 'asignado' : 'sin-asignar'}`}
+                    >
+                      <div>
+                        <div className="asig-doc-card-top">
+                          <span className="asig-doc-course-code">{c.codeCourse}</span>
+                          <span className="asig-doc-group-badge">{textoGrupo(materia)}</span>
+                        </div>
+                        <div className="asig-doc-espacio-badge">Electiva complementaria</div>
+                        <h4 className="asig-doc-materia-name">{c.nombreAsignatura}</h4>
+                        <div className="asig-doc-materia-meta">
+                          <span>Jornada {ETIQUETA_JORNADA[materia.jornada] || materia.jornada}</span>
+                          <span>•</span>
+                          <span>{c.cupos} cupos</span>
+                          {c.horasSemanales != null && (
+                            <>
+                              <span>•</span>
+                              <span>{c.horasSemanales} h/semana</span>
+                            </>
+                          )}
+                        </div>
+
+                        <div className={`asig-doc-docente-box ${tieneDocente ? 'con-docente' : ''}`}>
+                          <div className="asig-doc-docente-header">
+                            <span className="asig-doc-docente-label">Docente Responsable</span>
+                            <span
+                              className={`badge ${tieneDocente ? 'badge-success' : 'asig-doc-badge-pendiente'}`}
+                              style={{ fontSize: '0.72rem', padding: '0.15rem 0.45rem' }}
+                            >
+                              {tieneDocente ? 'Designado' : 'Sin docente asignado'}
+                            </span>
+                          </div>
+                          {tieneDocente ? (
+                            <>
+                              <div className="asig-doc-docente-nombre">
+                                <UserCheck size={14} style={{ display: 'inline', marginRight: '4px', color: '#16a34a' }} />
+                                {c.nombreDocente}
+                              </div>
+                              {c.horario && (
+                                <div style={{
+                                  fontSize: '0.78rem',
+                                  fontWeight: 650,
+                                  color: '#065f46',
+                                  background: '#ecfdf5',
+                                  border: '1px solid #a7f3d0',
+                                  borderRadius: '6px',
+                                  padding: '0.25rem 0.55rem',
+                                  marginBottom: '0.4rem',
+                                  display: 'inline-block'
+                                }}>
+                                  Horario de clase: {c.horario}
+                                </div>
+                              )}
+                              <div className="asig-doc-docente-horario-summary">
+                                <Clock size={13} style={{ flexShrink: 0, marginTop: '2px', color: '#2563eb' }} />
+                                <div>
+                                  <strong>Disponibilidad registrada:</strong>{' '}
+                                  {horariosDoc && horariosDoc.length > 0 ? (
+                                    <span>{horariosDoc.map(h => `${h.dia}: ${h.horas}`).join(' | ')}</span>
+                                  ) : (
+                                    <span style={{ color: '#64748b', fontStyle: 'italic' }}>Sin horario registrado en este período</span>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ color: '#64748b', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                              Aún no se ha designado un docente para este curso.
+                            </div>
+                          )}
+                          {c.sinDocentesAsociados && !tieneDocente && (
+                            <div className="asig-doc-comp-alerta" role="status">
+                              <AlertCircle size={14} />
+                              <span>{c.alerta}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="asig-doc-card-actions">
+                        {puedeAsignar && (
+                          <button
+                            type="button"
+                            className={`${tieneDocente ? 'btn-secondary' : 'btn-primary'} btn-sm`}
+                            onClick={() => handleAbrirDesignacion(materia)}
+                            style={{ flex: 1, justifyContent: 'center' }}
+                          >
+                            <UserPlus size={14} />
+                            <span>{tieneDocente ? 'Editar docente' : 'Asignar docente'}</span>
+                          </button>
+                        )}
+                        {puedeAsignar && tieneDocente && (
+                          <button
+                            type="button"
+                            className="btn-danger btn-sm"
+                            onClick={() => handleDesasignarDocente(materia)}
+                            title="Desasignar docente"
+                            style={{ padding: '0.45rem 0.65rem' }}
+                          >
+                            <UserX size={14} />
+                          </button>
+                        )}
+                        {comp.puedeEditar && !tieneDocente && (
+                          <>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={() => abrirEditarComp(c)}
+                              title="Cambiar la electiva o los cupos"
+                              style={{ padding: '0.45rem 0.65rem' }}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-danger btn-sm"
+                              onClick={() => quitarComp(c)}
+                              title="Quitar de las complementarias del período"
+                              style={{ padding: '0.45rem 0.65rem' }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </>)}
+
+      {/* Modal: proponer o modificar una electiva complementaria */}
+      {modalComp && (
+        <div className="asig-modal-backdrop" onClick={() => !guardandoComp && setModalComp(null)}>
+          <div className="asig-modal-card asig-doc-comp-modal" onClick={(e) => e.stopPropagation()}>
+            <form onSubmit={guardarComp}>
+              <div className="asig-modal-header">
+                <div>
+                  <h3 className="asig-modal-title">
+                    {modalComp.cursoId ? 'Modificar electiva complementaria' : 'Proponer electiva complementaria'}
+                  </h3>
+                  <div className="asig-modal-target">Programa {codigoProgramaComp}</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => setModalComp(null)}
+                  title="Cerrar ventana"
+                  disabled={guardandoComp}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="asig-doc-comp-form">
+                <label className="asig-doc-comp-campo">
+                  <span>Electiva complementaria</span>
+                  <select
+                    value={modalComp.codeCourse}
+                    onChange={(e) => setModalComp({ ...modalComp, codeCourse: e.target.value })}
+                    required
+                  >
+                    <option value="">Seleccione una electiva...</option>
+                    {opcionesBancoComp.map(a => {
+                      // Ya programada por otro programa: se ve, pero no se puede elegir
+                      const ocupada = Boolean(a.programadaPor) && a.codeCourse !== modalComp.codeCourse
+                      return (
+                        <option key={a.codeCourse} value={a.codeCourse} disabled={ocupada}>
+                          {a.codeCourse} - {a.nombre}{ocupada ? ` (ya propuesta por ${a.programadaPor})` : ''}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </label>
+
+                <div className="asig-doc-comp-campo">
+                  <span>Jornada</span>
+                  <div className="asig-doc-segmentado" role="group" aria-label="Jornada de la electiva">
+                    {['DIURNA', 'NOCTURNA'].map(j => (
+                      <button
+                        key={j}
+                        type="button"
+                        className={`asig-doc-segmento ${modalComp.jornada === j ? 'active' : ''}`}
+                        aria-pressed={modalComp.jornada === j}
+                        disabled={Boolean(modalComp.cursoId)}
+                        onClick={() => setModalComp({ ...modalComp, jornada: j })}
+                      >
+                        {ETIQUETA_JORNADA[j]}
+                      </button>
+                    ))}
+                  </div>
+                  <small>No se programa en la jornada del programa: la elige quien la propone.</small>
+                </div>
+
+                <label className="asig-doc-comp-campo">
+                  <span>Cupos</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={modalComp.cupos}
+                    onChange={(e) => {
+                      if (e.target.value === '' || /^\d*$/.test(e.target.value)) {
+                        setModalComp({ ...modalComp, cupos: e.target.value })
+                      }
+                    }}
+                    required
+                  />
+                </label>
+              </div>
+
+              <div className="asig-doc-comp-pie">
+                <button type="button" className="btn-secondary btn-sm" onClick={() => setModalComp(null)} disabled={guardandoComp}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary btn-sm" disabled={guardandoComp}>
+                  {guardandoComp ? <RefreshCw size={14} className="spin" /> : null}
+                  <span>{modalComp.cursoId ? 'Guardar cambios' : 'Proponer'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* 6. Modal de Designación de Docentes con Horarios */}
       {materiaParaDesignar && (
@@ -1133,7 +1808,7 @@ export default function AsignacionDocenteView({
               <div>
                 <h3 className="asig-modal-title">{materiaParaDesignar.idDocente ? 'Editar docente asignado' : 'Designar docente a la materia'}</h3>
                 <div className="asig-modal-target">
-                  <strong>{materiaParaDesignar.codeCourse} - {materiaParaDesignar.nameCourse}</strong> ({textoGrupo(materiaParaDesignar)} · Jornada {ETIQUETA_JORNADA[materiaParaDesignar.jornada] || materiaParaDesignar.jornada} · Semestre {selectedSemestre})
+                  <strong>{materiaParaDesignar.codeCourse} - {materiaParaDesignar.nameCourse}</strong> ({textoGrupo(materiaParaDesignar)} · Jornada {ETIQUETA_JORNADA[materiaParaDesignar.jornada] || materiaParaDesignar.jornada} · {materiaParaDesignar.esComplementaria ? 'Electiva complementaria' : `Semestre ${selectedSemestre}`})
                 </div>
               </div>
               <button
@@ -1191,12 +1866,58 @@ export default function AsignacionDocenteView({
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <span style={{ fontSize: '0.8rem', color: '#475569' }}>
-                  Para asignar, las horas disponibles restantes deben cubrir las horas semanales de la materia. No se comparan días ni horarios de clase. La misma regla aplica a tu perfil docente como coordinador.
+                  Se muestran únicamente los tramos libres de cada docente (descontando sus cursos ya asignados) que cubran las horas semanales de la materia dentro del límite de 20 h.
                 </span>
                 <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
                   {docentesFiltrados.filter(d => capacidadDocente(d.id).valido).length} docentes elegibles
                 </span>
               </div>
+
+              {/* Aviso cuando no hay calificaciones previas registradas (> 0) */}
+              {!Object.values(evaluacionesMap).some(ev => ev?.calificacion != null && Number(ev.calificacion) > 0) && (
+                <div className="asig-modal-notice-info">
+                  <Info size={16} style={{ flexShrink: 0 }} />
+                  <span>
+                    Esta asignatura no registra historial de calificaciones docentes previas. Mostrando todos los profesores de la facultad {facultadModal?.nombre ? `(${facultadModal.nombre})` : ''} para su elección.
+                  </span>
+                </div>
+              )}
+
+              {/* Opciones de distribución del horario: 1 día o 2 días */}
+              {Number(materiaParaDesignar?.horasSemanales || 0) >= 2 && (
+                <div className="asig-distribucion-box">
+                  <div className="asig-distribucion-label">
+                    <CalendarDays size={16} style={{ color: '#2563eb' }} />
+                    <span>Distribución de las {materiaParaDesignar.horasSemanales}h presenciales:</span>
+                  </div>
+                  <div className="asig-distribucion-buttons">
+                    <button
+                      type="button"
+                      className={`btn-sm ${modoDistribucion === '1_DIA' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', fontWeight: 650 }}
+                      onClick={() => {
+                        setModoDistribucion('1_DIA')
+                        setFranjasSeleccionadas({})
+                        setFranjasSeleccionadasDia2({})
+                      }}
+                    >
+                      1 solo día ({materiaParaDesignar.horasSemanales}h seguidas)
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-sm ${modoDistribucion === '2_DIAS' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', fontWeight: 650 }}
+                      onClick={() => {
+                        setModoDistribucion('2_DIAS')
+                        setFranjasSeleccionadas({})
+                        setFranjasSeleccionadasDia2({})
+                      }}
+                    >
+                      Dividir en 2 días ({(Number(materiaParaDesignar.horasSemanales) / 2.0).toFixed(1).replace('.0', '')}h cada día)
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Lista de docentes con su horario */}
               <div className="asig-docente-list">
@@ -1226,6 +1947,39 @@ export default function AsignacionDocenteView({
                     const estaAsignando = asignandoId === docente.id
                     const evaluacion = evaluacionesMap[String(docente.id)]
                     const capacidad = capacidadDocente(docente.id)
+                    const franjasAptas = calcularFranjasDisponibles(docente.id)
+                    const franjaElegida = franjasSeleccionadas[docente.id] || franjasAptas[0] || null
+
+                    // Para modo 2 días: filtrar franjas disponibles en días distintos a la sesión 1
+                    const franjasAptasDia2 = modoDistribucion === '2_DIAS'
+                      ? franjasAptas.filter(f => !franjaElegida || Number(f.dia) !== Number(franjaElegida.dia))
+                      : []
+                    const franjaElegidaDia2 = modoDistribucion === '2_DIAS'
+                      ? (franjasSeleccionadasDia2[docente.id] || franjasAptasDia2[0] || null)
+                      : null
+
+                    const tieneFranjaValida = modoDistribucion === '2_DIAS'
+                      ? Boolean(franjaElegida && franjaElegidaDia2 && Number(franjaElegida.dia) !== Number(franjaElegidaDia2.dia))
+                      : Boolean(franjaElegida)
+
+                    const mismoHorarioActual = esElActual && (
+                      modoDistribucion === '2_DIAS'
+                        ? (Number(materiaParaDesignar.dia) === Number(franjaElegida?.dia)
+                            && String(materiaParaDesignar.horaInicio || '').slice(0, 5) === String(franjaElegida?.horaInicio || '').slice(0, 5)
+                            && String(materiaParaDesignar.horaFin || '').slice(0, 5) === String(franjaElegida?.horaFinClase || '').slice(0, 5)
+                            && Number(materiaParaDesignar.dia2) === Number(franjaElegidaDia2?.dia)
+                            && String(materiaParaDesignar.horaInicio2 || '').slice(0, 5) === String(franjaElegidaDia2?.horaInicio || '').slice(0, 5)
+                            && String(materiaParaDesignar.horaFin2 || '').slice(0, 5) === String(franjaElegidaDia2?.horaFinClase || '').slice(0, 5))
+                        : (materiaParaDesignar.dia2 == null
+                            && Number(materiaParaDesignar.dia) === Number(franjaElegida?.dia)
+                            && String(materiaParaDesignar.horaInicio || '').slice(0, 5) === String(franjaElegida?.horaInicio || '').slice(0, 5)
+                            && String(materiaParaDesignar.horaFin || '').slice(0, 5) === String(franjaElegida?.horaFinClase || '').slice(0, 5))
+                    )
+
+                    const horasRequeridas = Number(materiaParaDesignar?.horasSemanales || 0)
+                    const horasRequeridasSesion = modoDistribucion === '2_DIAS'
+                      ? (horasRequeridas / 2.0).toFixed(1).replace('.0', '')
+                      : horasRequeridas
 
                     return (
                       <div
@@ -1281,15 +2035,19 @@ export default function AsignacionDocenteView({
                           <div>
                             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '0.45rem' }}>
                               Última evaluación registrada ({evaluacion?.periodo_nombre || evaluacion?.periodoNombre || 'período anterior'}):{' '}
-                              <strong style={{ color: evaluacion ? '#0f766e' : '#64748b' }}>
-                                {evaluacion
-                                  ? `${Number(evaluacion.calificacion).toFixed(2)} / 5.00`
-                                  : 'Sin registro'}
-                              </strong>
+                              {(() => {
+                                const nota = evaluacion?.calificacion != null ? Number(evaluacion.calificacion) : 0
+                                const evaluado = Number.isFinite(nota) && nota > 0
+                                return (
+                                  <strong style={{ color: evaluado ? '#0f766e' : '#64748b' }}>
+                                    {evaluado ? `${nota.toFixed(2)} / 5.00` : 'No evaluado'}
+                                  </strong>
+                                )
+                              })()}
                             </div>
                             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <Clock size={12} style={{ color: '#2563eb' }} />
-                              <span>Horario de disponibilidad en el período:</span>
+                              <span>Horario general de disponibilidad en el período:</span>
                             </div>
                             {horarios && horarios.length > 0 ? (
                               <div className="asig-horario-container">
@@ -1304,18 +2062,188 @@ export default function AsignacionDocenteView({
                                 <span>El docente no ha registrado disponibilidad horaria para este período</span>
                               </div>
                             )}
+
+                            {/* Selector de franja horaria para la clase */}
+                            <div className="asig-franjas-selector">
+                              <div className="asig-franjas-title">
+                                <Clock size={12} style={{ color: '#2563eb' }} />
+                                <span>
+                                  {modoDistribucion === '2_DIAS'
+                                    ? `Elegir 2 días de clase (${horasRequeridasSesion}h por sesión):`
+                                    : `Elegir franja de clase (${horasRequeridas}h presenciales requeridas):`}
+                                </span>
+                              </div>
+
+                              {modoDistribucion === '1_DIA' ? (
+                                franjasAptas.length > 0 ? (
+                                  <div className="asig-franjas-list">
+                                    {franjasAptas.map(franja => {
+                                      const isSelected = franjaElegida?.id === franja.id
+                                      return (
+                                        <label
+                                          key={franja.id}
+                                          className={`asig-franja-chip ${isSelected ? 'selected' : ''}`}
+                                          onClick={() => setFranjasSeleccionadas(prev => ({ ...prev, [docente.id]: franja }))}
+                                        >
+                                          <div className="asig-franja-radio">
+                                            <input
+                                              type="radio"
+                                              name={`franja-${docente.id}`}
+                                              checked={isSelected}
+                                              onChange={() => setFranjasSeleccionadas(prev => ({ ...prev, [docente.id]: franja }))}
+                                            />
+                                            <span>{franja.textoFranja}</span>
+                                          </div>
+                                          <span className="asig-franja-badge-clase">Clase: {franja.textoHorarioAsignar}</span>
+                                        </label>
+                                      )
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="asig-franja-warning-tag">
+                                    <AlertCircle size={13} />
+                                    <span>Sin franjas con al menos {horasRequeridas}h disponibles (o límite de 20h alcanzado)</span>
+                                  </div>
+                                )
+                              ) : (
+                                /* Selector de 2 días */
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                                  {/* Sesión Día 1 */}
+                                  <div>
+                                    <div style={{ fontSize: '0.73rem', fontWeight: 700, color: '#334155', marginBottom: '0.25rem' }}>
+                                      1. Sesión Día 1 ({horasRequeridasSesion}h):
+                                    </div>
+                                    {franjasAptas.length > 0 ? (
+                                      <div className="asig-franjas-list">
+                                        {franjasAptas.map(franja => {
+                                          const isSelected = franjaElegida?.id === franja.id
+                                          return (
+                                            <label
+                                              key={`s1-${franja.id}`}
+                                              className={`asig-franja-chip ${isSelected ? 'selected' : ''}`}
+                                              onClick={() => {
+                                                setFranjasSeleccionadas(prev => ({ ...prev, [docente.id]: franja }))
+                                                if (franjaElegidaDia2 && Number(franjaElegidaDia2.dia) === Number(franja.dia)) {
+                                                  setFranjasSeleccionadasDia2(prev => {
+                                                    const copia = { ...prev }
+                                                    delete copia[docente.id]
+                                                    return copia
+                                                  })
+                                                }
+                                              }}
+                                            >
+                                              <div className="asig-franja-radio">
+                                                <input
+                                                  type="radio"
+                                                  name={`franja-s1-${docente.id}`}
+                                                  checked={isSelected}
+                                                  onChange={() => {
+                                                    setFranjasSeleccionadas(prev => ({ ...prev, [docente.id]: franja }))
+                                                    if (franjaElegidaDia2 && Number(franjaElegidaDia2.dia) === Number(franja.dia)) {
+                                                      setFranjasSeleccionadasDia2(prev => {
+                                                        const copia = { ...prev }
+                                                        delete copia[docente.id]
+                                                        return copia
+                                                      })
+                                                    }
+                                                  }}
+                                                />
+                                                <span>{franja.textoFranja}</span>
+                                              </div>
+                                              <span className="asig-franja-badge-clase">Clase 1: {franja.textoHorarioAsignar}</span>
+                                            </label>
+                                          )
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <div className="asig-franja-warning-tag">
+                                        <AlertCircle size={13} />
+                                        <span>Sin franjas con al menos {horasRequeridasSesion}h disponibles</span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Sesión Día 2 */}
+                                  <div>
+                                    <div style={{ fontSize: '0.73rem', fontWeight: 700, color: '#334155', marginBottom: '0.25rem' }}>
+                                      2. Sesión Día 2 ({horasRequeridasSesion}h) — en día diferente al Día 1:
+                                    </div>
+                                    {franjasAptasDia2.length > 0 ? (
+                                      <div className="asig-franjas-list">
+                                        {franjasAptasDia2.map(franja => {
+                                          const isSelected = franjaElegidaDia2?.id === franja.id
+                                          return (
+                                            <label
+                                              key={`s2-${franja.id}`}
+                                              className={`asig-franja-chip ${isSelected ? 'selected' : ''}`}
+                                              onClick={() => setFranjasSeleccionadasDia2(prev => ({ ...prev, [docente.id]: franja }))}
+                                            >
+                                              <div className="asig-franja-radio">
+                                                <input
+                                                  type="radio"
+                                                  name={`franja-s2-${docente.id}`}
+                                                  checked={isSelected}
+                                                  onChange={() => setFranjasSeleccionadasDia2(prev => ({ ...prev, [docente.id]: franja }))}
+                                                />
+                                                <span>{franja.textoFranja}</span>
+                                              </div>
+                                              <span className="asig-franja-badge-clase">Clase 2: {franja.textoHorarioAsignar}</span>
+                                            </label>
+                                          )
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <div className="asig-franja-warning-tag">
+                                        <AlertCircle size={13} />
+                                        <span>
+                                          {!franjaElegida
+                                            ? 'Primero selecciona la sesión del Día 1'
+                                            : `Sin franjas disponibles de al menos ${horasRequeridasSesion}h en un día diferente a ${franjaElegida.diaNombre}`}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Resumen unificado */}
+                                  {franjaElegida && franjaElegidaDia2 && (
+                                    <div style={{
+                                      padding: '0.45rem 0.65rem', background: '#ecfdf5',
+                                      border: '1px solid #a7f3d0', borderRadius: '6px',
+                                      fontSize: '0.78rem', color: '#065f46', fontWeight: 650
+                                    }}>
+                                      Horario semanal completo: {franjaElegida.textoHorarioAsignar} / {franjaElegidaDia2.textoHorarioAsignar}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
 
                         <div>
                           <button
                             type="button"
-                            className={esElActual ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}
-                            onClick={() => handleConfirmarDesignacion(docente)}
-                            disabled={estaAsignando || esElActual || !capacidad.valido}
+                            className={mismoHorarioActual ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}
+                            onClick={() => handleConfirmarDesignacion(docente, franjaElegida, franjaElegidaDia2)}
+                            disabled={estaAsignando || mismoHorarioActual || !capacidad.valido || !tieneFranjaValida}
+                            title={
+                              !capacidad.valido
+                                ? 'El docente no tiene horas suficientes'
+                                : (!tieneFranjaValida
+                                  ? (modoDistribucion === '2_DIAS'
+                                    ? `El docente debe tener dos franjas libres de al menos ${horasRequeridasSesion}h en días diferentes`
+                                    : `El docente no tiene una franja libre con al menos ${horasRequeridas}h`)
+                                  : (esElActual ? 'Actualizar el horario del docente asignado' : 'Designar docente a este curso'))
+                            }
                             style={{ minWidth: '100px', whiteSpace: 'nowrap' }}
                           >
-                            {estaAsignando ? 'Guardando...' : esElActual ? 'Asignado' : esElCoordinador ? 'Asignarme' : 'Designar'}
+                            {estaAsignando
+                              ? 'Guardando...'
+                              : esElActual
+                                ? (mismoHorarioActual ? 'Asignado' : 'Actualizar horario')
+                                : esElCoordinador
+                                  ? 'Asignarme'
+                                  : 'Designar'}
                           </button>
                         </div>
                       </div>
