@@ -1,0 +1,21 @@
+# Finales de línea LF en el repositorio (se ejecuta en Linux: Vercel y Debian 13 de SIA).
+* text=auto eol=lf
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.csv text eol=lf
+
+# Scripts de Windows con CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binarios: sin conversión.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.xlsx binary

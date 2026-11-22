@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import {
   getCoordinadores,
+  getDocentes,
   createCoordinador,
   updateCoordinador,
   deleteCoordinador
@@ -42,6 +43,7 @@ export default function CoordinadoresView({
   onShowToast
 }) {
   const [coordinadores, setCoordinadores] = useState([])
+  const [docentes, setDocentes] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [programFilter, setProgramFilter] = useState('ALL')
@@ -52,24 +54,23 @@ export default function CoordinadoresView({
   const [deletingCoord, setDeletingCoord] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // Form state
+  // Form state (vinculado a un docente existente + programa + correo de coordinación)
   const [formData, setFormData] = useState({
-    identificacion: '',
-    nombre_completo: '',
-    correo: '',
+    docente_id: '',
     correo_institucional: '',
-    telefono: '',
     code_program: '',
-    categoria: 'Auxiliar',
-    tipo_contrato: 'Nombrado',
     activo: true
   })
 
   const loadData = async () => {
     setLoading(true)
     try {
-      const data = await getCoordinadores()
-      setCoordinadores(data || [])
+      const [coordsData, docsData] = await Promise.all([
+        getCoordinadores(),
+        getDocentes().catch(() => [])
+      ])
+      setCoordinadores(coordsData || [])
+      setDocentes(Array.isArray(docsData) ? docsData.filter(d => d.estado !== false && d.activo !== false) : [])
     } catch (err) {
       console.error('Error al cargar coordinadores:', err)
       onShowToast?.('Error al cargar la lista de coordinadores: ' + err.message, 'error')
@@ -85,14 +86,9 @@ export default function CoordinadoresView({
   const handleOpenCreate = () => {
     setEditingCoord(null)
     setFormData({
-      identificacion: '',
-      nombre_completo: '',
-      correo: '',
+      docente_id: docentes[0]?.id != null ? String(docentes[0].id) : '',
       correo_institucional: '',
-      telefono: '',
       code_program: programas[0]?.code_program || '',
-      categoria: 'Auxiliar',
-      tipo_contrato: 'Nombrado',
       activo: true
     })
     setIsModalOpen(true)
@@ -101,14 +97,9 @@ export default function CoordinadoresView({
   const handleOpenEdit = (coord) => {
     setEditingCoord(coord)
     setFormData({
-      identificacion: coord.identificacion || '',
-      nombre_completo: coord.nombre_completo || '',
-      correo: coord.correo || '',
+      docente_id: coord.docente_id != null ? String(coord.docente_id) : '',
       correo_institucional: coord.correo_institucional || '',
-      telefono: coord.telefono || '',
       code_program: coord.code_program || '',
-      categoria: coord.categoria || 'Auxiliar',
-      tipo_contrato: coord.tipo_contrato || 'Nombrado',
       activo: coord.activo ?? true
     })
     setIsModalOpen(true)
@@ -116,49 +107,34 @@ export default function CoordinadoresView({
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!formData.nombre_completo.trim() || !formData.correo_institucional.trim()) {
-      onShowToast?.('El nombre y el correo institucional son obligatorios', 'warning')
+    if (!formData.docente_id) {
+      onShowToast?.('Debe seleccionar un docente', 'warning')
       return
     }
-
-    if (!editingCoord && !formData.identificacion.trim()) {
-      onShowToast?.('La identificación es obligatoria', 'warning')
+    if (!formData.code_program) {
+      onShowToast?.('Debe seleccionar un programa académico', 'warning')
       return
     }
-
-    if (!editingCoord && !/^[0-9]{1,10}$/.test(formData.identificacion.trim())) {
-      onShowToast?.('El N. Documento solo admite números, hasta 10 dígitos', 'warning')
-      return
-    }
-
-    // El teléfono del coordinador es un celular: 10 dígitos y empieza por 3 (opcional)
-    if (formData.telefono.trim() && !/^3[0-9]{9}$/.test(formData.telefono.trim())) {
-      onShowToast?.('El celular debe tener 10 dígitos y empezar por 3', 'warning')
+    if (!formData.correo_institucional.trim()) {
+      onShowToast?.('El correo institucional de coordinación es obligatorio', 'warning')
       return
     }
 
     setSubmitting(true)
     try {
       const payload = {
-        nombre_completo: formData.nombre_completo.trim(),
-        correo: formData.correo ? formData.correo.trim() : null,
-        correo_institucional: formData.correo_institucional.trim(),
-        telefono: formData.telefono ? formData.telefono.trim() : null,
-        code_program: formData.code_program || null,
-        categoria: formData.categoria || 'Auxiliar',
-        tipo_contrato: formData.tipo_contrato || 'Nombrado',
-        activo: formData.activo
+        docente_id: Number(formData.docente_id),
+        code_program: formData.code_program,
+        correo_institucional: formData.correo_institucional.trim().toLowerCase(),
+        activo: Boolean(formData.activo)
       }
 
       if (editingCoord) {
         await updateCoordinador(editingCoord.id, payload)
         onShowToast?.('Coordinador actualizado correctamente', 'success')
       } else {
-        await createCoordinador({
-          ...payload,
-          identificacion: formData.identificacion.trim()
-        })
-        onShowToast?.('Coordinador registrado exitosamente', 'success')
+        await createCoordinador(payload)
+        onShowToast?.('Coordinador designado exitosamente', 'success')
       }
       setIsModalOpen(false)
       loadData()
@@ -477,124 +453,54 @@ export default function CoordinadoresView({
 
             <form onSubmit={handleSubmit}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {/* Identificación */}
+                <p style={{ margin: 0, fontSize: '0.84rem', color: '#64748b' }}>
+                  Seleccione el docente que asumirá la coordinación del programa y su correo institucional de coordinación.
+                </p>
+
+                {/* Docente designado */}
                 <div className="form-group">
-                  <label>N. Documento *</label>
-                  <input
-                    type="text"
+                  <label>Docente designado como Coordinador *</label>
+                  <select
                     required
-                    disabled={!!editingCoord}
-                    inputMode="numeric"
-                    maxLength={10}
-                    placeholder="Ej. 1118234567"
-                    value={formData.identificacion}
-                    onChange={(e) => setFormData({ ...formData, identificacion: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                  />
-                  {editingCoord && (
-                    <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
-                      El N. Documento no se puede modificar una vez registrado.
-                    </small>
-                  )}
-                </div>
-
-                {/* Nombre completo */}
-                <div className="form-group">
-                  <label>Nombre Completo *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ej. María Fernanda Rodríguez Pérez"
-                    value={formData.nombre_completo}
-                    onChange={(e) => setFormData({ ...formData, nombre_completo: e.target.value })}
-                  />
-                  <small style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
-                    Escríbalo sin títulos: nombres primero y luego los dos apellidos.
-                  </small>
-                </div>
-
-                {/* Fila doble: Categoría y Tipo de Contrato */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label>Categoría*</label>
-                    <select
-                      value={formData.categoria}
-                      onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
-                      style={{ fontWeight: 500 }}
-                    >
-                      {CATEGORIAS.map(cat => (
-                        <option key={cat} value={cat}>
-                          {cat}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label>Tipo de Contrato *</label>
-                    <select
-                      value={formData.tipo_contrato}
-                      onChange={(e) => setFormData({ ...formData, tipo_contrato: e.target.value })}
-                      style={{ fontWeight: 500 }}
-                    >
-                      {TIPOS_CONTRATO.map(tc => (
-                        <option key={tc} value={tc}>
-                          {tc}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Correo institucional */}
-                <div className="form-group">
-                  <label>Correo Institucional *</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="Ej. maria.rodriguez@correounivalle.edu.co"
-                    value={formData.correo_institucional}
-                    onChange={(e) => setFormData({ ...formData, correo_institucional: e.target.value })}
-                  />
-                </div>
-
-                {/* Correo personal */}
-                <div className="form-group">
-                  <label>Correo Personal / Alternativo</label>
-                  <input
-                    type="email"
-                    placeholder="Ej. maria.rodriguez@gmail.com"
-                    value={formData.correo}
-                    onChange={(e) => setFormData({ ...formData, correo: e.target.value })}
-                  />
-                </div>
-
-                {/* Celular (el campo se sigue llamando telefono en el backend) */}
-                <div className="form-group">
-                  <label>Celular</label>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={10}
-                    placeholder="Ej. 3151234567 (10 dígitos, empieza por 3)"
-                    value={formData.telefono}
-                    onChange={(e) => setFormData({ ...formData, telefono: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                  />
+                    value={formData.docente_id}
+                    onChange={(e) => setFormData({ ...formData, docente_id: e.target.value })}
+                  >
+                    <option value="">-- Seleccione un docente --</option>
+                    {docentes.map(d => (
+                      <option key={d.id} value={String(d.id)}>
+                        {d.nombres} {d.apellidos} — Doc. {d.numeroDocumento || d.numero_documento}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Programa vinculado */}
                 <div className="form-group">
-                  <label>Programa Académico Vinculado</label>
+                  <label>Programa Académico Vinculado *</label>
                   <select
+                    required
                     value={formData.code_program}
                     onChange={(e) => setFormData({ ...formData, code_program: e.target.value })}
                   >
-                    <option value="">-- Sin programa asignado --</option>
+                    <option value="">-- Seleccione un programa --</option>
                     {programas.map(p => (
                       <option key={p.code_program} value={p.code_program}>
                         {p.name_program} ({p.code_program})
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* Correo institucional de coordinación */}
+                <div className="form-group">
+                  <label>Correo Institucional de Coordinación *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="Ej. coordinacion.sistemas@correounivalle.edu.co"
+                    value={formData.correo_institucional}
+                    onChange={(e) => setFormData({ ...formData, correo_institucional: e.target.value })}
+                  />
                 </div>
 
                 {/* Activo */}

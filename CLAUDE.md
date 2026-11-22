@@ -145,7 +145,7 @@ Son dos repositorios independientes. Detecta en cuál estás: si ves `build.grad
 
 | | Frontend | Backend |
 |---|---|---|
-| Repositorio | `JhonPerlaza0614/mi-app` (rama `main`) | `ItsJuanPe1/cda-backend` (rama `develop`) |
+| Repositorio | `JhonPerlaza0614/cda-fronted` (rama `main`) | `ItsJuanPe1/cda-backend` (rama `develop`) |
 | Tecnología | React 19, Vite 8, `lucide-react`, Oxlint, JavaScript y CSS | Java 21, Spring Boot 4.1.1, Gradle, Lombok |
 | Datos y seguridad | `@supabase/supabase-js` (prototipo) | Spring Data JPA, Flyway, PostgreSQL, Spring Security con OAuth2 Resource Server, Bean Validation, Actuator, springdoc OpenAPI |
 | Empaquetado | `vite build` (archivos estáticos) | `Dockerfile` y `docker-compose.yml`; `.env.example` |

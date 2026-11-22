@@ -715,6 +715,7 @@ export default function PensumView({
   // de la malla. La malla no se modifica: al cambiar de período el espacio vuelve a verse vacío.
   // =========================================================================
   const [electivasProg, setElectivasProg] = useState([])
+  const [pendientesObligatorias, setPendientesObligatorias] = useState([])
   const [electivasMeta, setElectivasMeta] = useState({ periodoId: null, plazoAbierto: false, puedeEditar: false })
   const [electivaModal, setElectivaModal] = useState(null)
   const [electivaSaving, setElectivaSaving] = useState(false)
@@ -723,6 +724,7 @@ export default function PensumView({
     const code = currentProgram?.code_program
     if (!code) {
       setElectivasProg([])
+      setPendientesObligatorias([])
       setEscuelasBanco([])
       setElectivasMeta({ periodoId: null, plazoAbierto: false, puedeEditar: false })
       return
@@ -730,6 +732,7 @@ export default function PensumView({
     try {
       const r = await getElectivasProgramadas(code)
       setElectivasProg(r?.electivas || [])
+      setPendientesObligatorias(Array.isArray(r?.pendientesObligatorias) ? r.pendientesObligatorias : [])
       setEscuelasBanco(r?.escuelasBanco || [])
       setElectivasMeta({
         periodoId: r?.periodoId ?? null,
@@ -738,6 +741,7 @@ export default function PensumView({
       })
     } catch {
       setElectivasProg([])
+      setPendientesObligatorias([])
       setEscuelasBanco([])
       setElectivasMeta({ periodoId: null, plazoAbierto: false, puedeEditar: false })
     }
@@ -1584,6 +1588,66 @@ export default function PensumView({
             >
               Volver a malla activa
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Alerta de electivas obligatorias pendientes para el período académico vigente */}
+      {!isViewingInactive && electivasMeta.periodoId !== null && pendientesObligatorias.length > 0 && (
+        <div
+          className="warning-banner print-hide"
+          role="alert"
+          style={{
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: '0.65rem',
+            background: '#fffbeb',
+            borderColor: '#f59e0b',
+            color: '#92400e'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem' }}>
+            <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px', color: '#d97706' }} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.93rem' }}>
+                Selección obligatoria de electivas pendiente para el período vigente ({pendientesObligatorias.length})
+              </div>
+              <div style={{ fontSize: '0.84rem', marginTop: '0.15rem' }}>
+                Los siguientes espacios de electiva pertenecen a semestres activos de este período y deben escogerse obligatoriamente. Al iniciar un nuevo período académico, las selecciones se limpian automáticamente.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', paddingLeft: '1.85rem' }}>
+            {pendientesObligatorias.map((p) => (
+              <div
+                key={`${p.codeEspacio}-${p.semestre}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.55rem',
+                  padding: '0.35rem 0.65rem',
+                  borderRadius: '8px',
+                  background: '#fef3c7',
+                  border: '1px solid #fcd34d',
+                  fontSize: '0.82rem',
+                  color: '#78350f'
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>
+                  {p.nombreEspacio} · Semestre {p.semestre}
+                </span>
+                {puedeProgramarElectivas && (
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm"
+                    style={{ padding: '0.2rem 0.55rem', fontSize: '0.76rem' }}
+                    onClick={() => abrirModalElectiva({ codeEspacio: p.codeEspacio })}
+                  >
+                    Escoger ahora
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

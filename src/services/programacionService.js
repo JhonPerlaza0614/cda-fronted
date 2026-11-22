@@ -39,6 +39,7 @@ export async function getProgramacion(periodoId, { codeProgram = '', codeCourse 
       numeroResolucion: c.numero_resolucion,
       grupo: c.grupo,
       cupos: c.cupos ?? null,
+      codigoEspacio: c.code_course_espacio ?? null,
       idDocente: c.id_docente,
       estado: c.estado
     }))

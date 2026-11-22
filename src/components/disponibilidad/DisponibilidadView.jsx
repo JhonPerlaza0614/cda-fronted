@@ -361,15 +361,23 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
 
   // R1 (segunda ronda): agrega todas las horas habilitadas de un día sin tocar los demás.
   // El sábado queda de 7:00 a 19:00 porque de 19:00 a 21:00 está bloqueado.
+  // Si todas las horas seleccionables del día ya están marcadas, el mismo botón las quita
+  // (HU-007, HU-008 y HU-051). Fuera de edición no cuenta ni quita las horas ya guardadas.
   const selectDay = (day) => {
     if (!canEdit) return
     dragMode.current = null
-    const next = new Set(selectedRef.current)
+    const dayKeys = []
     for (const slot of SLOTS) {
       if (isBlockedSlot(day.id, slot)) continue
       const key = slotKey(day.id, slot)
       if (!isEditing && savedSlots.has(key)) continue
-      next.add(key)
+      dayKeys.push(key)
+    }
+    const next = new Set(selectedRef.current)
+    const allSelected = dayKeys.length > 0 && dayKeys.every((key) => next.has(key))
+    for (const key of dayKeys) {
+      if (allSelected) next.delete(key)
+      else next.add(key)
     }
     replaceSelection(next)
     setNotice(null)
@@ -655,7 +663,7 @@ export default function DisponibilidadView({ docenteId = null, docenteNombre = n
         <>
           <div className="availability-instructions">
             <span className="availability-info-icon"><Info size={18} /></span>
-            <div><strong>¿Cómo funciona?</strong><span>Cada casilla representa una franja de 30 minutos indicada en la columna de hora (ej. <strong>07:00 – 07:30</strong>). Haz clic o arrastra para seleccionar un intervalo continuo; las casillas consecutivas del mismo día se agrupan en un solo horario. Puedes marcar y desmarcar libremente; al guardar se comprueba que cada intervalo dure <strong>mínimo 1 hora</strong> (2 casillas seguidas), porque no se puede registrar un bloque de 30 minutos. Con el botón <strong>“Seleccionar todo”</strong> de cada día marcas todas las horas habilitadas de ese día, y con el <strong>“Seleccionar todo”</strong> de abajo marcas toda la semana. Los sábados de 19:00 a 21:00 no están habilitados. Al guardar tu horario la tabla se bloquea; si necesitas modificar casillas marcadas o no marcadas, pulsa el botón <strong>“Editar”</strong> en el resumen inferior. En modo edición, <strong>“Limpiar selección”</strong> elimina el registro guardado, previa confirmación.</span></div>
+            <div><strong>¿Cómo funciona?</strong><span>Cada casilla representa una franja de 30 minutos indicada en la columna de hora (ej. <strong>07:00 – 07:30</strong>). Haz clic o arrastra para seleccionar un intervalo continuo; las casillas consecutivas del mismo día se agrupan en un solo horario. Puedes marcar y desmarcar libremente; al guardar se comprueba que cada intervalo dure <strong>mínimo 1 hora</strong> (2 casillas seguidas), porque no se puede registrar un bloque de 30 minutos. Con el botón <strong>“Seleccionar todo”</strong> de cada día marcas todas las horas habilitadas de ese día; si vuelves a pulsarlo, se desmarcan. Con el <strong>“Seleccionar todo”</strong> de abajo marcas toda la semana. Los sábados de 19:00 a 21:00 no están habilitados. Al guardar tu horario la tabla se bloquea; si necesitas modificar casillas marcadas o no marcadas, pulsa el botón <strong>“Editar”</strong> en el resumen inferior. En modo edición, <strong>“Limpiar selección”</strong> elimina el registro guardado, previa confirmación.</span></div>
           </div>
 
           <div className="availability-card">
