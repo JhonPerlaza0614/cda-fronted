@@ -9,7 +9,6 @@ import {
   Save,
   BookOpen,
   Sparkles,
-  Check,
   RotateCcw,
   TrendingUp
 } from 'lucide-react'
@@ -35,6 +34,12 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
   const [loading, setLoading] = useState(false)
   const [savingCohortes, setSavingCohortes] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [generatingCohortes, setGeneratingCohortes] = useState(false)
+  const [selectedAdmissionCodes, setSelectedAdmissionCodes] = useState([])
+  const [cohortesConfigOpen, setCohortesConfigOpen] = useState(false)
+  const [cohortesLoadError, setCohortesLoadError] = useState('')
+  const [advertenciaGeneracion, setAdvertenciaGeneracion] = useState('')
+  const [confirmarAvanceForzado, setConfirmarAvanceForzado] = useState(false)
 
   // Datos del periodo actual
   const [allCohortes, setAllCohortes] = useState([])
@@ -50,13 +55,6 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
 
   // Resolución vigente obtenida del pensum del programa seleccionado (puede ser null)
   const [resolucionVigentePensum, setResolucionVigentePensum] = useState(null)
-
-  // Estado modal propuesta
-  const [isPropuestaModalOpen, setIsPropuestaModalOpen] = useState(false)
-  const [selectedPeriodoAnteriorId, setSelectedPeriodoAnteriorId] = useState('')
-  const [propuestas, setPropuestas] = useState([])
-  const [confirmarForzado, setConfirmarForzado] = useState(false)
-  const [loadingPropuesta, setLoadingPropuesta] = useState(false)
 
   // Estado confirmación regenerar
   const [isConfirmRegenerarOpen, setIsConfirmRegenerarOpen] = useState(false)
@@ -101,6 +99,23 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
     return periodos.find(p => String(p.id) === String(selectedPeriodoId))
   }, [periodos, selectedPeriodoId])
 
+  const periodoAnterior = useMemo(() => {
+    if (!selectedPeriodo) return null
+    const fechaActual = selectedPeriodo.fechaInicioSemestre || selectedPeriodo.fecha_inicio_semestre
+    if (!fechaActual) return null
+
+    return periodos
+      .filter(periodo => {
+        const fecha = periodo.fechaInicioSemestre || periodo.fecha_inicio_semestre
+        return String(periodo.id) !== String(selectedPeriodoId) && fecha && fecha < fechaActual
+      })
+      .sort((a, b) => {
+        const fechaA = a.fechaInicioSemestre || a.fecha_inicio_semestre
+        const fechaB = b.fechaInicioSemestre || b.fecha_inicio_semestre
+        return String(fechaB).localeCompare(String(fechaA))
+      })[0] || null
+  }, [periodos, selectedPeriodo, selectedPeriodoId])
+
   const selectedPrograma = useMemo(() => {
     return programas.find(p => p.code_program === selectedProgramCode)
   }, [programas, selectedProgramCode])
@@ -113,15 +128,17 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
   // 2. Cargar cohortes, resumen y cursos cuando cambia el periodo
   const loadPeriodoData = useCallback(async () => {
     if (!selectedPeriodoId) {
+      setCohortesLoadError('')
       setCuposConfigCargando(false)
       return
     }
     setLoading(true)
+    setCohortesLoadError('')
     setCuposConfigCargando(true)
     setCuposConfig(null)
     try {
       const [cohortesData, resumenData, cursosData, cuposData] = await Promise.all([
-        getCohortes(selectedPeriodoId).catch(() => []),
+        getCohortes(selectedPeriodoId),
         getResumenProgramacion(selectedPeriodoId).catch(() => null),
         getProgramacion(
           selectedPeriodoId,
@@ -134,6 +151,7 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
       setCursos(cursosData || [])
       setCuposConfig(cuposData)
     } catch (err) {
+      setCohortesLoadError(err.message || 'No fue posible consultar las cohortes del período.')
       onShowToast?.(err.message || 'Error al cargar datos del período', 'error')
     } finally {
       setLoading(false)
@@ -249,52 +267,74 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
     }
   }
 
-  // Manejo de la propuesta automática (HU-043)
-  const handleAbrirPropuesta = () => {
-    // Buscar periodo anterior por orden de fecha
-    const otrosPeriodos = periodos.filter(p => String(p.id) !== String(selectedPeriodoId))
-    if (otrosPeriodos.length > 0) {
-      setSelectedPeriodoAnteriorId(String(otrosPeriodos[0].id))
-    }
-    setIsPropuestaModalOpen(true)
-    setPropuestas([])
-    setConfirmarForzado(false)
-  }
-
-  const handleConsultarPropuesta = async () => {
-    if (!selectedPeriodoId) return
-    setLoadingPropuesta(true)
+  const handleGenerarCohortes = async (forzarAvance = false) => {
+    if (!selectedPeriodoId || !periodoAnterior) return
+    setGeneratingCohortes(true)
     try {
-      const data = await getPropuestaCohortes(selectedPeriodoId, selectedPeriodoAnteriorId || null, confirmarForzado)
-      setPropuestas(data || [])
-    } catch (err) {
-      onShowToast?.(err.message || 'Error al calcular propuesta', 'error')
-    } finally {
-      setLoadingPropuesta(false)
-    }
-  }
-
-  const handleAplicarPropuesta = (propuestaProg) => {
-    if (!propuestaProg) return
-    const semestresPropuestos = new Map(propuestaProg.cohortesPropuestas.map(i => [i.semestre, i]))
-
-    setProgramCohortes(prev => prev.map(item => {
-      const prop = semestresPropuestos.get(item.semestre)
-      if (prop) {
-        return {
-          ...item,
-          activo: true,
-          jornada: prop.jornada || item.jornada,
-          numeroResolucion: prop.numeroResolucion || item.numeroResolucion,
-          enExtincion: Boolean(prop.enExtincion)
-        }
-      } else {
-        return { ...item, activo: false }
+      const propuestasData = await getPropuestaCohortes(
+        selectedPeriodoId,
+        String(periodoAnterior.id),
+        forzarAvance
+      )
+      const advertencia = propuestasData?.find(item => item.advertenciaPeriodoAnterior)?.advertenciaPeriodoAnterior
+      if (advertencia && !forzarAvance) {
+        setAdvertenciaGeneracion(advertencia)
+        setConfirmarAvanceForzado(false)
+        return
       }
-    }))
 
-    setIsPropuestaModalOpen(false)
-    onShowToast?.(`Propuesta de avance cargada para ${propuestaProg.nombrePrograma}. Revise y guarde los cambios.`, 'info')
+      const admisiones = new Set(selectedAdmissionCodes)
+      const propuestasPorPrograma = new Map(
+        (Array.isArray(propuestasData) ? propuestasData : []).map(item => [item.codeProgram, item])
+      )
+      const operaciones = programas.flatMap(programa => {
+        const propuesta = propuestasPorPrograma.get(programa.code_program)
+        const cohortesPropuestas = (propuesta?.cohortesPropuestas || [])
+          .filter(cohorte => cohorte.semestre !== 1 || admisiones.has(programa.code_program))
+          .map(cohorte => ({
+            semestre: cohorte.semestre,
+            jornada: cohorte.jornada || programa.jornada || 'DIURNA',
+            numeroResolucion: cohorte.numeroResolucion || programa.numero_resolucion || '',
+            confirmada: cohorte.confirmada ?? true
+          }))
+
+        if (admisiones.has(programa.code_program) && !cohortesPropuestas.some(cohorte => cohorte.semestre === 1)) {
+          cohortesPropuestas.push({
+            semestre: 1,
+            jornada: programa.jornada || 'DIURNA',
+            numeroResolucion: programa.numero_resolucion || '',
+            confirmada: true
+          })
+        }
+
+        return cohortesPropuestas.length > 0
+          ? [{ codeProgram: programa.code_program, cohortes: cohortesPropuestas }]
+          : []
+      })
+
+      if (operaciones.length === 0) {
+        throw new Error('No hay cohortes para generar desde el período anterior ni programas seleccionados con admisiones.')
+      }
+
+      const resultados = await Promise.allSettled(operaciones.map(({ codeProgram, cohortes }) =>
+        guardarCohortes(selectedPeriodoId, codeProgram, cohortes)
+      ))
+      await loadPeriodoData()
+      const fallidas = resultados.filter(resultado => resultado.status === 'rejected')
+      if (fallidas.length > 0) {
+        const detalle = fallidas[0].reason?.message || 'Error desconocido'
+        throw new Error(`No se pudieron guardar ${fallidas.length} de ${operaciones.length} programas. ${detalle}`)
+      }
+
+      setAdvertenciaGeneracion('')
+      setConfirmarAvanceForzado(false)
+      setCohortesConfigOpen(false)
+      onShowToast?.(`Cohortes generadas para ${selectedPeriodo?.nombre}.`, 'success')
+    } catch (err) {
+      onShowToast?.(err.message || 'Error al generar las cohortes', 'error')
+    } finally {
+      setGeneratingCohortes(false)
+    }
   }
 
   // Generación de Programación (HU-045)
@@ -407,173 +447,125 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
       {/* 3. Contenido de las Pestañas */}
       {activeTab === 'cohortes' && (
         <div className="pc-tab-content">
-          <div className="pc-cohortes-layout">
-            {/* Panel de Selección de Programa y Acciones */}
-            <div className="pc-panel pc-program-header-panel">
+          {cohortesLoadError ? (
+            <div className="pc-panel">
+              <div className="pc-alert pc-alert-warning">
+                <AlertTriangle size={18} />
+                <span>No se pudo verificar si el paso 1 ya está configurado: {cohortesLoadError}</span>
+              </div>
+              <button
+                type="button"
+                className="pc-btn pc-btn-secondary"
+                onClick={loadPeriodoData}
+                disabled={loading}
+              >
+                {loading ? <RefreshCw size={16} className="pc-spin" /> : <RotateCcw size={16} />}
+                <span>Reintentar consulta</span>
+              </button>
+            </div>
+          ) : allCohortes.length === 0 ? (
+            <div className="pc-panel pc-admissions-panel">
               <div className="pc-panel-header">
                 <div>
-                  <h3 className="pc-panel-title">Configuración de Semestres Ofertados</h3>
+                  <h3 className="pc-panel-title">¿Qué programas tendrán admisiones en este período?</h3>
                   <p className="pc-panel-desc">
-                    Marque los semestres que cursan en este período y confirme la resolución de la malla correspondiente.
+                    Seleccione los programas que recibirán estudiantes nuevos en primer semestre.
                   </p>
                 </div>
-
-                <div className="pc-actions-row">
-                  <button
-                    type="button"
-                    className="pc-btn pc-btn-secondary"
-                    onClick={handleAbrirPropuesta}
-                    title="Proponer automáticamente el avance de semestres desde un período anterior"
-                  >
-                    <RotateCcw size={16} />
-                    <span>Proponer avance desde período anterior</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="pc-btn pc-btn-primary"
-                    onClick={handleGuardarCohortes}
-                    disabled={savingCohortes}
-                  >
-                    {savingCohortes ? <RefreshCw size={16} className="pc-spin" /> : <Save size={16} />}
-                    <span>Guardar Cohortes del Programa</span>
-                  </button>
-                </div>
               </div>
 
-              {/* Selector de programa */}
-              <div className="pc-program-picker">
-                <label>Programa Académico:</label>
-                <select
-                  value={selectedProgramCode}
-                  onChange={(e) => setSelectedProgramCode(e.target.value)}
-                  className="pc-select"
-                >
-                  {programas.map(prog => {
-                    const count = allCohortes.filter(c => c.codeProgram === prog.code_program).length
-                    return (
-                      <option key={prog.code_program} value={prog.code_program}>
-                        {prog.code_program} - {prog.name_program}{prog.estado !== 'ACTIVO' ? ' [DESACTIVADO]' : ''} ({count > 0 ? `${count} cohortes activas` : 'Sin cohortes'})
-                      </option>
-                    )
-                  })}
-                </select>
+              {periodoAnterior ? (
+                <p className="pc-alert pc-alert-info">
+                  Las cohortes actuales se calcularán tomando como base el período anterior
+                  <strong> {periodoAnterior.nombre}</strong>.
+                </p>
+              ) : (
+                <div className="pc-alert pc-alert-warning">
+                  <AlertTriangle size={18} />
+                  <span>No se encontró un período anterior con fecha de inicio. No es posible generar cohortes automáticamente.</span>
+                </div>
+              )}
 
-                {selectedPrograma && (
-                  <div className="pc-program-meta">
-                    <span><strong>Jornada:</strong> {selectedPrograma.jornada}</span>
-                    <span><strong>Duración:</strong> {selectedPrograma.numero_semestre || 10} sem. diurna {selectedPrograma.semestres_nocturna ? `/ ${selectedPrograma.semestres_nocturna} nocturna` : ''}</span>
-                    <span><strong>Ingreso:</strong> {selectedPrograma.ingreso || 'SEMESTRAL'}</span>
-                    <span><strong>Resolución Vigente:</strong> {resolucionVigentePensum || selectedPrograma.numero_resolucion || <em className="pc-text-muted">Sin resolución (malla legacy)</em>}</span>
-                    {selectedPrograma.estado !== 'ACTIVO' && (
-                      <span className="pc-badge pc-badge-warning">Programa desactivado</span>
-                    )}
-                  </div>
-                )}
+              <div className="pc-admissions-list">
+                {programas.map(programa => (
+                  <label
+                    className={`pc-admission-option ${selectedAdmissionCodes.includes(programa.code_program) ? 'selected' : ''}`}
+                    key={programa.code_program}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedAdmissionCodes.includes(programa.code_program)}
+                      onChange={(event) => {
+                        setSelectedAdmissionCodes(previous => event.target.checked
+                          ? [...previous, programa.code_program]
+                          : previous.filter(code => code !== programa.code_program)
+                        )
+                      }}
+                    />
+                    <span>{programa.name_program}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="pc-admissions-footer">
+                <span className="pc-text-muted">
+                  {selectedAdmissionCodes.length} programa{selectedAdmissionCodes.length === 1 ? '' : 's'} seleccionado{selectedAdmissionCodes.length === 1 ? '' : 's'}
+                </span>
+                <button
+                  type="button"
+                  className="pc-btn pc-btn-primary pc-btn-lg"
+                  onClick={() => handleGenerarCohortes()}
+                  disabled={!periodoAnterior || generatingCohortes}
+                >
+                  {generatingCohortes ? <RefreshCw size={18} className="pc-spin" /> : <Sparkles size={18} />}
+                  <span>Generar cohortes para {selectedPeriodo?.nombre || 'el período'}</span>
+                </button>
               </div>
             </div>
-
-            {/* Matriz de semestres ofertados (1 al N) */}
-            <div className="pc-semestres-grid">
-              {programCohortes.map((cohorte) => (
-                <div
-                  key={cohorte.semestre}
-                  className={`pc-semestre-card ${cohorte.activo ? 'activo' : 'inactivo'}`}
-                >
-                  <div className="pc-card-header">
-                    <label className="pc-toggle-label">
-                      <input
-                        type="checkbox"
-                        checked={cohorte.activo}
-                        onChange={() => toggleSemestreActivo(cohorte.semestre)}
-                      />
-                      <span className="pc-semestre-num">Semestre {cohorte.semestre}</span>
-                    </label>
-
-                    <span className={`pc-badge ${cohorte.activo ? 'pc-badge-success' : 'pc-badge-neutral'}`}>
-                      {cohorte.activo ? 'Ofertado' : 'No Ofertado'}
-                    </span>
-                  </div>
-
-                  {cohorte.activo && (
-                    <div className="pc-card-body">
-                      <div className="pc-field-group">
-                        <label>Resolución de Malla:</label>
-                        <input
-                          type="text"
-                          value={cohorte.numeroResolucion}
-                          onChange={(e) => updateCohorteField(cohorte.semestre, 'numeroResolucion', e.target.value)}
-                          placeholder="Ej. Res. 084 de 2021"
-                          className="pc-input-sm"
-                        />
-                      </div>
-
-                      <div className="pc-card-footer">
-                        {cohorte.enExtincion ? (
-                          <span className="pc-pill pc-pill-warning" title="Esta cohorte cursa una malla en extinción">
-                            Malla en extinción
-                          </span>
-                        ) : (
-                          <span className="pc-pill pc-pill-success" title="Malla curricular vigente">
-                            Malla vigente
-                          </span>
-                        )}
-
-                        <label className="pc-confirm-check">
-                          <input
-                            type="checkbox"
-                            checked={cohorte.confirmada}
-                            onChange={(e) => updateCohorteField(cohorte.semestre, 'confirmada', e.target.checked)}
-                          />
-                          <span>Confirmada</span>
-                        </label>
-                      </div>
-                    </div>
-                  )}
+          ) : !cohortesConfigOpen ? (
+            <div className="pc-panel pc-cohortes-summary">
+              <div className="pc-panel-header">
+                <div>
+                  <h3 className="pc-panel-title">Cohortes de {selectedPeriodo?.nombre}</h3>
+                  <p className="pc-panel-desc">Resumen de las cohortes activas por programa.</p>
                 </div>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  className="pc-btn pc-btn-secondary"
+                  onClick={() => setCohortesConfigOpen(true)}
+                >
+                  <Layers size={16} />
+                  <span>Configuración de cohortes</span>
+                </button>
+              </div>
 
-            {/* Resumen de estado de programas */}
-            <div className="pc-panel pc-programas-status-panel">
-              <h4 className="pc-panel-title">Estado Global de Cohortes en el Período</h4>
-              <div className="pc-status-table-wrapper">
+              <div className="pc-table-wrapper">
                 <table className="pc-table">
                   <thead>
                     <tr>
-                      <th>Código</th>
                       <th>Programa</th>
                       <th>Jornada</th>
-                      <th>Cohortes Activas</th>
-                      <th>Estado</th>
-                      <th>Acción</th>
+                      <th>Semestres ofertados</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {programas.map(prog => {
-                      const cohortesProg = allCohortes.filter(c => c.codeProgram === prog.code_program)
-                      const semestresStr = cohortesProg.map(c => c.semestre + 'º').join(', ')
-                      const configurado = cohortesProg.length > 0
-
+                    {programas.map(programa => {
+                      const cohortesPrograma = allCohortes
+                        .filter(cohorte => cohorte.codeProgram === programa.code_program)
+                        .sort((a, b) => a.semestre - b.semestre)
+                      if (cohortesPrograma.length === 0) return null
                       return (
-                        <tr key={prog.code_program}>
-                          <td><strong>{prog.code_program}</strong></td>
-                          <td>{prog.name_program}</td>
-                          <td>{prog.jornada}</td>
-                          <td>{configurado ? semestresStr : <span className="pc-text-muted">Ninguna</span>}</td>
+                        <tr key={programa.code_program}>
+                          <td>{programa.name_program}</td>
+                          <td>{programa.jornada || '—'}</td>
                           <td>
-                            <span className={`pc-badge ${configurado ? 'pc-badge-success' : 'pc-badge-warning'}`}>
-                              {configurado ? 'Configurado' : 'Pendiente'}
-                            </span>
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              className="pc-btn-link"
-                              onClick={() => setSelectedProgramCode(prog.code_program)}
-                            >
-                              Configurar
-                            </button>
+                            <div className="pc-semester-tags">
+                              {cohortesPrograma.map(cohorte => (
+                                <span className="pc-semester-tag" key={`${programa.code_program}-${cohorte.semestre}`}>
+                                  Semestre {cohorte.semestre}
+                                </span>
+                              ))}
+                            </div>
                           </td>
                         </tr>
                       )
@@ -582,7 +574,115 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
                 </table>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="pc-cohortes-layout">
+              <div className="pc-panel pc-program-header-panel">
+                <div className="pc-panel-header">
+                  <div>
+                    <h3 className="pc-panel-title">Configuración de cohortes</h3>
+                    <p className="pc-panel-desc">
+                      Active o desactive semestres para agregar o eliminar cohortes, y edite sus resoluciones.
+                    </p>
+                  </div>
+
+                  <div className="pc-actions-row">
+                    <button
+                      type="button"
+                      className="pc-btn pc-btn-secondary"
+                      onClick={() => setCohortesConfigOpen(false)}
+                    >
+                      Volver al resumen
+                    </button>
+                    <button
+                      type="button"
+                      className="pc-btn pc-btn-primary"
+                      onClick={handleGuardarCohortes}
+                      disabled={savingCohortes}
+                    >
+                      {savingCohortes ? <RefreshCw size={16} className="pc-spin" /> : <Save size={16} />}
+                      <span>Guardar cambios</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pc-program-picker">
+                  <label>Programa Académico:</label>
+                  <select
+                    value={selectedProgramCode}
+                    onChange={(e) => setSelectedProgramCode(e.target.value)}
+                    className="pc-select"
+                  >
+                    {programas.map(prog => (
+                      <option key={prog.code_program} value={prog.code_program}>
+                        {prog.code_program} - {prog.name_program}
+                      </option>
+                    ))}
+                  </select>
+
+                  {selectedPrograma && (
+                    <div className="pc-program-meta">
+                      <span><strong>Jornada:</strong> {selectedPrograma.jornada}</span>
+                      <span><strong>Duración:</strong> {selectedPrograma.numero_semestre || 10} sem. diurna {selectedPrograma.semestres_nocturna ? `/ ${selectedPrograma.semestres_nocturna} nocturna` : ''}</span>
+                      <span><strong>Resolución Vigente:</strong> {resolucionVigentePensum || selectedPrograma.numero_resolucion || <em className="pc-text-muted">Sin resolución (malla legacy)</em>}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pc-semestres-grid">
+                {programCohortes.map(cohorte => (
+                  <div
+                    key={cohorte.semestre}
+                    className={`pc-semestre-card ${cohorte.activo ? 'activo' : 'inactivo'}`}
+                  >
+                    <div className="pc-card-header">
+                      <label className="pc-toggle-label">
+                        <input
+                          type="checkbox"
+                          checked={cohorte.activo}
+                          onChange={() => toggleSemestreActivo(cohorte.semestre)}
+                        />
+                        <span className="pc-semestre-num">Semestre {cohorte.semestre}</span>
+                      </label>
+                      <span className={`pc-badge ${cohorte.activo ? 'pc-badge-success' : 'pc-badge-neutral'}`}>
+                        {cohorte.activo ? 'Ofertado' : 'No ofertado'}
+                      </span>
+                    </div>
+
+                    {cohorte.activo && (
+                      <div className="pc-card-body">
+                        <div className="pc-field-group">
+                          <label>Resolución de malla:</label>
+                          <input
+                            type="text"
+                            value={cohorte.numeroResolucion}
+                            onChange={(e) => updateCohorteField(cohorte.semestre, 'numeroResolucion', e.target.value)}
+                            placeholder="Ej. Res. 084 de 2021"
+                            className="pc-input-sm"
+                          />
+                        </div>
+                        <div className="pc-card-footer">
+                          {cohorte.enExtincion ? (
+                            <span className="pc-pill pc-pill-warning">Malla en extinción</span>
+                          ) : (
+                            <span className="pc-pill pc-pill-success">Malla vigente</span>
+                          )}
+                          <label className="pc-confirm-check">
+                            <input
+                              type="checkbox"
+                              checked={cohorte.confirmada}
+                              onChange={(e) => updateCohorteField(cohorte.semestre, 'confirmada', e.target.checked)}
+                            />
+                            <span>Confirmada</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -675,113 +775,51 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
         />
       )}
 
-      {/* Modal: Propuesta de Avance Automático (HU-043) */}
-      {isPropuestaModalOpen && (
+      {advertenciaGeneracion && (
         <div className="pc-modal-backdrop">
-          <div className="pc-modal">
+          <div className="pc-modal pc-modal-sm">
             <div className="pc-modal-header">
-              <h3>Propuesta Automática de Cohortes del Siguiente Período</h3>
+              <div className="pc-modal-title-with-icon">
+                <AlertTriangle size={22} className="pc-text-warning" />
+                <h3>Período anterior con novedad</h3>
+              </div>
               <button
                 type="button"
                 className="pc-btn-close"
-                onClick={() => setIsPropuestaModalOpen(false)}
+                onClick={() => setAdvertenciaGeneracion('')}
+                aria-label="Cerrar"
               >
                 ✕
               </button>
             </div>
-
             <div className="pc-modal-body">
-              <p>
-                El sistema calcula la sucesión de cohortes rotando cada semestre y proponiendo
-                nuevo ingreso en primer semestre con la resolución vigente. Las cohortes avanzadas conservan su resolución
-                histórica hasta extinguirse.
-              </p>
-
-              <div className="pc-field-group">
-                <label>Tomar como base el período anterior:</label>
-                <select
-                  value={selectedPeriodoAnteriorId}
-                  onChange={(e) => setSelectedPeriodoAnteriorId(e.target.value)}
-                  className="pc-select"
-                >
-                  {periodos
-                    .filter(p => String(p.id) !== String(selectedPeriodoId))
-                    .map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.nombre} ({p.estado || (p.vigente ? 'Vigente' : 'Historial')})
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              {/* Advertencia si periodo fue cancelado */}
-              {propuestas.some(p => p.advertenciaPeriodoAnterior) && (
-                <div className="pc-alert pc-alert-warning">
-                  <AlertTriangle size={18} />
-                  <div>
-                    <strong>Período anterior con novedad o cancelado:</strong>
-                    <p>{propuestas[0].advertenciaPeriodoAnterior}</p>
-                    <label className="pc-confirm-check">
-                      <input
-                        type="checkbox"
-                        checked={confirmarForzado}
-                        onChange={(e) => setConfirmarForzado(e.target.checked)}
-                      />
-                      <span>Confirmar y forzar avance de cohortes a pesar de la advertencia</span>
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              <div className="pc-modal-actions-bar">
-                <button
-                  type="button"
-                  className="pc-btn pc-btn-primary"
-                  onClick={handleConsultarPropuesta}
-                  disabled={loadingPropuesta}
-                >
-                  {loadingPropuesta ? <RefreshCw size={16} className="pc-spin" /> : <Sparkles size={16} />}
-                  <span>Calcular Propuesta</span>
-                </button>
-              </div>
-
-              {/* Resultados calculados de la propuesta */}
-              {propuestas.length > 0 && (
-                <div className="pc-propuestas-list">
-                  {propuestas.map(progProp => {
-                    const esSeleccionado = progProp.codeProgram === selectedProgramCode
-                    return (
-                      <div
-                        key={progProp.codeProgram}
-                        className={`pc-propuesta-card ${esSeleccionado ? 'highlight' : ''}`}
-                      >
-                        <div className="pc-prop-header">
-                          <div>
-                            <strong>{progProp.codeProgram} - {progProp.nombrePrograma}</strong>
-                            <div className="pc-text-muted">
-                              Cohortes propuestas: {progProp.cohortesPropuestas.length > 0
-                                ? progProp.cohortesPropuestas.map(i => `${i.semestre}º (${i.numeroResolucion})`).join(', ')
-                                : 'Sin avance automático'}
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            className="pc-btn pc-btn-secondary pc-btn-sm"
-                            onClick={() => {
-                              setSelectedProgramCode(progProp.codeProgram)
-                              handleAplicarPropuesta(progProp)
-                            }}
-                          >
-                            <Check size={14} />
-                            <span>Aplicar a {progProp.codeProgram}</span>
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+              <p>{advertenciaGeneracion}</p>
+              <label className="pc-confirm-check">
+                <input
+                  type="checkbox"
+                  checked={confirmarAvanceForzado}
+                  onChange={event => setConfirmarAvanceForzado(event.target.checked)}
+                />
+                <span>Confirmo que deseo generar las cohortes usando este período como base.</span>
+              </label>
+            </div>
+            <div className="pc-modal-footer">
+              <button
+                type="button"
+                className="pc-btn pc-btn-secondary"
+                onClick={() => setAdvertenciaGeneracion('')}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="pc-btn pc-btn-warning"
+                onClick={() => handleGenerarCohortes(true)}
+                disabled={!confirmarAvanceForzado || generatingCohortes}
+              >
+                {generatingCohortes ? <RefreshCw size={16} className="pc-spin" /> : <Sparkles size={16} />}
+                <span>Confirmar y generar</span>
+              </button>
             </div>
           </div>
         </div>
