@@ -235,6 +235,69 @@
   flex-wrap: wrap;
 }
 
+.pc-admissions-panel,
+.pc-cohortes-summary {
+  max-width: 100%;
+}
+
+.pc-admissions-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.65rem;
+  margin: 1.25rem 0;
+}
+
+.pc-admission-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 48px;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  background-color: #ffffff;
+  color: #1e293b;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.pc-admission-option.selected {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+}
+
+.pc-admission-option input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #2563eb;
+}
+
+.pc-admissions-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.pc-semester-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.pc-semester-tag {
+  display: inline-flex;
+  padding: 0.25rem 0.55rem;
+  border-radius: 9999px;
+  background-color: #dbeafe;
+  color: #1e40af;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 /* Semestres Grid */
 .pc-cohortes-layout {
   display: flex;
@@ -985,6 +1048,14 @@
 }
 
 @media (max-width: 720px) {
+  .pc-admissions-footer {
+    align-items: stretch;
+  }
+
+  .pc-admissions-footer .pc-btn {
+    justify-content: center;
+  }
+
   .pc-table-compacta th:nth-child(2),
   .pc-table-compacta td:nth-child(2) {
     display: none;

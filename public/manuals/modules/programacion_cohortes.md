@@ -2,9 +2,10 @@
 
 ## Preparación
 1. Confirma que exista un período vigente.
-2. Selecciona el programa.
-3. Selecciona la cohorte.
-4. Revisa la jornada: `DIURNA`, `NOCTURNA` o `AMBAS`.
+2. Si el período no tiene cohortes, marca los programas que recibirán admisiones de primer semestre.
+3. Genera las cohortes del período. El sistema toma como base el período inmediatamente anterior, avanza sus cohortes y agrega primer semestre solo a los programas seleccionados.
+4. Consulta el resumen de cohortes por programa. Desde **Configuración de cohortes** puedes agregar o eliminar semestres, cambiar resoluciones y guardar los ajustes.
+5. Si el período ya tiene cohortes, consulta directamente el resumen o entra a **Configuración de cohortes** para editarlas.
 
 ## Consulta
 La información puede mostrar:
