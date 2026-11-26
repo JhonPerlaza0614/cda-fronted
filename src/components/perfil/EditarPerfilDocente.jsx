@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, X } from 'lucide-react'
 import { updateMiContacto } from '../../services/docenteService'
-import { getFacultades } from '../../services/academicService'
+import { listarEscuelas } from '../../services/asociacionesService'
 
 // HU-015: el docente edita su facultad, correo personal, teléfono, celular y dirección desde "Mi perfil".
 // Nombres, apellidos y correo institucional son de solo lectura.
@@ -76,15 +76,20 @@ function ConfirmModal({ titulo, mensaje, textoConfirmar, peligro, procesando, on
 }
 
 export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShowToast }) {
-    const [facultades, setFacultades] = useState([])
-    const [cargandoFacultades, setCargandoFacultades] = useState(true)
+    const [escuelasCatalogo, setEscuelasCatalogo] = useState([])
+    const [cargandoEscuelas, setCargandoEscuelas] = useState(true)
+    const [busquedaEscuela, setBusquedaEscuela] = useState('')
 
-    const [original, setOriginal] = useState({
+    const escuelasIniciales = Array.isArray(docente.escuelas)
+        ? docente.escuelas.map((e) => String(e.codigo).trim().toUpperCase()).sort()
+        : []
+
+    const [original] = useState({
         correoPersonal: normalizar(docente.correo_personal),
         telefono: normalizar(docente.telefono),
         celular: normalizar(docente.celular),
         direccion: normalizar(docente.direccion),
-        idFacultad: docente.id_facultad != null ? String(docente.id_facultad) : ''
+        codigosEscuelas: escuelasIniciales
     })
     const [form, setForm] = useState(original)
     const [errores, setErrores] = useState({})
@@ -93,40 +98,47 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
 
     useEffect(() => {
         let isMounted = true
-        getFacultades()
+        listarEscuelas()
             .then((data) => {
                 if (!isMounted) return
                 if (Array.isArray(data)) {
-                    setFacultades(data)
-                    if (docente.id_facultad == null && docente.nombre_facultad) {
-                        const encontrada = data.find(
-                            (f) => (f.nombre || f.Nombre)?.trim().toLowerCase() === docente.nombre_facultad.trim().toLowerCase()
-                        )
-                        if (encontrada) {
-                            const idStr = String(encontrada.id)
-                            setOriginal((prev) => ({ ...prev, idFacultad: idStr }))
-                            setForm((prev) => (prev.idFacultad ? prev : { ...prev, idFacultad: idStr }))
-                        }
-                    }
+                    setEscuelasCatalogo(data)
                 }
             })
             .catch((err) => {
-                console.warn('Error al cargar facultades:', err)
+                console.warn('Error al cargar escuelas:', err)
             })
             .finally(() => {
-                if (isMounted) setCargandoFacultades(false)
+                if (isMounted) setCargandoEscuelas(false)
             })
         return () => {
             isMounted = false
         }
-    }, [docente.id_facultad, docente.nombre_facultad])
+    }, [])
+
+    const toggleEscuela = (codigo) => {
+        const cod = String(codigo).trim().toUpperCase()
+        setForm((prev) => {
+            const existe = prev.codigosEscuelas.includes(cod)
+            const siguiente = existe
+                ? prev.codigosEscuelas.filter((c) => c !== cod)
+                : [...prev.codigosEscuelas, cod].sort()
+            return { ...prev, codigosEscuelas: siguiente }
+        })
+    }
+
+    const escuelasFiltradas = escuelasCatalogo.filter((e) => {
+        const q = busquedaEscuela.trim().toLowerCase()
+        if (!q) return true
+        return `${e.codigo} ${e.nombre}`.toLowerCase().includes(q)
+    })
 
     const hayCambios =
         normalizar(form.correoPersonal).toLowerCase() !== original.correoPersonal.toLowerCase() ||
         normalizar(form.telefono) !== original.telefono ||
         normalizar(form.celular) !== original.celular ||
         normalizar(form.direccion) !== original.direccion ||
-        String(form.idFacultad || '') !== String(original.idFacultad || '')
+        JSON.stringify([...form.codigosEscuelas].sort()) !== JSON.stringify([...original.codigosEscuelas].sort())
 
     const handleChange = (campo) => (e) => {
         const valor = CAMPOS_NUMERICOS.has(campo) ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value
@@ -154,7 +166,7 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
                 telefono: normalizar(form.telefono) || null,
                 celular: normalizar(form.celular) || null,
                 direccion: form.direccion.trim() || null,
-                id_facultad: form.idFacultad ? parseInt(form.idFacultad, 10) : null
+                codigos_escuelas: form.codigosEscuelas
             })
             setConfirmacion(null)
             onShowToast?.(MSG_ACTUALIZADO, 'success')
@@ -217,26 +229,106 @@ export default function EditarPerfilDocente({ docente, onCancel, onSaved, onShow
 
             {/* Editables */}
             <div className="form-group">
-                <label htmlFor="perfil-facultad">Facultad</label>
-                <select
-                    id="perfil-facultad"
-                    value={form.idFacultad}
-                    onChange={handleChange('idFacultad')}
-                    disabled={procesando || cargandoFacultades}
-                    aria-invalid={Boolean(errores.idFacultad)}
-                    className={errores.idFacultad ? 'input-error' : undefined}
+                <label htmlFor="perfil-escuelas-buscar">Unidades académicas a las que perteneces ({form.codigosEscuelas.length})</label>
+                {form.codigosEscuelas.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.45rem' }}>
+                        {form.codigosEscuelas.map((cod) => {
+                            const esc = escuelasCatalogo.find((e) => e.codigo === cod)
+                            return (
+                                <span
+                                    key={cod}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.35rem',
+                                        padding: '0.25rem 0.6rem',
+                                        borderRadius: '999px',
+                                        background: '#eff6ff',
+                                        border: '1px solid #bfdbfe',
+                                        color: '#1d4ed8',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 600
+                                    }}
+                                >
+                                    <span>{cod}{esc ? ` · ${esc.nombre}` : ''}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleEscuela(cod)}
+                                        disabled={procesando}
+                                        aria-label={`Quitar escuela ${cod}`}
+                                        style={{
+                                            border: 'none',
+                                            background: 'transparent',
+                                            color: '#1d4ed8',
+                                            cursor: 'pointer',
+                                            padding: 0,
+                                            display: 'inline-flex'
+                                        }}
+                                    >
+                                        <X size={13} />
+                                    </button>
+                                </span>
+                            )
+                        })}
+                    </div>
+                )}
+                <input
+                    id="perfil-escuelas-buscar"
+                    type="text"
+                    value={busquedaEscuela}
+                    onChange={(e) => setBusquedaEscuela(e.target.value)}
+                    placeholder={cargandoEscuelas ? 'Cargando unidades académicas...' : 'Buscar unidad académica por código o nombre...'}
+                    disabled={procesando || cargandoEscuelas}
+                />
+                <div
+                    style={{
+                        maxHeight: '175px',
+                        overflowY: 'auto',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '8px',
+                        padding: '0.4rem',
+                        marginTop: '0.35rem',
+                        background: '#ffffff',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.2rem'
+                    }}
                 >
-                    <option value="">
-                        {cargandoFacultades ? 'Cargando facultades...' : 'Seleccione una facultad...'}
-                    </option>
-                    {facultades.map((fac) => (
-                        <option key={fac.id} value={fac.id}>
-                            {fac.nombre || fac.Nombre}
-                        </option>
-                    ))}
-                </select>
-                {errores.idFacultad && <span className="field-error">{errores.idFacultad}</span>}
-                <span className="form-hint">Facultad a la que estás adscrito.</span>
+                    {cargandoEscuelas ? (
+                        <span className="form-hint" style={{ padding: '0.35rem' }}>Cargando catálogo de unidades académicas...</span>
+                    ) : escuelasFiltradas.length === 0 ? (
+                        <span className="form-hint" style={{ padding: '0.35rem' }}>Sin unidades académicas que coincidan con la búsqueda.</span>
+                    ) : (
+                        escuelasFiltradas.map((esc) => {
+                            const checked = form.codigosEscuelas.includes(esc.codigo)
+                            return (
+                                <label
+                                    key={esc.codigo}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        padding: '0.3rem 0.45rem',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        background: checked ? '#eff6ff' : 'transparent',
+                                        fontSize: '0.84rem',
+                                        fontWeight: checked ? 600 : 400
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => toggleEscuela(esc.codigo)}
+                                        disabled={procesando}
+                                    />
+                                    <span><strong>{esc.codigo}</strong> — {esc.nombre}</span>
+                                </label>
+                            )
+                        })
+                    )}
+                </div>
+                <span className="form-hint">Puedes seleccionar una o varias unidades académicas a las que perteneces.</span>
             </div>
 
             <div className="form-group">
