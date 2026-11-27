@@ -13,30 +13,33 @@ import {
   TrendingUp
 } from 'lucide-react'
 import { getPeriodos, getProgramas, getPensumByProgram } from '../../services/academicService'
-import { getCohortes, guardarCohortes, getPropuestaCohortes } from '../../services/cohortesService'
+import { getCohortes, guardarCohortes, guardarCohortesLote, getPropuestaCohortes } from '../../services/cohortesService'
 import { generarProgramacion, getProgramacion, getResumenProgramacion, getCuposConfig } from '../../services/programacionService'
 import CursosProgramadosPanel from './CursosProgramadosPanel'
 import AvanceProgramacionView from './AvanceProgramacionView'
 import './ProgramacionCohortesView.css'
 
-export default function ProgramacionCohortesView({ onShowToast, user, coordinadorPerfil }) {
+export default function ProgramacionCohortesView({ onShowToast, user, coordinadorPerfil, onNavigateToPeriodos }) {
   const rol = Number(user?.rol ?? 1)
   const isAdmin = rol === 1
   const isCoordinador = rol === 2
   const coordCode = coordinadorPerfil?.code_program || ''
 
   const [periodos, setPeriodos] = useState([])
+  const [periodosCargados, setPeriodosCargados] = useState(false)
   const [selectedPeriodoId, setSelectedPeriodoId] = useState('')
   const [programas, setProgramas] = useState([])
   const [selectedProgramCode, setSelectedProgramCode] = useState('')
 
   const [activeTab, setActiveTab] = useState(isCoordinador ? 'cursos' : 'cohortes')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [cohortesCargadas, setCohortesCargadas] = useState(false)
   const [savingCohortes, setSavingCohortes] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generatingCohortes, setGeneratingCohortes] = useState(false)
   const [selectedAdmissionCodes, setSelectedAdmissionCodes] = useState([])
   const [cohortesConfigOpen, setCohortesConfigOpen] = useState(false)
+  const [admisionesOpen, setAdmisionesOpen] = useState(false)
   const [cohortesLoadError, setCohortesLoadError] = useState('')
   const [advertenciaGeneracion, setAdvertenciaGeneracion] = useState('')
   const [confirmarAvanceForzado, setConfirmarAvanceForzado] = useState(false)
@@ -80,6 +83,8 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
         const vigente = periodosData?.find(p => p.vigente)
         if (vigente) {
           setSelectedPeriodoId(String(vigente.id))
+        } else {
+          setCohortesCargadas(true)
         }
         if (isCoordinador) {
           if (coordCode) setSelectedProgramCode(coordCode)
@@ -87,8 +92,10 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
           setSelectedProgramCode(programasData[0].code_program)
         }
       } catch (err) {
+        setCohortesCargadas(true)
         onShowToast?.(err.message || 'Error al cargar datos iniciales', 'error')
       } finally {
+        setPeriodosCargados(true)
         setLoading(false)
       }
     }
@@ -155,6 +162,7 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
       onShowToast?.(err.message || 'Error al cargar datos del período', 'error')
     } finally {
       setLoading(false)
+      setCohortesCargadas(true)
       setCuposConfigCargando(false)
     }
   }, [selectedPeriodoId, onShowToast, isCoordinador, coordCode])
@@ -316,19 +324,13 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
         throw new Error('No hay cohortes para generar desde el período anterior ni programas seleccionados con admisiones.')
       }
 
-      const resultados = await Promise.allSettled(operaciones.map(({ codeProgram, cohortes }) =>
-        guardarCohortes(selectedPeriodoId, codeProgram, cohortes)
-      ))
+      await guardarCohortesLote(selectedPeriodoId, operaciones)
       await loadPeriodoData()
-      const fallidas = resultados.filter(resultado => resultado.status === 'rejected')
-      if (fallidas.length > 0) {
-        const detalle = fallidas[0].reason?.message || 'Error desconocido'
-        throw new Error(`No se pudieron guardar ${fallidas.length} de ${operaciones.length} programas. ${detalle}`)
-      }
 
       setAdvertenciaGeneracion('')
       setConfirmarAvanceForzado(false)
       setCohortesConfigOpen(false)
+      setAdmisionesOpen(false)
       onShowToast?.(`Cohortes generadas para ${selectedPeriodo?.nombre}.`, 'success')
     } catch (err) {
       onShowToast?.(err.message || 'Error al generar las cohortes', 'error')
@@ -388,7 +390,7 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
             <span className="pc-periodo-name">
               {selectedPeriodo
                 ? `${selectedPeriodo.nombre}${selectedPeriodo.numeroResolucion ? ` · Res. ${selectedPeriodo.numeroResolucion}` : ''}`
-                : 'Docentes (Vigente)'}
+                : 'Sin período vigente'}
             </span>
             {selectedPeriodo && (
               <span className={`pc-badge ${selectedPeriodo.vigente ? 'pc-badge-success' : 'pc-badge-neutral'}`}>
@@ -399,6 +401,56 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
         </div>
       </div>
 
+      {/* Sin período vigente: guiar al usuario a crear/activar uno */}
+      {periodosCargados && !selectedPeriodo ? (
+        <div
+          className="pc-panel"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textAlign: 'center',
+            padding: '3rem 1.5rem',
+            gap: '0.85rem'
+          }}
+        >
+          <div
+            style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '14px',
+              background: '#eff6ff',
+              color: '#2563eb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <CalendarDays size={28} />
+          </div>
+          <h3 className="pc-panel-title" style={{ margin: 0 }}>
+            No hay un período académico vigente
+          </h3>
+          <p className="pc-panel-desc" style={{ maxWidth: '460px', margin: 0 }}>
+            {isAdmin
+              ? 'Por favor crea un período académico (o activa uno existente) para configurar las cohortes y generar la programación académica.'
+              : 'Actualmente no hay un período académico vigente. Comunícate con el administrador para activar uno.'}
+          </p>
+          {isAdmin && onNavigateToPeriodos && (
+            <button
+              type="button"
+              className="pc-btn pc-btn-primary"
+              style={{ marginTop: '0.4rem' }}
+              onClick={onNavigateToPeriodos}
+            >
+              <CalendarDays size={16} />
+              <span>Ir a Períodos Académicos</span>
+            </button>
+          )}
+        </div>
+      ) : (
+      <>
       {/* 2. Barra de Pestañas */}
       <div className="pc-tabs-nav">
         {!isCoordinador && (
@@ -447,7 +499,12 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
       {/* 3. Contenido de las Pestañas */}
       {activeTab === 'cohortes' && (
         <div className="pc-tab-content">
-          {cohortesLoadError ? (
+          {!cohortesCargadas || (loading && allCohortes.length === 0) ? (
+            <div className="pc-panel" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '2rem', justifyContent: 'center', color: '#475569' }}>
+              <RefreshCw size={18} className="pc-spin" />
+              <span>Cargando cohortes del período...</span>
+            </div>
+          ) : cohortesLoadError ? (
             <div className="pc-panel">
               <div className="pc-alert pc-alert-warning">
                 <AlertTriangle size={18} />
@@ -463,7 +520,7 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
                 <span>Reintentar consulta</span>
               </button>
             </div>
-          ) : allCohortes.length === 0 ? (
+          ) : allCohortes.length === 0 || admisionesOpen ? (
             <div className="pc-panel pc-admissions-panel">
               <div className="pc-panel-header">
                 <div>
@@ -472,6 +529,15 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
                     Seleccione los programas que recibirán estudiantes nuevos en primer semestre.
                   </p>
                 </div>
+                {allCohortes.length > 0 && (
+                  <button
+                    type="button"
+                    className="pc-btn pc-btn-secondary"
+                    onClick={() => setAdmisionesOpen(false)}
+                  >
+                    Volver al resumen
+                  </button>
+                )}
               </div>
 
               {periodoAnterior ? (
@@ -487,24 +553,34 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
               )}
 
               <div className="pc-admissions-list">
-                {programas.map(programa => (
-                  <label
-                    className={`pc-admission-option ${selectedAdmissionCodes.includes(programa.code_program) ? 'selected' : ''}`}
-                    key={programa.code_program}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedAdmissionCodes.includes(programa.code_program)}
-                      onChange={(event) => {
-                        setSelectedAdmissionCodes(previous => event.target.checked
-                          ? [...previous, programa.code_program]
-                          : previous.filter(code => code !== programa.code_program)
-                        )
-                      }}
-                    />
-                    <span>{programa.name_program}</span>
-                  </label>
-                ))}
+                {programas.map(programa => {
+                  const esNocturna = String(programa.jornada || '').toUpperCase() === 'NOCTURNA'
+                    || String(programa.code_program || '').toUpperCase().endsWith('-NOC')
+                  return (
+                    <label
+                      className={`pc-admission-option ${selectedAdmissionCodes.includes(programa.code_program) ? 'selected' : ''}`}
+                      key={programa.code_program}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedAdmissionCodes.includes(programa.code_program)}
+                        onChange={(event) => {
+                          setSelectedAdmissionCodes(previous => event.target.checked
+                            ? [...previous, programa.code_program]
+                            : previous.filter(code => code !== programa.code_program)
+                          )
+                        }}
+                      />
+                      <span style={{ flex: 1 }}>{programa.name_program}</span>
+                      <span
+                        className={`pc-badge ${esNocturna ? 'pc-badge-purple' : 'pc-badge-blue'}`}
+                        style={{ flexShrink: 0 }}
+                      >
+                        {esNocturna ? 'Nocturna' : 'Diurna'}
+                      </span>
+                    </label>
+                  )
+                })}
               </div>
 
               <div className="pc-admissions-footer">
@@ -529,14 +605,30 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
                   <h3 className="pc-panel-title">Cohortes de {selectedPeriodo?.nombre}</h3>
                   <p className="pc-panel-desc">Resumen de las cohortes activas por programa.</p>
                 </div>
-                <button
-                  type="button"
-                  className="pc-btn pc-btn-secondary"
-                  onClick={() => setCohortesConfigOpen(true)}
-                >
-                  <Layers size={16} />
-                  <span>Configuración de cohortes</span>
-                </button>
+                <div className="pc-actions-row">
+                  <button
+                    type="button"
+                    className="pc-btn pc-btn-secondary"
+                    onClick={() => {
+                      const conPrimerSemestre = allCohortes
+                        .filter(c => c.semestre === 1)
+                        .map(c => c.codeProgram)
+                      setSelectedAdmissionCodes([...new Set(conPrimerSemestre)])
+                      setAdmisionesOpen(true)
+                    }}
+                  >
+                    <Sparkles size={16} />
+                    <span>Admisiones</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="pc-btn pc-btn-secondary"
+                    onClick={() => setCohortesConfigOpen(true)}
+                  >
+                    <Layers size={16} />
+                    <span>Configuración de cohortes</span>
+                  </button>
+                </div>
               </div>
 
               <div className="pc-table-wrapper">
@@ -878,6 +970,8 @@ export default function ProgramacionCohortesView({ onShowToast, user, coordinado
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   )

@@ -35,10 +35,12 @@ const cardStyle = {
 
 function Row({ icon, label, children }) {
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.92rem' }}>
-            <span style={{ color: '#71717a', display: 'inline-flex' }}>{icon}</span>
-            <span style={{ color: '#71717a', minWidth: '130px' }}>{label}</span>
-            <span style={{ color: '#27272a', overflowWrap: 'anywhere' }}>{children}</span>
+        <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.3rem 0.6rem', fontSize: '0.92rem' }}>
+            <span style={{ color: '#71717a', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', minWidth: '140px' }}>
+                {icon}
+                <span>{label}</span>
+            </span>
+            <span style={{ color: '#27272a', overflowWrap: 'anywhere', flex: '1 1 180px' }}>{children}</span>
         </div>
     )
 }

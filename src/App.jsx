@@ -90,9 +90,20 @@ export default function App({ user, onLogout }) {
       .catch(() => { if (seq === loadSeq.current) setIsConnected(false) })
 
     try {
-      const [progs, asigs, pensum, coordData, periodos] = await Promise.all([
+      // Cargar catálogo completo de asignaturas (8k+ filas) sin bloquear el primer pintado
+      if (canSeeAcademicData) {
+        getAsignaturas()
+          .then((asigs) => {
+            if (seq !== loadSeq.current) return
+            setAsignaturas(asigs)
+            const asigMap = new Map(asigs.map(a => [a.code_course, a]))
+            setPensumList(prev => prev.map(item => withCourseInfo(item, asigMap)))
+          })
+          .catch(err => console.warn('Error al cargar asignaturas en segundo plano:', err))
+      }
+
+      const [progs, pensum, coordData, periodos] = await Promise.all([
         canSeeAcademicData ? getProgramas() : Promise.resolve([]),
-        canSeeAcademicData ? getAsignaturas() : Promise.resolve([]),
         canSeeAcademicData ? getAllPensum() : Promise.resolve([]),
         isCoordinador && user?.email
           ? getMiPerfilCoordinador(user.email).catch(() => null)
@@ -101,12 +112,10 @@ export default function App({ user, onLogout }) {
       ])
       if (seq !== loadSeq.current) return
 
-      const asigMap = new Map(asigs.map(a => [a.code_course, a]))
       setProgramas(progs)
-      setAsignaturas(asigs)
-      setPensumList(pensum.map(item => withCourseInfo(item, asigMap)))
+      setPensumList(pensum)
       const listaP = Array.isArray(periodos) ? periodos : []
-      setPeriodoActivo(listaP.find(p => p.vigente) || listaP[0] || null)
+      setPeriodoActivo(listaP.find(p => p.vigente || p.estado === 'VIGENTE') || null)
 
       if (isCoordinador) {
         setCoordinadorPerfil(coordData)
@@ -251,6 +260,7 @@ export default function App({ user, onLogout }) {
                 onShowToast={showToast}
                 user={user}
                 coordinadorPerfil={coordinadorPerfil}
+                onNavigateToPeriodos={() => setActiveTab('periodos')}
               />
             )}
 
@@ -306,6 +316,7 @@ export default function App({ user, onLogout }) {
                 pensumList={pensumList}
                 periodoActivoProp={periodoActivo}
                 onShowToast={showToast}
+                onNavigateToPeriodos={() => setActiveTab('periodos')}
               />
             )}
 

@@ -201,7 +201,8 @@ export default function AsignacionDocenteView({
   // (al coordinador `programas` le llega solo con el suyo).
   programasTodos = null,
   pensumList = [],
-  onShowToast
+  onShowToast,
+  onNavigateToPeriodos
 }) {
   // 1. Estado de selección de Programa y Período
   // HU-016 criterio 6: el coordinador solo ve su programa; sin programa asignado no se toma otro.
@@ -317,8 +318,8 @@ export default function AsignacionDocenteView({
     try {
       const data = await getPeriodos()
       const lista = Array.isArray(data) ? data : []
-      const vigente = lista.find(p => p.vigente) || lista[0]
-      setPeriodoActivo(vigente || null)
+      const vigente = lista.find(p => p.vigente || p.estado === 'VIGENTE') || null
+      setPeriodoActivo(vigente)
     } catch (err) {
       console.error('Error al cargar períodos:', err)
       setErrorCarga(true)
@@ -1094,6 +1095,7 @@ export default function AsignacionDocenteView({
 
   const soloPendientes = filtroDocentes === 'SIN_DOCENTE'
   const coordinadorSinPrograma = isCoordinador && !coordinadorPerfil?.code_program
+  const sinPeriodoVigente = !periodosCargando && !errorCarga && !periodoActivo
   const cargandoVista = periodosCargando || loading
   // HU-016: el programa del coordinador no tiene versión en la jornada elegida
   const sinProgramaEnJornada = Boolean(programaBase) && programasVisibles.length === 0
@@ -1149,7 +1151,53 @@ export default function AsignacionDocenteView({
         </div>
       )}
 
-      {!coordinadorSinPrograma && (<>
+      {/* Sin período vigente */}
+      {!coordinadorSinPrograma && sinPeriodoVigente && (
+        <div
+          className="asig-doc-estado-vacio"
+          style={{
+            background: '#ffffff',
+            border: '1px solid #cbd5e1',
+            borderRadius: '12px',
+            padding: '3rem 1.5rem',
+            gap: '0.75rem'
+          }}
+        >
+          <div
+            style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '14px',
+              background: '#eff6ff',
+              color: '#2563eb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <CalendarDays size={28} />
+          </div>
+          <h3 style={{ margin: 0 }}>No hay un período académico vigente</h3>
+          <p style={{ margin: 0, maxWidth: '460px', color: '#64748b' }}>
+            {isAdmin
+              ? 'Por favor crea un período académico (o activa uno existente) para asignar docentes a los cursos.'
+              : 'Actualmente no hay un período académico vigente. Comunícate con el administrador para activar uno.'}
+          </p>
+          {isAdmin && onNavigateToPeriodos && (
+            <button
+              type="button"
+              className="btn-primary"
+              style={{ marginTop: '0.4rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+              onClick={onNavigateToPeriodos}
+            >
+              <CalendarDays size={16} />
+              <span>Ir a Períodos Académicos</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {!coordinadorSinPrograma && !sinPeriodoVigente && (<>
         {/* 2. Barra de filtros de HU-016: la jornada decide qué programa se muestra debajo */}
         <div className="asig-doc-filtros-bar">
           {!isCoordinador && (
