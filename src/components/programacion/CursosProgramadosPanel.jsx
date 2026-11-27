@@ -310,23 +310,43 @@ export default function CursosProgramadosPanel({
   return (
     <div className="pc-panel">
       <div className="pc-filters-bar">
-        <div className="pc-search-box">
-          <Search size={16} className="pc-search-icon" />
-          <input
-            type="text"
-            placeholder="Buscar por código, curso, materia o carrera..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="pc-input"
-          />
+        <div className="pc-filters-top">
+          <div className="pc-search-box">
+            <Search size={16} className="pc-search-icon" />
+            <input
+              type="text"
+              placeholder="Buscar por código, curso, materia o carrera..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="pc-input"
+            />
+          </div>
+
+          <button
+            type="button"
+            className="pc-btn pc-btn-success pc-btn-exportar"
+            onClick={() => {
+              setConfirmacionChecked(false)
+              setMostrarModalExportar(true)
+            }}
+            disabled={!periodoId || cursos.length === 0 || exportando}
+            title="Exportar programación académica oficial a Excel"
+          >
+            {exportando ? (
+              <RefreshCw size={16} className="pc-spin" />
+            ) : (
+              <FileSpreadsheet size={16} />
+            )}
+            <span>Exportar Excel</span>
+          </button>
         </div>
 
         <div className="pc-filter-group">
-          <Filter size={16} />
+          <Filter size={16} className="pc-filter-icon" />
           <select
             value={filtroPrograma}
             onChange={(e) => setFiltroPrograma(e.target.value)}
-            className="pc-select"
+            className="pc-select pc-filter-select"
             aria-label="Filtrar por programa"
           >
             <option value="">Todos los programas</option>
@@ -340,7 +360,7 @@ export default function CursosProgramadosPanel({
           <select
             value={filtroAsignatura}
             onChange={(e) => setFiltroAsignatura(e.target.value)}
-            className="pc-select"
+            className="pc-select pc-filter-select"
             aria-label="Filtrar por asignatura"
           >
             <option value="">Todas las asignaturas</option>
@@ -354,7 +374,7 @@ export default function CursosProgramadosPanel({
           <select
             value={filtroJornada}
             onChange={(e) => setFiltroJornada(e.target.value)}
-            className="pc-select"
+            className="pc-select pc-filter-select"
             aria-label="Filtrar por jornada"
           >
             <option value="">Todas las jornadas</option>
@@ -365,7 +385,7 @@ export default function CursosProgramadosPanel({
           <select
             value={filtroTipo}
             onChange={(e) => setFiltroTipo(e.target.value)}
-            className="pc-select"
+            className="pc-select pc-filter-select"
             aria-label="Filtrar por tipo de curso"
           >
             <option value="">Todos los tipos</option>
@@ -375,24 +395,6 @@ export default function CursosProgramadosPanel({
             <option value="COMPLEMENTARIAS">Electivas complementarias</option>
           </select>
         </div>
-
-        <button
-          type="button"
-          className="pc-btn pc-btn-success pc-btn-exportar"
-          onClick={() => {
-            setConfirmacionChecked(false)
-            setMostrarModalExportar(true)
-          }}
-          disabled={!periodoId || cursos.length === 0 || exportando}
-          title="Exportar programación académica oficial a Excel"
-        >
-          {exportando ? (
-            <RefreshCw size={16} className="pc-spin" />
-          ) : (
-            <FileSpreadsheet size={16} />
-          )}
-          <span>Exportar Excel</span>
-        </button>
       </div>
 
       {!cargandoCuposConfig && !puedeEditarCupos && !plazoAbierto && (

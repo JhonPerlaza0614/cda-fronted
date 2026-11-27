@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react'
-import { Plus, Search, Edit2, Trash2, RotateCcw, Library, BookOpen, AlertTriangle, Award, Sparkles, Building2, Clock } from 'lucide-react'
+import React, { useState, useEffect, useMemo, useDeferredValue } from 'react'
+import { Plus, Search, Edit2, Trash2, RotateCcw, Library, BookOpen, AlertTriangle, Award, Sparkles, Building2, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { createAsignatura, updateAsignatura, cambiarEstadoAsignatura, getFacultades } from '../../services/academicService'
+
+const PAGE_SIZE = 48
 
 export default function AsignaturasView({
   asignaturas,
@@ -10,6 +12,9 @@ export default function AsignaturasView({
   onShowToast
 }) {
   const [searchTerm, setSearchTerm] = useState('')
+  const deferredSearch = useDeferredValue(searchTerm)
+  const [soloEnCarrera, setSoloEnCarrera] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingAsignatura, setEditingAsignatura] = useState(null)
   const [deletingAsignatura, setDeletingAsignatura] = useState(null)
@@ -44,25 +49,65 @@ export default function AsignaturasView({
     horas_semanales: ''
   })
 
-  // Filtered courses
-  const filteredAsignaturas = asignaturas.filter(a => {
-    const facObj = facultadesList.find(f => String(f.id) === String(a.id_facultad || a.facultad))
-    const facName = facObj ? (facObj.nombre || facObj.Nombre || '') : ''
-    const query = searchTerm.toLowerCase()
-    return (
-      a.code_course.toLowerCase().includes(query) ||
-      a.name_course.toLowerCase().includes(query) ||
-      facName.toLowerCase().includes(query) ||
-      (a.id_facultad && String(a.id_facultad).includes(query))
-    )
-  })
+  // Índices O(1) memoizados para evitar miles de .filter()/.find() por render
+  const facultadById = useMemo(() => {
+    const map = new Map()
+    for (const f of facultadesList) {
+      map.set(String(f.id), f.nombre || f.Nombre || '')
+    }
+    return map
+  }, [facultadesList])
 
-  // Find programs where this course is taught
-  const getProgramsForCourse = (code_course) => {
-    const matchingPensum = pensumList.filter(item => item.code_course === code_course)
-    const progCodes = new Set(matchingPensum.map(p => p.code_program))
-    return programas.filter(p => progCodes.has(p.code_program))
-  }
+  const programsByCourse = useMemo(() => {
+    const progByCode = new Map(programas.map(p => [p.code_program, p]))
+    const codesByCourse = new Map()
+    for (const item of pensumList) {
+      if (!codesByCourse.has(item.code_course)) {
+        codesByCourse.set(item.code_course, new Set())
+      }
+      codesByCourse.get(item.code_course).add(item.code_program)
+    }
+    const result = new Map()
+    for (const [codeCourse, progCodes] of codesByCourse.entries()) {
+      const list = []
+      for (const pc of progCodes) {
+        const prog = progByCode.get(pc)
+        if (prog) list.push(prog)
+      }
+      result.set(codeCourse, list)
+    }
+    return result
+  }, [pensumList, programas])
+
+  // Filtered courses (memoizado + búsqueda diferida para evitar congelamiento con miles de materias)
+  const filteredAsignaturas = useMemo(() => {
+    const query = deferredSearch.trim().toLowerCase()
+    return asignaturas.filter(a => {
+      if (soloEnCarrera && !(programsByCourse.get(a.code_course)?.length > 0)) {
+        return false
+      }
+      if (!query) return true
+      const facName = facultadById.get(String(a.id_facultad || '')) || a.facultad || ''
+      return (
+        (a.code_course && a.code_course.toLowerCase().includes(query)) ||
+        (a.name_course && a.name_course.toLowerCase().includes(query)) ||
+        (facName && facName.toLowerCase().includes(query)) ||
+        (a.id_facultad && String(a.id_facultad).includes(query))
+      )
+    })
+  }, [asignaturas, deferredSearch, facultadById, soloEnCarrera, programsByCourse])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [deferredSearch, soloEnCarrera])
+
+  const totalPages = Math.max(1, Math.ceil(filteredAsignaturas.length / PAGE_SIZE))
+  const safePage = Math.min(currentPage, totalPages)
+  const pageStart = (safePage - 1) * PAGE_SIZE
+  const visibleAsignaturas = useMemo(
+    () => filteredAsignaturas.slice(pageStart, pageStart + PAGE_SIZE),
+    [filteredAsignaturas, pageStart]
+  )
 
   const handleOpenCreateModal = async (isElectivePreset = false) => {
     setEditingAsignatura(null)
@@ -250,26 +295,48 @@ export default function AsignaturasView({
       </div>
 
       {/* Control Bar */}
-      <div className="control-bar">
+      <div className="control-bar" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
         <div className="search-box">
           <Search size={18} className="search-icon" />
           <input
             type="text"
-            list="asignaturas-codigos"
-            placeholder="Digita el código o nombre de la asignatura..."
+            placeholder="Digita el código, nombre o facultad de la asignatura..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
-          <datalist id="asignaturas-codigos">
-            {asignaturas.map((asignatura) => (
-              <option key={asignatura.code_course} value={asignatura.code_course}>
-                {asignatura.name_course}
-              </option>
-            ))}
-          </datalist>
         </div>
+        <label
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.45rem',
+            padding: '0.48rem 0.85rem',
+            borderRadius: '999px',
+            border: `1px solid ${soloEnCarrera ? '#93c5fd' : '#cbd5e1'}`,
+            background: soloEnCarrera ? '#eff6ff' : '#ffffff',
+            color: soloEnCarrera ? '#1d4ed8' : '#475569',
+            fontSize: '0.84rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            userSelect: 'none',
+            whiteSpace: 'nowrap'
+          }}
+          title="Mostrar únicamente las asignaturas que pertenecen al pensum de al menos una carrera"
+        >
+          <input
+            type="checkbox"
+            checked={soloEnCarrera}
+            onChange={(e) => setSoloEnCarrera(e.target.checked)}
+            style={{ accentColor: '#2563eb', cursor: 'pointer' }}
+          />
+          <span>Solo en carreras ({programsByCourse.size})</span>
+        </label>
         <div className="stats-pill">
-          <span>Total materias: <strong>{asignaturas.length}</strong></span>
+          <span>
+            {deferredSearch.trim() || soloEnCarrera
+              ? <>Mostrando: <strong>{filteredAsignaturas.length}</strong> de {asignaturas.length}</>
+              : <>Total materias: <strong>{asignaturas.length}</strong></>}
+          </span>
           <span className="stats-separator">•</span>
           <span>Facultades en BD: <strong>{facultadesList.length}</strong></span>
         </div>
@@ -292,12 +359,14 @@ export default function AsignaturasView({
           )}
         </div>
       ) : (
+        <>
         <div className="cards-grid">
-          {filteredAsignaturas.map((asig) => {
-            const taughtPrograms = getProgramsForCourse(asig.code_course)
+          {visibleAsignaturas.map((asig) => {
+            const taughtPrograms = programsByCourse.get(asig.code_course) || []
             const isElective = asig.is_elective || asig.name_course?.toLowerCase().includes('electiv')
-            const facObj = facultadesList.find(f => String(f.id) === String(asig.id_facultad))
-            const facDisplayName = facObj ? (facObj.nombre || facObj.Nombre) : (asig.id_facultad ? `Facultad ID ${asig.id_facultad}` : null)
+            const facDisplayName = facultadById.get(String(asig.id_facultad || ''))
+              || asig.facultad
+              || (asig.id_facultad ? `Facultad ID ${asig.id_facultad}` : null)
             return (
               <div
                 key={asig.code_course}
@@ -396,6 +465,50 @@ export default function AsignaturasView({
             )
           })}
         </div>
+
+        {totalPages > 1 && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            marginTop: '1.25rem',
+            padding: '0.75rem 1rem',
+            background: '#ffffff',
+            border: '1px solid #cbd5e1',
+            borderRadius: '10px'
+          }}>
+            <span style={{ fontSize: '0.86rem', color: '#475569' }}>
+              Mostrando <strong>{pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filteredAsignaturas.length)}</strong> de <strong>{filteredAsignaturas.length}</strong> asignaturas (página {safePage} de {totalPages})
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={() => {
+                  setCurrentPage(p => Math.max(1, p - 1))
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}
+                disabled={safePage <= 1}
+              >
+                <ChevronLeft size={16} /> Anterior
+              </button>
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={() => {
+                  setCurrentPage(p => Math.min(totalPages, p + 1))
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}
+                disabled={safePage >= totalPages}
+              >
+                Siguiente <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+        </>
       )}
 
       {/* Modal Crear / Editar Asignatura */}

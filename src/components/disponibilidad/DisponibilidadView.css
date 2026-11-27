@@ -698,29 +698,38 @@
 
 @media (max-width: 760px) {
   .availability-page {
-    padding: 26px 15px 23px;
+    padding: 16px 10px 22px;
   }
 
   .availability-heading {
     align-items: flex-start;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
+    gap: 12px;
   }
 
   .availability-heading h1 {
-    max-width: 280px;
-    font-size: 26px;
+    max-width: 100%;
+    font-size: 22px;
   }
 
   .availability-heading p {
-    max-width: 330px;
+    max-width: 100%;
     font-size: 12px;
   }
 
   .availability-heading-icon {
-    flex-basis: 44px;
-    width: 44px;
-    height: 44px;
-    border-radius: 13px;
+    flex-basis: 42px;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+  }
+
+  .availability-deadline-card {
+    padding: 12px 13px;
+  }
+
+  .availability-deadline-dates {
+    grid-template-columns: 1fr;
   }
 
   .availability-instructions {
@@ -729,31 +738,40 @@
 
   .availability-card-top {
     align-items: flex-start;
-    padding: 16px 14px;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px 12px;
   }
 
   .availability-selected-count {
-    padding: 7px 8px;
-    font-size: 9px;
+    padding: 6px 10px;
+    font-size: 10px;
   }
 
   .availability-table-scroll {
-    padding-right: 10px;
-    padding-left: 10px;
+    padding-right: 8px;
+    padding-left: 8px;
+    -webkit-overflow-scrolling: touch;
   }
 
   .availability-table {
-    min-width: 625px;
-    border-spacing: 4px 2px;
+    min-width: 560px;
+    border-spacing: 4px 3px;
   }
 
   .availability-table .availability-time-heading,
   .availability-hour-label {
-    width: 88px;
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    width: 78px;
+    background: #ffffff;
+    box-shadow: 2px 0 4px rgba(15, 23, 42, 0.05);
   }
 
   .availability-hour-label {
-    font-size: 8px;
+    font-size: 9px;
+    padding-left: 2px !important;
   }
 
   .availability-day-name {
@@ -762,8 +780,8 @@
 
   .availability-day-short {
     display: inline-grid;
-    width: 25px;
-    height: 25px;
+    width: 26px;
+    height: 26px;
     place-items: center;
     border-radius: 8px;
     background: #f0f3ff;
@@ -772,22 +790,24 @@
   }
 
   .availability-table thead th {
-    height: 37px;
+    height: 39px;
   }
 
   .availability-table tbody td,
   .availability-slot {
-    height: 19px;
+    height: 28px;
+    border-radius: 6px;
   }
 
   .availability-end-time {
-    padding-left: 79px;
+    padding-left: 78px;
   }
 
   .availability-actions {
     align-items: stretch;
     flex-direction: column;
-    padding: 14px;
+    padding: 12px;
+    gap: 10px;
   }
 
   .availability-actions-help {
@@ -796,22 +816,26 @@
 
   .availability-action-buttons {
     display: grid;
-    grid-template-columns: 1fr 1.2fr;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
   }
 
   .availability-clear-button,
-  .availability-set-button {
-    padding: 0 11px;
+  .availability-set-button,
+  .availability-select-all-button {
+    min-height: 44px;
+    padding: 0 12px;
+    font-size: 12px;
   }
 
   .availability-legend {
-    margin-right: 15px;
-    margin-left: 15px;
+    margin-right: 12px;
+    margin-left: 12px;
   }
 
   .availability-notice {
-    margin-right: 14px;
-    margin-left: 14px;
+    margin-right: 12px;
+    margin-left: 12px;
   }
 
   .availability-state-card {
@@ -821,6 +845,12 @@
 
   .availability-retry-button {
     margin-left: 0;
+  }
+}
+
+@media (max-width: 460px) {
+  .availability-action-buttons {
+    grid-template-columns: 1fr;
   }
 }
 

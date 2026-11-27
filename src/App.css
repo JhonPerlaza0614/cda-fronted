@@ -3153,25 +3153,90 @@
 
 
 @media (max-width: 768px) {
+  .app-layout {
+    overflow-x: clip;
+  }
+
   .navbar-top-bar {
-    padding: 0.6rem 1rem;
+    padding: 0.6rem 0.85rem;
+  }
+
+  .navbar-top-container {
+    gap: 0.65rem;
+  }
+
+  .navbar-brand {
+    flex: 1;
+    min-width: 0;
+    gap: 0.6rem;
+  }
+
+  .brand-text {
+    min-width: 0;
+  }
+
+  .brand-title {
+    font-size: 0.98rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .brand-icon-bg {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
   }
 
   .navbar-nav-bar {
-    padding: 0.35rem 0.75rem;
+    padding: 0.4rem 0.65rem;
   }
 
-  .navbar-links {
+  .navbar-nav-container {
     justify-content: flex-start;
   }
 
+  .navbar-links {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start;
+    width: 100%;
+    scrollbar-width: none;
+  }
+
+  .navbar-links::-webkit-scrollbar {
+    display: none;
+  }
+
   .nav-tab-btn {
-    padding: 0.5rem 0.85rem;
-    font-size: 0.85rem;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.84rem;
+    min-height: 38px;
+  }
+
+  .navbar-popover {
+    max-width: calc(100vw - 1.5rem);
+  }
+
+  .view-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 0.75rem;
+  }
+
+  .table-container,
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }
 
 @media (max-width: 560px) {
+  .main-content {
+    padding: 0.85rem 0.65rem;
+  }
+
   .manual-floating-button {
     left: 0.65rem;
     top: 6.2rem;
@@ -3192,6 +3257,14 @@
     display: none;
   }
 
+  .navbar-icon-btn {
+    padding: 0.45rem 0.55rem;
+  }
+
+  .navbar-icon-btn span {
+    display: none;
+  }
+
   .navbar-actions .status-pill {
     display: none;
   }
@@ -3205,11 +3278,19 @@
   }
 
   .brand-title {
-    font-size: .95rem;
+    font-size: .9rem;
   }
 
   .brand-subtitle {
     font-size: .68rem;
+  }
+
+  .navbar-gestion-popover {
+    min-width: 240px;
+    position: fixed;
+    left: 0.75rem;
+    right: 0.75rem;
+    top: auto;
   }
 }
 

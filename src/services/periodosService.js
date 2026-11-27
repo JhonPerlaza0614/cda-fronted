@@ -46,3 +46,19 @@ export async function getPeriodos() {
 export async function desactivarPeriodo(id) {
   return requestBackend(`/periodos/${id}`, { method: 'DELETE' })
 }
+
+export async function extraerPeriodoDesdePdf(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return requestBackend('/periodos/extraer-pdf', {
+    method: 'POST',
+    body: formData,
+  })
+}
+
+export async function extraerPeriodoDesdeUrl(url) {
+  return requestBackend('/periodos/extraer-pdf-url', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  })
+}

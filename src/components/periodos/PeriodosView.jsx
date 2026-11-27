@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Edit3, ExternalLink, Plus, Save, Trash2, X } from 'lucide-react'
+import { ChevronDown, Edit3, ExternalLink, FileText, Link2, Plus, RefreshCw, Save, Trash2, Upload, X } from 'lucide-react'
 import { createPeriodo, updatePeriodo } from '../../services/academicService'
 import {
   getPeriodos,
   desactivarPeriodo,
+  extraerPeriodoDesdePdf,
+  extraerPeriodoDesdeUrl,
   ESTADO_LABELS,
   ESTADOS_PERIODO,
 } from '../../services/periodosService'
@@ -64,6 +66,10 @@ const dateFields = [
 function PeriodoForm({ initialValue, onCancel, onSaved, onShowToast }) {
   const [form, setForm] = useState(initialValue || emptyForm)
   const [saving, setSaving] = useState(false)
+  const [extrayendoPdf, setExtrayendoPdf] = useState(false)
+  const [pdfUrl, setPdfUrl] = useState(initialValue?.enlaceResolucion || '')
+  const [advertenciasPdf, setAdvertenciasPdf] = useState([])
+  const pdfInputRef = useRef(null)
   const isEditing = Boolean(initialValue?.id)
 
   useEffect(() => {
@@ -75,6 +81,62 @@ function PeriodoForm({ initialValue, onCancel, onSaved, onShowToast }) {
   }, [form.plazoDocenteInicio, form.plazoDocenteFin])
 
   const setField = (name, value) => setForm((current) => ({ ...current, [name]: value }))
+
+  const aplicarDatosExtraidos = (datos) => {
+    setForm((current) => ({
+      ...current,
+      nombre: datos.nombre || current.nombre,
+      numeroResolucion: datos.numeroResolucion || current.numeroResolucion,
+      fechaResolucion: datos.fechaResolucion || current.fechaResolucion,
+      fechaInicioSemestre: datos.fechaInicioSemestre || current.fechaInicioSemestre,
+      fechaFinSemestre: datos.fechaFinSemestre || current.fechaFinSemestre,
+      fechaAdicionInicio: datos.fechaAdicionInicio || current.fechaAdicionInicio,
+      fechaAdicionFin: datos.fechaAdicionFin || current.fechaAdicionFin,
+      fechaCancelacionInicio: datos.fechaCancelacionInicio || current.fechaCancelacionInicio,
+      fechaCancelacionFin: datos.fechaCancelacionFin || current.fechaCancelacionFin,
+      plazoDocenteInicio: datos.plazoDocenteInicio ? toLocalDateTime(datos.plazoDocenteInicio) : current.plazoDocenteInicio,
+      plazoDocenteFin: datos.plazoDocenteFin ? toLocalDateTime(datos.plazoDocenteFin) : current.plazoDocenteFin,
+      plazoCoordinadorInicio: datos.plazoCoordinadorInicio ? toLocalDateTime(datos.plazoCoordinadorInicio) : current.plazoCoordinadorInicio,
+      plazoCoordinadorFin: datos.plazoCoordinadorFin ? toLocalDateTime(datos.plazoCoordinadorFin) : current.plazoCoordinadorFin,
+      enlaceResolucion: datos.enlaceResolucion || current.enlaceResolucion,
+    }))
+    setAdvertenciasPdf(Array.isArray(datos.advertencias) ? datos.advertencias : [])
+    onShowToast('Datos extraídos del PDF. Revísalos antes de guardar.', 'success')
+  }
+
+  const handleSubirPdf = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setExtrayendoPdf(true)
+    setAdvertenciasPdf([])
+    try {
+      const datos = await extraerPeriodoDesdePdf(file)
+      aplicarDatosExtraidos(datos)
+    } catch (error) {
+      onShowToast(error.message || 'No se pudo leer el PDF de resolución', 'error')
+    } finally {
+      setExtrayendoPdf(false)
+    }
+  }
+
+  const handleLeerUrlPdf = async () => {
+    const limpio = pdfUrl.trim()
+    if (!limpio) {
+      onShowToast('Pega primero el enlace del PDF oficial de Univalle', 'error')
+      return
+    }
+    setExtrayendoPdf(true)
+    setAdvertenciasPdf([])
+    try {
+      const datos = await extraerPeriodoDesdeUrl(limpio)
+      aplicarDatosExtraidos(datos)
+    } catch (error) {
+      onShowToast(error.message || 'No se pudo leer el PDF desde el enlace', 'error')
+    } finally {
+      setExtrayendoPdf(false)
+    }
+  }
 
   const submit = async (event) => {
     event.preventDefault()
@@ -100,6 +162,67 @@ function PeriodoForm({ initialValue, onCancel, onSaved, onShowToast }) {
 
   return (
     <form className="periodo-form" onSubmit={submit}>
+      <div
+        className="periodo-pdf-import"
+        style={{
+          marginBottom: '1rem',
+          padding: '0.85rem 1rem',
+          borderRadius: '10px',
+          border: '1px solid #cbd5e1',
+          background: '#f8fafc',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.6rem',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, fontSize: '0.92rem', color: '#1e293b' }}>
+          <FileText size={16} />
+          <span>Autocompletar desde PDF de Resolución de Calendario</span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+          <input
+            type="url"
+            placeholder="https://registro.univalle.edu.co/wp-content/uploads/...pdf"
+            value={pdfUrl}
+            onChange={(e) => setPdfUrl(e.target.value)}
+            disabled={extrayendoPdf}
+            style={{ flex: '1 1 280px', minWidth: '220px', padding: '0.45rem 0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+          />
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={handleLeerUrlPdf}
+            disabled={extrayendoPdf || !pdfUrl.trim()}
+          >
+            {extrayendoPdf ? <RefreshCw size={15} className="spin" /> : <Link2 size={15} />}
+            <span>{extrayendoPdf ? 'Leyendo...' : 'Traer desde enlace'}</span>
+          </button>
+          <input
+            ref={pdfInputRef}
+            type="file"
+            accept=".pdf,application/pdf"
+            onChange={handleSubirPdf}
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => pdfInputRef.current?.click()}
+            disabled={extrayendoPdf}
+          >
+            <Upload size={15} />
+            <span>Subir PDF</span>
+          </button>
+        </div>
+        {advertenciasPdf.length > 0 && (
+          <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.82rem', color: '#92400e' }}>
+            {advertenciasPdf.map((adv, idx) => (
+              <li key={idx}>{adv}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <div className="periodo-form-grid">
         <label>Nombre del período<input required maxLength={20} value={form.nombre} onChange={(e) => setField('nombre', e.target.value)} /></label>
         <label>Número de resolución<input required value={form.numeroResolucion} onChange={(e) => setField('numeroResolucion', e.target.value)} /></label>

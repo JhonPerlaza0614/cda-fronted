@@ -50,6 +50,13 @@ export async function guardarCohortes(periodoId, codeProgram, cohortes) {
   }
 }
 
+export async function guardarCohortesLote(periodoId, programas) {
+  return await requestBackend(`/cohortes/lote?periodoId=${periodoId}`, {
+    method: 'POST',
+    body: JSON.stringify({ programas })
+  })
+}
+
 export async function getPropuestaCohortes(periodoActualId, periodoAnteriorId = null, confirmarAvanceForzado = false) {
   const params = new URLSearchParams({
     periodoActualId: String(periodoActualId),

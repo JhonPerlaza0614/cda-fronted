@@ -31,7 +31,7 @@ export default function MisCursosView({ onShowToast }) {
     const sinHoras = cursos.filter((c) => c.sin_horas).length
 
     return (
-        <div className="carga-docente" style={{ padding: '1.5rem', maxWidth: '1000px', margin: '0 auto' }}>
+        <div className="carga-docente carga-docente-page">
             <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', margin: 0, fontSize: '1.5rem' }}>
                 <BookOpen size={26} />
                 <span>Mis cursos</span>
@@ -60,42 +60,44 @@ export default function MisCursosView({ onShowToast }) {
                     {cursos.length === 0 ? (
                         <p className="carga-vacio">No tiene cursos asignados en este periodo</p>
                     ) : (
-                        <table className="carga-tabla">
-                            <thead>
-                                <tr>
-                                    <th>Código-Grupo</th>
-                                    <th>Asignatura</th>
-                                    <th>Programa</th>
-                                    <th>Jornada</th>
-                                    <th>Horas</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {cursos.map((c) => (
-                                    <tr key={c.curso_id}>
-                                        <td><span className="carga-codigo">{c.codigo_grupo}</span></td>
-                                        <td>{c.nombre_asignatura}</td>
-                                        <td>{c.nombre_programa}</td>
-                                        <td>{c.jornada}</td>
-                                        <td>
-                                            {c.sin_horas
-                                                ? (
-                                                    <span className="carga-sin-horas" title="La asignatura aún no tiene horas definidas">
-                                                        <AlertTriangle size={12} /> sin definir
-                                                    </span>
-                                                )
-                                                : <><Clock size={12} /> {c.horas}</>}
-                                        </td>
+                        <div className="carga-tabla-wrapper">
+                            <table className="carga-tabla">
+                                <thead>
+                                    <tr>
+                                        <th>Código-Grupo</th>
+                                        <th>Asignatura</th>
+                                        <th>Programa</th>
+                                        <th>Jornada</th>
+                                        <th>Horas</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                            <tfoot>
-                                <tr>
-                                    <td colSpan={4}><strong>Total</strong></td>
-                                    <td><strong>{datos.total_horas} / {datos.limite} h</strong></td>
-                                </tr>
-                            </tfoot>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {cursos.map((c) => (
+                                        <tr key={c.curso_id}>
+                                            <td><span className="carga-codigo">{c.codigo_grupo}</span></td>
+                                            <td>{c.nombre_asignatura}</td>
+                                            <td>{c.nombre_programa}</td>
+                                            <td>{c.jornada}</td>
+                                            <td>
+                                                {c.sin_horas
+                                                    ? (
+                                                        <span className="carga-sin-horas" title="La asignatura aún no tiene horas definidas">
+                                                            <AlertTriangle size={12} /> sin definir
+                                                        </span>
+                                                    )
+                                                    : <><Clock size={12} /> {c.horas}</>}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colSpan={4}><strong>Total</strong></td>
+                                        <td><strong>{datos.total_horas} / {datos.limite} h</strong></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     )}
 
                     {sinHoras > 0 && (

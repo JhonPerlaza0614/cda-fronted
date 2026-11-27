@@ -34,9 +34,8 @@ const GESTION_GROUPS = [
     ]
   },
   {
-    label: 'Período y control',
+    label: 'Control y auditoría',
     items: [
-      { id: 'periodos', label: 'Períodos Académicos', desc: 'Vigencia, fechas y plazos', icon: CalendarDays },
       { id: 'bitacora', label: 'Bitácora', desc: 'Auditoría de cambios', icon: ScrollText }
     ]
   }
@@ -232,6 +231,18 @@ export default function Navbar({ activeTab, setActiveTab, isConnected, user, onL
                 <Home size={17} />
                 <span>Inicio</span>
               </button>
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  className={`nav-tab-btn ${activeTab === 'periodos' ? 'active' : ''}`}
+                  onClick={() => navigateTo('periodos')}
+                  title="Períodos Académicos"
+                >
+                  <CalendarDays size={17} />
+                  <span>Períodos</span>
+                </button>
+              )}
 
               {canSeeProgramas && (
                 <button
